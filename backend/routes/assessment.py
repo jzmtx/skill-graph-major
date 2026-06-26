@@ -1,0 +1,431 @@
+from fastapi import APIRouter, HTTPException, BackgroundTasks
+from pydantic import BaseModel
+from database import supabase
+from services.llm import generate_questions, analyze_performance, generate_coding_questions, evaluate_code_submission, generate_project_idea
+import random
+import json
+
+router = APIRouter()
+
+class GetQuestionRequest(BaseModel):
+    skill_name: str
+    difficulty_level: int
+    student_id: str = None
+    exclude_question_ids: list[str] = []
+
+class SubmitAnswerRequest(BaseModel):
+    student_id: str
+    skill_name: str
+    question_id: str
+    selected_option: str
+    current_difficulty: int
+
+@router.post("/get-question")
+async def get_adaptive_question(req: GetQuestionRequest):
+    try:
+        # Get globally seen questions for this student
+        global_seen_ids = []
+        if req.student_id:
+            seen_res = supabase.table("student_seen_questions").select("question_id").eq("student_id", req.student_id).execute()
+            global_seen_ids = [s['question_id'] for s in seen_res.data]
+            
+        all_excludes = list(set(req.exclude_question_ids + global_seen_ids))
+        
+        seen_texts = set()
+        seen_topics = []
+        if all_excludes:
+            # Note: Supabase limits in_ filter to 100-200 items in URL length usually, but it's safe for now
+            # Alternatively, we just rely on DB unique constraints if we add one, but let's filter in memory
+            seen_texts_res = supabase.table("questions").select("question_base_text, options_json").in_("id", all_excludes).execute()
+            if hasattr(seen_texts_res, 'data'):
+                seen_texts = set(sq['question_base_text'].strip() for sq in seen_texts_res.data if sq.get('question_base_text'))
+                seen_topics = [sq.get('options_json', {}).get('topic') for sq in seen_texts_res.data if sq.get('options_json') and sq.get('options_json').get('topic')]
+                # Keep only unique recent topics
+                seen_topics = list(set([t for t in seen_topics if t]))[:5]
+        
+        # 1. Try to fetch an existing question from Cache (DB)
+        query = supabase.table("questions").select("*").eq("skill_name", req.skill_name).eq("difficulty_level", req.difficulty_level)
+        res = query.execute()
+        
+        # Filter out questions they've already seen
+        available_questions = [q for q in res.data if q['id'] not in all_excludes]
+
+        # 2. If no questions exist, generate a batch via Gemini/Groq
+        if not available_questions:
+            print(f"Cache miss for {req.skill_name} Level {req.difficulty_level}. Generating...")
+            
+            # Retry loop up to 3 times to get valid unique questions
+            for attempt in range(3):
+                new_qs = generate_questions(req.skill_name, count=5, seen_topics=seen_topics, target_difficulty=req.difficulty_level)
+                insert_data = []
+                for q in new_qs:
+                    diff = max(1, min(5, int(q.get("difficulty", req.difficulty_level))))
+                    
+                    raw_opts = q.get("options", [])
+                    opts = [str(opt).strip() for opt in raw_opts]
+                    correct_ans = str(q.get("correct_answer", opts[0] if opts else "")).strip()
+                    
+                    opts = list(dict.fromkeys(opts))
+                    
+                    if opts and correct_ans not in opts:
+                        opts[-1] = correct_ans
+                        opts = list(dict.fromkeys(opts))
+                    
+                    padding_options = ["None of the above", "All of the above", "Error", "Compilation failed", "Undefined"]
+                    pad_idx = 0
+                    while len(opts) < 4:
+                        pad = padding_options[pad_idx % len(padding_options)]
+                        if pad not in opts and pad != correct_ans:
+                            opts.append(pad)
+                        pad_idx += 1
+                        
+                    q_text = q.get("question_base_text", "Error parsing question")
+                    code_snip = q.get("code_snippet", "")
+                    
+                    q_text_lower = q_text.lower()
+                    if not code_snip and ("following" in q_text_lower or "output" in q_text_lower):
+                        continue
+                    
+                    if code_snip:
+                        q_text += f"\n\n```python\n{code_snip}\n```"
+                        
+                    if q_text.strip() in seen_texts:
+                        continue
+                    
+                    insert_data.append({
+                        "skill_name": req.skill_name,
+                        "difficulty_level": diff,
+                        "question_base_text": q_text,
+                        "options_json": {"choices": opts, "topic": q.get("topic", "General")},
+                        "correct_answer": correct_ans
+                    })
+                
+                if insert_data:
+                    insert_data[0]["difficulty_level"] = req.difficulty_level
+                    inserted = supabase.table("questions").insert(insert_data).execute()
+                    available_questions = [q for q in inserted.data if q['difficulty_level'] == req.difficulty_level and q['id'] not in all_excludes]
+                    if available_questions:
+                        break # Successfully generated unique questions, exit loop
+
+        # 3. If STILL empty after retries, fallback gracefully
+        if not available_questions:
+            # ONLY fallback to questions matching the REQUIRED difficulty
+            fallback = supabase.table("questions").select("*").eq("skill_name", req.skill_name).eq("difficulty_level", req.difficulty_level).execute()
+            avail_fallback = [q for q in fallback.data if q['id'] not in all_excludes]
+            if avail_fallback:
+                available_questions = avail_fallback
+            else:
+                # If truly out of unique questions for this difficulty, clear the seen history dynamically to allow retakes
+                if all_excludes and fallback.data:
+                    available_questions = fallback.data
+                else:
+                    raise HTTPException(status_code=500, detail="Failed to fetch or generate questions")
+
+        # 4. Pick a random question
+        chosen_q = random.choice(available_questions)
+        
+        # 5. Anti-plagiarism/Cheating: Shuffle choices dynamically!
+        options_data = chosen_q['options_json']
+        if isinstance(options_data, dict) and "choices" in options_data:
+            options = list(options_data["choices"])
+            topic = options_data.get("topic", "General")
+        else:
+            options = list(options_data)
+            topic = "General"
+            
+        random.shuffle(options)
+
+        return {
+            "question_id": chosen_q['id'],
+            "difficulty_level": chosen_q['difficulty_level'],
+            "question_text": chosen_q['question_base_text'],
+            "options": options,
+            "topic": topic
+        }
+
+    except Exception as e:
+        print("Error getting question:", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+def pregenerate_questions_task(skill_name: str, difficulty_level: int):
+    """Background task to pregenerate questions if cache is low."""
+    try:
+        # Check cache
+        res = supabase.table("questions").select("id").eq("skill_name", skill_name).eq("difficulty_level", difficulty_level).execute()
+        if len(res.data) < 2:
+            print(f"[Background] Cache low for {skill_name} Level {difficulty_level}. Pregenerating...")
+            new_qs = generate_questions(skill_name, count=5, target_difficulty=difficulty_level)
+            insert_data = []
+            for q in new_qs:
+                diff = max(1, min(5, int(q.get("difficulty", difficulty_level))))
+                raw_opts = q.get("options", [])
+                opts = [str(opt).strip() for opt in raw_opts]
+                correct_ans = str(q.get("correct_answer", opts[0] if opts else "")).strip()
+                opts = list(dict.fromkeys(opts))
+                if opts and correct_ans not in opts:
+                    opts[-1] = correct_ans
+                    opts = list(dict.fromkeys(opts))
+                
+                padding_options = ["None of the above", "All of the above", "Error", "Compilation failed", "Undefined"]
+                pad_idx = 0
+                while len(opts) < 4:
+                    pad = padding_options[pad_idx % len(padding_options)]
+                    if pad not in opts and pad != correct_ans:
+                        opts.append(pad)
+                    pad_idx += 1
+                
+                q_text = q.get("question_base_text", "Error parsing question")
+                code_snip = q.get("code_snippet", "")
+                q_text_lower = q_text.lower()
+                if not code_snip and ("following" in q_text_lower or "output" in q_text_lower):
+                    continue
+                if code_snip:
+                    q_text += f"\n\n```python\n{code_snip}\n```"
+                
+                insert_data.append({
+                    "skill_name": skill_name,
+                    "difficulty_level": difficulty_level,
+                    "question_base_text": q_text,
+                    "options_json": {"choices": opts, "topic": q.get("topic", "General")},
+                    "correct_answer": correct_ans
+                })
+            
+            if insert_data:
+                insert_data[0]["difficulty_level"] = difficulty_level
+                supabase.table("questions").insert(insert_data).execute()
+                print(f"[Background] Pre-generation successful for {skill_name} Level {difficulty_level}")
+    except Exception as e:
+        print(f"[Background] Pre-generation failed: {e}")
+
+@router.post("/submit-answer")
+async def submit_answer(req: SubmitAnswerRequest, background_tasks: BackgroundTasks):
+    try:
+        # Mark question as seen globally
+        if req.student_id:
+            try:
+                supabase.table("student_seen_questions").insert({
+                    "student_id": req.student_id,
+                    "skill_name": req.skill_name,
+                    "question_id": req.question_id
+                }).execute()
+            except Exception as se:
+                print("Already seen or error recording:", se)
+
+        # 1. Fetch correct answer from DB
+        q_res = supabase.table("questions").select("correct_answer").eq("id", req.question_id).execute()
+        if not q_res.data:
+            raise HTTPException(status_code=404, detail="Question not found")
+            
+        correct_ans = q_res.data[0]['correct_answer']
+        
+        # 2. Check if correct
+        is_correct = (req.selected_option.strip() == correct_ans.strip())
+        
+        # 3. Adaptive Logic: Adjust next difficulty
+        next_difficulty = req.current_difficulty
+        if is_correct:
+            next_difficulty = min(5, req.current_difficulty + 1)
+        else:
+            next_difficulty = max(1, req.current_difficulty - 1)
+            
+        # Spawn background task to pre-generate for next_difficulty
+        background_tasks.add_task(pregenerate_questions_task, req.skill_name, next_difficulty)
+            
+        return {
+            "is_correct": is_correct,
+            "correct_answer": correct_ans,
+            "next_difficulty": next_difficulty
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class GetCodingQuestionRequest(BaseModel):
+    skill_name: str
+    difficulty_type: str # basic or conceptual
+    student_id: str = None
+
+@router.post("/get-coding-question")
+async def get_coding_question(req: GetCodingQuestionRequest):
+    try:
+        difficulty_level = 4 if req.difficulty_type == "basic" else 5
+        selected_q = None
+        
+        if req.student_id:
+            # Fetch seen coding questions
+            seen_res = supabase.table("student_seen_coding_questions").select("coding_question_id").eq("student_id", req.student_id).execute()
+            seen_ids = [r['coding_question_id'] for r in seen_res.data]
+            
+            # Fetch all questions for this skill and level
+            all_q_res = supabase.table("coding_questions").select("*").eq("skill_name", req.skill_name).eq("difficulty_level", difficulty_level).execute()
+            
+            unseen_qs = [q for q in all_q_res.data if q['id'] not in seen_ids]
+            
+            if unseen_qs:
+                selected_q = random.choice(unseen_qs)
+                
+        if not selected_q:
+            print("No unseen coding questions available in DB. Generating a new one.")
+            q_data = generate_coding_questions(req.skill_name, req.difficulty_type)
+            
+            q_text = q_data.get("question_base_text", "Write a complete program based on standard interview problems.")
+            starter = q_data.get("starter_code", "")
+            correct_ans = str(q_data.get("correct_answer", ""))
+            topic = q_data.get("topic", "Coding")
+            
+            # Insert into DB
+            insert_res = supabase.table("coding_questions").insert({
+                "skill_name": req.skill_name,
+                "difficulty_level": difficulty_level,
+                "question_base_text": q_text,
+                "starter_code": starter,
+                "correct_answer": correct_ans,
+                "topic": topic
+            }).execute()
+            
+            if insert_res.data:
+                selected_q = insert_res.data[0]
+            else:
+                selected_q = {
+                    "question_base_text": q_text,
+                    "topic": topic,
+                    "starter_code": starter,
+                    "id": None
+                }
+
+        # Mark as seen
+        if req.student_id and selected_q.get("id"):
+            try:
+                supabase.table("student_seen_coding_questions").insert({
+                    "student_id": req.student_id,
+                    "skill_name": req.skill_name,
+                    "coding_question_id": selected_q["id"]
+                }).execute()
+            except Exception as e:
+                print("Already seen or error marking coding question as seen:", e)
+                
+        return {
+            "question_text": selected_q.get("question_base_text", ""),
+            "topic": selected_q.get("topic", "Coding"),
+            "starter_code": selected_q.get("starter_code", "")
+        }
+    except Exception as e:
+        print("Error getting coding question:", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+class EvaluateCodeRequest(BaseModel):
+    skill_name: str
+    question_text: str
+    student_code: str
+
+@router.post("/evaluate-code")
+async def evaluate_code(req: EvaluateCodeRequest):
+    try:
+        eval_data = evaluate_code_submission(req.skill_name, req.question_text, req.student_code)
+        return eval_data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class AnswerHistory(BaseModel):
+    topic: str
+    is_correct: bool
+    difficulty: int
+
+class CompleteAssessmentRequest(BaseModel):
+    student_id: str | None
+    skill_name: str
+    score_percentage: float
+    history: list[dict]
+
+class SimulateCodeRequest(BaseModel):
+    skill_name: str
+    code: str
+
+class ReportQuestionRequest(BaseModel):
+    question_id: str
+    student_id: str | None
+    reason: str
+
+@router.post("/report-question")
+async def report_question(req: ReportQuestionRequest):
+    try:
+        import json
+        import os
+        from datetime import datetime
+        
+        report = {
+            "question_id": req.question_id,
+            "student_id": req.student_id,
+            "reason": req.reason,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        # Log to file since we don't have DB DDL access for new tables yet
+        file_path = os.path.join(os.path.dirname(__file__), "..", "reported_questions.json")
+        reports = []
+        if os.path.exists(file_path):
+            with open(file_path, "r") as f:
+                try:
+                    reports = json.load(f)
+                except:
+                    pass
+        reports.append(report)
+        with open(file_path, "w") as f:
+            json.dump(reports, f, indent=4)
+            
+        return {"status": "success", "message": "Question reported successfully"}
+    except Exception as e:
+        print("Error reporting question:", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/complete")
+async def complete_assessment(req: CompleteAssessmentRequest):
+    try:
+        analytics = analyze_performance(req.skill_name, req.history)
+        
+        if req.score_percentage >= 60:
+            skill_res = supabase.table("student_skills").select("*").eq("student_id", req.student_id).eq("skill_name", req.skill_name).execute()
+            
+            if skill_res.data:
+                new_score = skill_res.data[0]['skill_score'] + int(req.score_percentage / 2)
+                
+                supabase.table("student_skills").update({
+                    "verification_level": 1,
+                    "skill_score": new_score
+                }).eq("id", skill_res.data[0]['id']).execute()
+                
+                return {
+                    "message": "Assessment passed! Skill upgraded to Level 1.",
+                    "passed": True,
+                    "analytics": analytics
+                }
+        
+        return {
+            "message": "Assessment completed. Keep practicing!",
+            "passed": False,
+            "analytics": analytics
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/simulate-code")
+async def simulate_code(req: SimulateCodeRequest):
+    try:
+        from services.llm import simulate_code_execution
+        output = simulate_code_execution(req.skill_name, req.code)
+        return {"output": output}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class ProjectIdeaRequest(BaseModel):
+    skill_name: str
+
+@router.post("/project-idea")
+async def get_project_idea(req: ProjectIdeaRequest):
+    try:
+        idea = generate_project_idea(req.skill_name)
+        return {"idea": idea}
+    except Exception as e:
+        print("Project idea error:", e)
+        raise HTTPException(status_code=500, detail=str(e))

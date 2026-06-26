@@ -1,0 +1,22 @@
+# Node modules
+node_modules/
+
+# Python Virtual Environments
+venv/
+env/
+.env
+
+# Next.js build output
+.next/
+out/
+build/
+
+# Mac OS
+.DS_Store
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.swp
+__pycache__/
+*.pyc
