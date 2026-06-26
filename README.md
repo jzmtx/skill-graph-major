@@ -59,20 +59,56 @@ Welcome to the team! To work on this project locally, follow these steps strictl
 5. The API will be available at `http://127.0.0.1:8000`.
 
 ### 4. Environment Variables (.env)
-**DO NOT COMMIT `.env` FILES TO GITHUB.** 
+Since this is a private repository for our team, here are the actual environment variables you need to run the project.
 
-You need to create your own `.env` files locally to connect to the database and AI services.
-
-**For the Backend (`backend/.env`):**
+**Backend Setup (`backend/.env`):**
+1. Navigate to the `backend` directory.
+2. Create a new file named exactly `.env`.
+3. Open `.env` in your code editor and paste the following exactly as is:
 ```env
-SUPABASE_URL=your_supabase_project_url
-SUPABASE_KEY=your_supabase_anon_key
-GROQ_API_KEY=your_groq_api_key
-GEMINI_API_KEY=your_gemini_api_key
-```
+# Supabase (Database & Auth)
+SUPABASE_URL=https://nueopmjkktlyudnmecmz.supabase.co
+SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im51ZW9wbWpra3RseXVkbm1lY216Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MjI5MzIwMiwiZXhwIjoyMDk3ODY5MjAyfQ.C5g0z7Hx4laWblNJLbRmRslyR9j2NzT6pt9_cWSq6fY
+DATABASE_URL=postgresql://postgres:Skillgraph@123@db.nueopmjkktlyudnmecmz.supabase.co:5432/postgres
 
-**For the Frontend (`frontend/.env.local`):**
-*(Currently, most API calls are proxied through the FastAPI backend, but add any frontend-specific keys here).*
+# Groq (AI Model for JD parsing & Interviews)
+GROQ_API_KEY=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
+
+# Cloudinary (File Storage)
+CLOUDINARY_CLOUD_NAME=djjmaj5dy
+CLOUDINARY_API_KEY=261453169686886
+CLOUDINARY_API_SECRET=sBBKaWXz_GH6fimHGNjGF21clzI
+
+# Tavily (Career Search)
+TAVILY_API_KEY=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
+```
+4. Save the file. The FastAPI server will automatically pick these up when you run `uvicorn`.
+
+**Frontend Setup (`frontend/.env.local`):**
+1. Navigate to the `frontend` directory.
+2. Create a new file named exactly `.env.local`.
+3. Paste the following:
+```env
+# Supabase (Database & Auth - Required by Frontend for client-side Auth if needed)
+NEXT_PUBLIC_SUPABASE_URL=https://nueopmjkktlyudnmecmz.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_qWbykuolXvKyJsSqEXlTDA_PCxb8aYt
+
+# Backend API URL (for local development)
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
+4. Save the file. When you run `npm run dev`, Next.js will load these automatically.
+
+---
+
+## 🌐 Using the Web App Locally
+
+Once you have both the frontend (Next.js) and backend (FastAPI) servers running simultaneously in separate terminal windows:
+
+1. Open your web browser and go to `http://localhost:3000`.
+2. **Login/Register:** You can register a new account or log in. Because you are connected to the shared Supabase database, any account you create will be visible to the whole team, and you'll see any data we've already generated!
+3. **Dashboard:** After logging in, you'll be taken to the dashboard where you can see your skill graph.
+4. **Assessment & Verification:** Click on a node in the skill graph to take an AI-powered assessment. For Level 2 skills, you can submit a GitHub URL for the AI to analyze and generate interview questions!
+5. **Resume & Jobs:** Use the sidebar to upload a resume or search for jobs based on your verified skills.
 
 ---
 
