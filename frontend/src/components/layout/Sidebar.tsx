@@ -7,7 +7,7 @@ import { Home, Compass, Map, Trophy, Briefcase, UserCircle, LogOut } from 'lucid
 const navItems = [
   { name: 'Dashboard', href: '/dashboard', icon: Home },
   { name: 'Careers', href: '/dashboard/careers', icon: Compass },
-  { name: 'Roadmap', href: '/dashboard/roadmap', icon: Map },
+  { name: 'My Roadmaps', href: '/dashboard/roadmap', icon: Map },
   { name: 'Verification', href: '/dashboard/verify', icon: Trophy },
   { name: 'Jobs', href: '/dashboard/jobs', icon: Briefcase },
 ];

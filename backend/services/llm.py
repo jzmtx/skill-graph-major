@@ -544,5 +544,103 @@ def generate_project_idea(skill_name: str) -> str:
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
-        print("Failed to generate project idea:", e)
         return f"Build a comprehensive, full-stack application using {skill_name} that includes authentication, a database, and a complex domain logic feature (like real-time updates or advanced data processing)."
+
+def analyze_github_repo(github_url: str, skill_name: str, project_abstract: str) -> dict:
+    import urllib.request
+    import re
+    import base64
+    
+    # 1. Extract username/repo
+    match = re.search(r'github\.com/([^/]+)/([^/]+)', github_url)
+    if not match:
+        return {"passed_checks": False, "feedback": "Invalid GitHub URL."}
+        
+    username, repo = match.group(1), match.group(2)
+    repo = repo.replace('.git', '').strip('/')
+    
+    # 2. Fetch README via GitHub API
+    api_url = f"https://api.github.com/repos/{username}/{repo}/readme"
+    readme_content = ""
+    try:
+        req = urllib.request.Request(api_url, headers={'User-Agent': 'SkillGraph-App'})
+        with urllib.request.urlopen(req) as response:
+            if response.status == 200:
+                data = json.loads(response.read().decode())
+                if 'content' in data:
+                    readme_content = base64.b64decode(data['content']).decode('utf-8')
+    except Exception as e:
+        print("Failed to fetch README via API:", e)
+        # Try raw fallback
+        try:
+            raw_url = f"https://raw.githubusercontent.com/{username}/{repo}/main/README.md"
+            req = urllib.request.Request(raw_url, headers={'User-Agent': 'SkillGraph-App'})
+            with urllib.request.urlopen(req) as response:
+                if response.status == 200:
+                    readme_content = response.read().decode('utf-8')
+        except Exception:
+            try:
+                raw_url = f"https://raw.githubusercontent.com/{username}/{repo}/master/README.md"
+                req = urllib.request.Request(raw_url, headers={'User-Agent': 'SkillGraph-App'})
+                with urllib.request.urlopen(req) as response:
+                    if response.status == 200:
+                        readme_content = response.read().decode('utf-8')
+            except Exception:
+                pass
+                
+    if not readme_content:
+        return {"passed_checks": False, "feedback": "Could not read the repository README. Make sure it is public and has a README.md."}
+        
+    # 3. Analyze with LLM
+    prompt = f"""
+    You are a Senior Engineering Assessor.
+    We are verifying a candidate's Level 2 proficiency in '{skill_name}'.
+    They submitted a GitHub repository for evaluation.
+    
+    Repository Abstract provided by user:
+    {project_abstract}
+    
+    Repository README.md Content:
+    {readme_content[:3000]}
+    
+    Evaluate this repository. Does it look like a valid project that uses '{skill_name}'? 
+    If yes, generate exactly 5 highly specific, difficult anti-plagiarism interview questions about the code they likely wrote based on this README. 
+    The questions must be designed to catch someone who just cloned the repo without understanding it.
+    - 4 questions should be "conceptual" (architectural choices, edge cases, interactions between files).
+    - 1 question MUST be "coding" (ask them to write a specific, small snippet of code extending or modifying a feature mentioned in the repo).
+    
+    Return strictly a JSON object:
+    {{
+        "passed_checks": true or false,
+        "feedback": "Why it passed or failed",
+        "questions": [
+            {{
+                "id": 1,
+                "type": "conceptual",
+                "text": "Your conceptual question here"
+            }},
+            ...
+            {{
+                "id": 5,
+                "type": "coding",
+                "text": "Write a snippet that..."
+            }}
+        ]
+    }}
+    """
+    
+    try:
+        res = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+            response_format={"type": "json_object"}
+        )
+        data = json.loads(res.choices[0].message.content)
+        # Ensure 'questions' is present to avoid frontend crashes if LLM hallucinates schema
+        if "questions" not in data and "interview_question" in data:
+            data["questions"] = [{"id": 1, "type": "conceptual", "text": data["interview_question"]}]
+        return data
+    except Exception as e:
+        print("LLM Error in analyze_github_repo:", e)
+        return {"passed_checks": False, "feedback": "Failed to analyze repository with AI."}

@@ -4,8 +4,14 @@ from models import GitHubExtractRequest
 import urllib.request
 import json
 import re
+from pydantic import BaseModel
+from services.hireability import calculate_hireability_index
 
 router = APIRouter()
+
+class ManualSkillAddRequest(BaseModel):
+    student_id: str
+    skill_name: str
 
 def extract_github_username(url: str) -> str:
     # Handles trailing slashes or extra paths
@@ -85,5 +91,35 @@ def get_my_skills(student_id: str):
     try:
         response = supabase.table('student_skills').select('*').eq('student_id', student_id).execute()
         return response.data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/hireability/{student_id}")
+def get_hireability_score(student_id: str):
+    try:
+        response = supabase.table('student_skills').select('*').eq('student_id', student_id).execute()
+        skills = response.data
+        return calculate_hireability_index(skills)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/add")
+def add_manual_skill(req: ManualSkillAddRequest):
+    try:
+        # Check if it already exists
+        existing = supabase.table('student_skills').select('id').eq('student_id', req.student_id).ilike('skill_name', req.skill_name).execute()
+        if existing.data:
+             return {"message": "Skill already exists", "skill": existing.data[0]}
+             
+        # Insert new skill
+        new_skill = {
+            "student_id": req.student_id,
+            "skill_name": req.skill_name.strip(),
+            "source": "manual",
+            "verification_level": 0,
+            "skill_score": 0
+        }
+        response = supabase.table('student_skills').insert(new_skill).execute()
+        return {"message": "Skill added successfully", "skill": response.data[0] if response.data else None}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

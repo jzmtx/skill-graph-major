@@ -4,7 +4,7 @@ import os
 from dotenv import load_dotenv
 
 # We will import our routers here
-from routes import auth, colleges, skills, assessment, project
+from routes import auth, colleges, skills, assessment, project, admin, roadmaps
 
 load_dotenv()
 
@@ -27,4 +27,6 @@ app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
 app.include_router(colleges.router, prefix="/api/colleges", tags=["Colleges"])
 app.include_router(skills.router, prefix="/api/skills", tags=["Skills"])
 app.include_router(assessment.router, prefix="/api/assessment", tags=["assessment"])
-app.include_router(project.router, prefix="/api/project", tags=["project"])
+app.include_router(project.router, prefix="/api/project", tags=["Project"])
+app.include_router(roadmaps.router, prefix="/api/roadmaps", tags=["Roadmaps"])
+app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])

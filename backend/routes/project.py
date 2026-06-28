@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from typing import List
 from database import supabase
 from services.llm import analyze_github_repo, client
 import json
@@ -12,12 +13,15 @@ class VerifyRepoRequest(BaseModel):
     github_url: str
     project_abstract: str
 
+class QA(BaseModel):
+    question: str
+    answer: str
+
 class SubmitInterviewRequest(BaseModel):
     student_id: str
     skill_name: str
     github_url: str
-    question_asked: str
-    student_answer: str
+    qa_pairs: List[QA]
 
 @router.post("/verify-repo")
 async def verify_repo(req: VerifyRepoRequest):
@@ -30,7 +34,7 @@ async def verify_repo(req: VerifyRepoRequest):
             
         return {
             "message": "Repository analyzed and principles verified.",
-            "interview_question": analysis_result.get("interview_question")
+            "questions": analysis_result.get("questions")
         }
         
     except Exception as e:
@@ -40,38 +44,41 @@ async def verify_repo(req: VerifyRepoRequest):
 @router.post("/submit-interview")
 async def submit_interview(req: SubmitInterviewRequest):
     try:
+        qa_text = ""
+        for i, qa in enumerate(req.qa_pairs):
+            qa_text += f"Q{i+1}: {qa.question}\nA: {qa.answer}\n\n"
+            
         # Use LLM to grade the student's answer
         prompt = f"""
         You are a senior software engineering manager conducting an anti-plagiarism interview.
         The candidate claims to have built a project at {req.github_url} using {req.skill_name}.
         
-        You asked them this specific architectural question: "{req.question_asked}"
+        You asked them the following sequence of architectural and coding questions:
         
-        The candidate answered: "{req.student_answer}"
+        {qa_text}
         
-        Evaluate their answer. Does their answer demonstrate a genuine, working knowledge of the code 
-        they supposedly wrote? Or does it sound like a generic, copy-pasted, or hallucinated response?
+        Evaluate their answers holistically. Do their answers demonstrate a genuine, working knowledge of the code 
+        they supposedly wrote? Or do they sound like generic, copy-pasted, or hallucinated responses?
+        If they failed to provide a valid, conceptually correct coding snippet for the coding question, they MUST fail the interview.
         
         Return ONLY a JSON object with two keys:
         - "passed": boolean (true if they passed the verification, false if they failed)
-        - "feedback": A short string explaining why they passed or failed.
+        - "feedback": A short string explaining why they passed or failed, referencing specific answers.
         """
         
-        # We'll use a direct call here for simplicity, although ideally it'd be in llm.py
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=prompt,
+        # Use Groq client imported from services.llm
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+            response_format={"type": "json_object"}
         )
         
-        # Clean the response to ensure it's valid JSON
-        raw_text = response.text.strip()
-        if raw_text.startswith("```json"):
-            raw_text = raw_text[7:-3]
+        raw_text = response.choices[0].message.content.strip()
             
         try:
             result = json.loads(raw_text)
         except Exception:
-            # Fallback if json parsing fails
             passed = "true" in raw_text.lower() and "false" not in raw_text.lower()
             result = {"passed": passed, "feedback": raw_text}
 

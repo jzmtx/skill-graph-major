@@ -1,148 +1,92 @@
-# SkillGraph Major 🚀
+# SkillGraph AI
 
-SkillGraph is an AI-powered project-based learning, assessment, and career verification platform. This repository contains both the frontend (Next.js) and backend (FastAPI) services.
+SkillGraph AI is an intelligent, live-market-driven career mapping platform. It moves away from static, outdated roadmaps by actively scraping current job boards (LinkedIn, Indeed, Glassdoor) via JobSpy, extracting exactly what employers are asking for using high-speed NLP (Aho-Corasick), and orchestrating a LLaMa-3 70B AI to generate logical, sequential learning paths.
 
-## 🏗️ Project Architecture
-- **Frontend**: Next.js 14 (App Router), React, Tailwind CSS, TypeScript
-- **Backend**: FastAPI (Python), Supabase (PostgreSQL), Piston API (Code Execution)
-- **AI Models**: Gemini & Llama-3 (via Groq) for dynamic assessments, JD parsing, and code evaluation.
+## End-to-End Journey (What We Built)
 
----
+1. **Live Market Intelligence**: We built a Python backend that takes a user's desired Role (e.g. Full Stack Developer) and Ecosystem (e.g. MERN). It triggers JobSpy to scrape ~50 live job descriptions across the internet.
+2. **Advanced NLP Skill Extraction**: The raw text from these Job Descriptions is run through a custom Aho-Corasick NLP engine against our massive database of thousands of tech skills. It calculates precise demand percentages (e.g., React: 85%, Docker: 42%).
+3. **Ontology & Framework Mapping**: The system detects Parent-Child relationships. If it sees "Python" is in demand, it automatically pulls data for specific frameworks like Django and FastAPI so the user isn't left guessing.
+4. **LLaMa-3 Generation Engine**: We feed the hard data into a strictly prompted Groq LLaMa-3 70B model. The AI is forbidden from hallucinating skills. It sequentially orders the data into Foundations ➔ Frameworks ➔ Databases ➔ Cloud, providing a structured, interactive roadmap.
+5. **Interactive UI & RAG Chat**: The Next.js frontend renders this roadmap in a dynamic canvas. We also built an AI Assistant that can read your specific roadmap and answer questions about why certain technologies were chosen over others.
 
-## 🌟 What We've Built Till Now (Project Overview)
+## Setup Instructions
 
-Our platform gamifies the learning process by using a node-based **Skill Graph**. As users prove their knowledge, they level up their skills and unlock new career opportunities.
-
-### 1. Level 1 Assessment: Adaptive AI Evaluation
-When a user clicks on a skill node to take an assessment, they face a 12-question gauntlet generated entirely on the fly by AI:
-*   **Adaptive MCQs**: The first 10 questions adjust in difficulty based on whether the user gets the previous questions right or wrong.
-*   **Dynamic Coding Challenges**: The final 2 questions require writing actual code. 
-*   **Piston Execution Engine**: For the coding questions, we don't just rely on AI for grading. We wrap the user's code in a test script and run it *live* in a secure sandbox using the Piston API! If their code fails the test cases, the exact compiler/runtime error is piped back to them as feedback. If the language isn't supported by Piston, it safely falls back to a strict AI conceptual grading.
-
-### 2. Level 2 Assessment: Project Verification
-To reach Level 2, users must build and defend a real-world project.
-*   **Idea Generation**: The AI generates a complex, highly specific project spec for the user to build based on their skill.
-*   **Strict Engineering Checks**: The user submits their GitHub repository URL and writes a Project Abstract. The backend reaches out to the **GitHub API** to scan the root file tree of their repository. It explicitly checks for Software Engineering best practices (e.g., failing the submission if they committed a `.env` file or forgot a `README.md`).
-*   **The Defense Interview**: If the codebase passes the structural checks, the AI acts as a Senior Engineering Manager. It reads the Abstract and the file structure to generate a tough architectural interview question. The user must defend their design decisions to prove they didn't just copy the code!
-
----
-
-## 🛠️ Setup Instructions for the Team
-
-Welcome to the team! To work on this project locally, follow these steps strictly.
-
-### 1. Prerequisites
-- **Git**
-- **Node.js** (v18+)
-- **Python** (v3.10+)
-
-### 2. Clone the Repository
+### 1. Clone the Repository
 ```bash
-git clone https://github.com/jzmtx/skill-graph-major.git
-cd skill-graph-major
+git clone <repository_url>
+cd skillgraph
 ```
 
-### 3. Environment Variables (.env)
-We use a shared database and storage for the team, but you need your own AI keys.
-
-**Backend Setup (`backend/.env`):**
-1. Navigate to the `backend` directory.
-2. Make a copy of the template file and rename the copy to exactly `.env`.
-   ```bash
-   cp .env.example .env
-   ```
-3. Open `.env` in your code editor. The shared Supabase and Cloudinary keys are already populated.
-4. Replace the dummy values for `GROQ_API_KEY` and `TAVILY_API_KEY` with your actual API keys (or ask the project lead for them).
-5. Save the file.
-
-**Frontend Setup (`frontend/.env.local`):**
-1. Navigate to the `frontend` directory.
-2. Make a copy of the template file and rename the copy to exactly `.env.local`.
-   ```bash
-   cp .env.example .env.local
-   ```
-3. Open `.env.local` and ensure the `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are correct.
-4. Save the file.
-
-### 4. Start the Backend (FastAPI)
-1. Open a terminal in the `backend` directory.
-2. Create and activate a Python virtual environment:
-   ```bash
-   python -m venv venv
-   
-   # Windows:
-   venv\Scripts\activate
-   # Mac/Linux:
-   source venv/bin/activate
-   ```
-3. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-4. Run the API server:
-   ```bash
-   uvicorn main:app --reload
-   ```
-
-### 5. Start the Frontend (Next.js)
-1. Open a *new* terminal window in the `frontend` directory.
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Run the development server:
-   ```bash
-   npm run dev
-   ```
-4. The frontend will be available at `http://localhost:3000`.
-
----
-
-## 🧪 Testing Guide
-
-Once both servers are running simultaneously, open `http://localhost:3000` in your browser.
-
-1.  **Login/Register**: Because you are connected to the shared Supabase database, any account you create will be visible to the team.
-2.  **Dashboard**: After logging in, you'll be taken to the dashboard to view your interactive Skill Graph.
-3.  **Test Level 1 (Adaptive AI + Piston)**: 
-    *   Click on an unverified skill node.
-    *   Answer the 10 adaptive MCQs.
-    *   On questions 11 and 12, write Python code (e.g., `def solve(n): return n + 1`). You can click the **Run Code** button to execute it live against the Piston engine and view console output before clicking **Submit Answer**!
-4.  **Test Level 2 (Project Verification)**: 
-    *   Click on a skill that has already passed Level 1.
-    *   Click the "L2 Verify Project" button.
-    *   Generate a project idea.
-    *   Try submitting a GitHub URL that doesn't have a README or has a `.env` file (e.g. one of your old repos). The AI should instantly fail you! Then try submitting a clean, proper repository to get to the interview question phase.
-
----
-
-## 🌿 Git Workflow: How to Collaborate
-
-To ensure we don't overwrite each other's work, we use **Git Branches**.
-
-### The Golden Rule: Never work directly on `main`!
-The `main` branch should always contain working, deployable code.
-
-### 1. Working on a New Feature
-When you want to add a feature, create a new branch:
+### 2. Backend Setup (FastAPI / Python)
 ```bash
-git checkout -b feature/your-feature-name
+cd backend
+
+# Create a virtual environment (optional but recommended)
+python -m venv venv
+source venv/bin/activate  # On Windows use: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
 ```
 
-### 2. Saving Your Work
-Once you've made changes:
-```bash
-git add .
-git commit -m "Added the awesome new feature"
-git push origin feature/your-feature-name
+**Required `.env` file in `/backend`:**
+Create a `.env` file in the `backend` folder with the following keys:
+```env
+# Supabase (Database & Auth)
+SUPABASE_URL=your_supabase_url
+SUPABASE_KEY=your_supabase_service_role_key
+DATABASE_URL=your_postgres_connection_string
+
+# Groq (AI Model for Roadmaps & Chat)
+GROQ_API_KEY=your_groq_api_key
+
+# Cloudinary (File Storage)
+CLOUDINARY_CLOUD_NAME=your_cloud_name
+CLOUDINARY_API_KEY=your_api_key
+CLOUDINARY_API_SECRET=your_api_secret
+
+# Tavily (Career Search / Fallback)
+TAVILY_API_KEY=your_tavily_key
+
+# Job Search APIs
+SERPER_API_KEY=your_serper_key
+JSEARCH_API_KEY=your_jsearch_key
 ```
 
-### 3. Merging (Pull Requests)
-Create a **Pull Request (PR)** on GitHub to merge your branch into `main`. The team will review your code. 
-
-### 4. Deleting a Bad Branch
-If you created a branch and realized it's a terrible idea, you can easily delete it and return to the stable `main` code:
+**Run the Backend:**
 ```bash
-git checkout main
-git branch -D feature/bad-idea
+uvicorn main:app --reload
 ```
+The backend will run on `http://localhost:8000`.
+
+### 3. Frontend Setup (Next.js / React)
+```bash
+cd ../frontend
+
+# Install dependencies
+npm install
+```
+
+**Required `.env.local` file in `/frontend`:**
+Create a `.env.local` file in the `frontend` folder with the following keys:
+```env
+# Supabase (Database & Auth)
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+
+# Backend API URL (for local development)
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
+
+**Run the Frontend:**
+```bash
+npm run dev
+```
+The frontend will run on `http://localhost:3000`.
+
+## Architecture Highlights
+- **FastAPI**: Chosen for its high speed, asynchronous capabilities, and excellent integration with Python ML/NLP libraries.
+- **Next.js**: Chosen for SEO, fast rendering, and dynamic routing for user dashboards.
+- **Supabase**: Handles all Postgres relational data, JSONB storage for roadmap schemas, and Row Level Security.
+- **Groq**: Provides ultra-fast inference for the massive LLaMa-3 70B model, crucial for quick generation wait times.

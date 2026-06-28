@@ -44,6 +44,16 @@ export const getMySkills = async (student_id: string) => {
   return response.data;
 };
 
+export const addSkill = async (data: { student_id: string; skill_name: string }) => {
+  const response = await api.post('/api/skills/add', data);
+  return response.data;
+};
+
+export const getHireabilityScore = async (student_id: string) => {
+  const response = await api.get(`/api/skills/hireability/${student_id}`);
+  return response.data;
+};
+
 // --- Assessment APIs ---
 export const getAdaptiveQuestion = async (data: Record<string, unknown>) => {
   const response = await api.post('/api/assessment/get-question', data);

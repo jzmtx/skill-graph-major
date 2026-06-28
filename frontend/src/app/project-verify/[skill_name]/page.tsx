@@ -2,9 +2,10 @@
 
 import React, { useState, use } from 'react';
 import { verifyProjectRepo, submitProjectInterview, getProjectIdea } from '@/lib/api';
-import { ArrowLeft, CheckCircle2, Send, Terminal, Loader2, XCircle, ShieldAlert, Brain, Lightbulb } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Send, Terminal, Loader2, XCircle, ShieldAlert, Brain, Lightbulb, Code2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { Editor } from '@monaco-editor/react';
 
 export default function ProjectVerificationPage({ params }: { params: Promise<{ skill_name: string }> }) {
   const router = useRouter();
@@ -18,8 +19,10 @@ export default function ProjectVerificationPage({ params }: { params: Promise<{ 
   const [projectIdea, setProjectIdea] = useState('');
   const [projectAbstract, setProjectAbstract] = useState('');
   const [githubUrl, setGithubUrl] = useState('');
-  const [question, setQuestion] = useState('');
-  const [answer, setAnswer] = useState('');
+  
+  const [questions, setQuestions] = useState<any[]>([]);
+  const [answers, setAnswers] = useState<Record<number, string>>({});
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   
   const [result, setResult] = useState<{passed: boolean, feedback: string} | null>(null);
 
@@ -55,7 +58,9 @@ export default function ProjectVerificationPage({ params }: { params: Promise<{ 
         project_abstract: projectAbstract
       });
       
-      setQuestion(res.interview_question);
+      setQuestions(res.questions);
+      setCurrentQuestionIndex(0);
+      setAnswers({});
       setStep(2);
     } catch (e: any) {
       setError(e.response?.data?.detail || "Failed to analyze repository. Check if it's public.");
@@ -64,23 +69,38 @@ export default function ProjectVerificationPage({ params }: { params: Promise<{ 
     }
   };
 
-  const handleSubmitInterview = async () => {
-    if (answer.length < 20) {
-      setError("Please provide a more detailed answer.");
+  const handleNextQuestion = () => {
+    const currentQ = questions[currentQuestionIndex];
+    if (!answers[currentQ.id] || answers[currentQ.id].trim().length < 10) {
+      setError("Please provide a more detailed answer before continuing.");
       return;
     }
+    setError('');
     
+    if (currentQuestionIndex < questions.length - 1) {
+      setCurrentQuestionIndex(prev => prev + 1);
+    } else {
+      handleSubmitInterview();
+    }
+  };
+
+  const handleSubmitInterview = async () => {
     setLoading(true);
     setError('');
     
     try {
       const studentId = localStorage.getItem('student_id');
+      
+      const qa_pairs = questions.map(q => ({
+        question: q.text,
+        answer: answers[q.id] || ""
+      }));
+      
       const res = await submitProjectInterview({
         student_id: studentId,
         skill_name: skillName,
         github_url: githubUrl,
-        question_asked: question,
-        student_answer: answer
+        qa_pairs: qa_pairs
       });
       
       setResult(res);
@@ -216,36 +236,70 @@ export default function ProjectVerificationPage({ params }: { params: Promise<{ 
             )}
 
             {/* Step 2: The Interview */}
-            {step === 2 && (
+            {step === 2 && questions.length > 0 && (
               <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-                <div className="inline-block px-3 py-1 bg-amber-100 text-amber-800 text-xs font-bold rounded-full mb-4 uppercase tracking-wider">
-                  Anti-Plagiarism Check
+                <div className="flex justify-between items-center mb-4">
+                  <div className="inline-block px-3 py-1 bg-amber-100 text-amber-800 text-xs font-bold rounded-full uppercase tracking-wider">
+                    Anti-Plagiarism Check
+                  </div>
+                  <div className="text-sm font-medium text-slate-500">
+                    Question {currentQuestionIndex + 1} of {questions.length}
+                  </div>
                 </div>
-                <h2 className="text-2xl font-bold text-slate-800 mb-6">Explain your code.</h2>
+                
+                <h2 className="text-2xl font-bold text-slate-800 mb-6 flex items-center gap-2">
+                  {questions[currentQuestionIndex].type === 'coding' ? <Code2 className="w-6 h-6 text-indigo-600" /> : <Brain className="w-6 h-6 text-indigo-600" />}
+                  {questions[currentQuestionIndex].type === 'coding' ? 'Coding Challenge' : 'Explain your code'}
+                </h2>
                 
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 mb-6">
                   <p className="text-slate-800 font-medium leading-relaxed">
-                    {question}
+                    {questions[currentQuestionIndex].text}
                   </p>
                 </div>
                 
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">Your Answer (Be specific to your codebase)</label>
-                    <textarea 
-                      rows={6} required placeholder="Explain your approach, the files involved, and why you made those architectural decisions..."
-                      className="w-full p-4 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
-                      value={answer} onChange={e => setAnswer(e.target.value)}
-                    />
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      {questions[currentQuestionIndex].type === 'coding' ? 'Your Code Snippet' : 'Your Answer (Be specific to your codebase)'}
+                    </label>
+                    {questions[currentQuestionIndex].type === 'coding' ? (
+                      <div className="border border-slate-300 rounded-xl overflow-hidden h-64">
+                        <Editor
+                          height="100%"
+                          defaultLanguage="javascript"
+                          value={answers[questions[currentQuestionIndex].id] || ""}
+                          onChange={(val) => setAnswers({...answers, [questions[currentQuestionIndex].id]: val || ""})}
+                          options={{
+                            minimap: { enabled: false },
+                            fontSize: 14,
+                            lineNumbers: "on",
+                            scrollBeyondLastLine: false,
+                            padding: { top: 16, bottom: 16 }
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <textarea 
+                        rows={6} required placeholder="Explain your approach, the files involved, and why you made those architectural decisions..."
+                        className="w-full p-4 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
+                        value={answers[questions[currentQuestionIndex].id] || ""} 
+                        onChange={e => setAnswers({...answers, [questions[currentQuestionIndex].id]: e.target.value})}
+                      />
+                    )}
                   </div>
                   
                   <div className="pt-2">
                     <button
-                      onClick={handleSubmitInterview}
-                      disabled={loading || answer.length < 10}
+                      onClick={handleNextQuestion}
+                      disabled={loading || !answers[questions[currentQuestionIndex].id] || answers[questions[currentQuestionIndex].id].trim().length < 10}
                       className="w-full flex items-center justify-center px-6 py-3.5 bg-slate-900 text-white font-medium rounded-xl hover:bg-slate-800 disabled:opacity-50 transition-colors"
                     >
-                      {loading ? <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Evaluating Answer...</> : <><Send className="w-4 h-4 mr-2" /> Submit Answer</>}
+                      {loading ? <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Evaluating...</> : (
+                        currentQuestionIndex < questions.length - 1 
+                          ? "Next Question" 
+                          : <><Send className="w-4 h-4 mr-2" /> Submit Interview</>
+                      )}
                     </button>
                   </div>
                 </div>
