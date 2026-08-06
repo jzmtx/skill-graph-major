@@ -1,12 +1,16 @@
 import os
 from groq import Groq
-from dotenv import load_dotenv
+from dotenv import load_dotenv, dotenv_values
 import json
 
 load_dotenv()
 
-# We use Groq because the API key is already present in .env
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+from dotenv import dotenv_values
+import random
+env_vars = dotenv_values(".env")
+keys_str = env_vars.get("GROQ_API_KEYS", env_vars.get("GROQ_API_KEY", ""))
+key_list = [k.strip() for k in keys_str.split(",") if k.strip()]
+client = Groq(api_key=random.choice(key_list) if key_list else None)
 
 def verify_questions(skill_name: str, questions: list) -> list:
     """

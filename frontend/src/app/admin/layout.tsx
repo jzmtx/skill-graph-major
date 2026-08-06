@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, FileQuestion, Lock, LogOut, BarChart as ChartIcon, Activity } from "lucide-react";
+import { LayoutDashboard, Users, FileQuestion, Lock, LogOut, BarChart as ChartIcon, Activity, Library } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -78,13 +78,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { name: "Users", href: "/admin", icon: Users },
     { name: "Question Bank", href: "/admin/questions", icon: FileQuestion },
     { name: "Market Analytics", href: "/admin/market", icon: ChartIcon },
+    { name: "Resource Cache", href: "/admin/resources", icon: Library },
     { name: "API Usage", href: "/admin/api", icon: Activity },
   ];
 
   return (
-    <div className="min-h-screen bg-slate-950 flex">
-      {/* Sidebar */}
-      <div className="w-64 border-r border-slate-800 bg-slate-900/50 flex flex-col">
+    <div className="h-screen bg-slate-950 flex overflow-hidden">
+      {/* Sidebar - Locked to screen height, no scrolling */}
+      <div className="w-64 h-screen border-r border-slate-800 bg-slate-900/50 flex flex-col shrink-0">
         <div className="p-6 border-b border-slate-800">
           <Link href="/admin" className="flex items-center gap-3">
             <div className="p-2 bg-indigo-500 rounded-lg">
@@ -94,7 +95,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </Link>
         </div>
         
-        <div className="p-4 flex-1">
+        <div className="p-4 flex-1 overflow-y-auto">
           <nav className="space-y-2">
             {navItems.map((item) => {
               const isActive = pathname === item.href;
@@ -128,8 +129,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="flex-1 overflow-auto">
+      {/* Main Content - Independent scrolling and dark background to prevent bleed */}
+      <div className="flex-1 h-screen overflow-y-auto bg-slate-950 text-slate-200">
         {children}
       </div>
     </div>

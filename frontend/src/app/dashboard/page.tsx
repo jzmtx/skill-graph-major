@@ -8,16 +8,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import HireabilityScore from '@/components/dashboard/HireabilityScore';
 
 export default function DashboardPage() {
-  const [skills, setSkills] = useState<any[]>(() => {
-    // Optimistic UI: Load from cache instantly if available
-    if (typeof window !== 'undefined') {
-      const cached = localStorage.getItem('cached_skills');
-      return cached ? JSON.parse(cached) : [];
-    }
-    return [];
-  });
-  // If we have cached skills, don't show the harsh loading state initially
-  const [loading, setLoading] = useState(skills.length === 0);
+  const [skills, setSkills] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [addingSkill, setAddingSkill] = useState(false);
   const [customSkill, setCustomSkill] = useState("");
@@ -68,6 +60,13 @@ export default function DashboardPage() {
       try {
         const studentId = localStorage.getItem('student_id');
         const githubUrl = localStorage.getItem('student_github');
+        
+        // Optimistic UI: Load from cache instantly to prevent flicker
+        const cached = localStorage.getItem('cached_skills');
+        if (cached) {
+          setSkills(JSON.parse(cached));
+          setLoading(false);
+        }
         
         if (!studentId) {
           setLoading(false);

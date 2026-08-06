@@ -8,49 +8,100 @@ import Link from "next/link";
 import RoadmapCanvas from "@/components/roadmap/RoadmapCanvas";
 import RoadmapAnalysis from "@/components/roadmap/RoadmapAnalysis";
 
-function GeneratingScreen({ role, ecosystem }: { role: string; ecosystem: string }) {
-  const [phase, setPhase] = useState(0);
+function GeneratingScreen({ role, ecosystem, requestId }: { role: string; ecosystem: string; requestId: string }) {
+  const [progress, setProgress] = useState(0);
+  const [message, setMessage] = useState("Initializing...");
+  const [phaseIndex, setPhaseIndex] = useState(0);
 
-  const phases = [
-    { text: "Scraping global job boards for FAANG requirements...", icon: <Database className="w-8 h-8 text-blue-400" />, delay: 0 },
-    { text: "Running statistical NLP matrix on JD corpus...", icon: <Cpu className="w-8 h-8 text-purple-400" />, delay: 6000 },
-    { text: "Inferring Complements and Alternatives...", icon: <GitBranch className="w-8 h-8 text-amber-400" />, delay: 12000 },
-    { text: "LLaMa-3 synthesizing chronological graph...", icon: <Sparkles className="w-8 h-8 text-indigo-400" />, delay: 18000 },
+  const icons = [
+    <Database key="1" className="w-8 h-8 text-blue-400" />,
+    <Cpu key="2" className="w-8 h-8 text-purple-400" />,
+    <GitBranch key="3" className="w-8 h-8 text-amber-400" />,
+    <Sparkles key="4" className="w-8 h-8 text-indigo-400" />,
+    <CheckCircle2 key="5" className="w-8 h-8 text-emerald-400" />,
   ];
 
   React.useEffect(() => {
-    const timeouts = phases.map((p, i) => 
-      setTimeout(() => setPhase(i), p.delay)
-    );
-    return () => timeouts.forEach(clearTimeout);
-  }, []);
+    // Polling timer
+    const timer = setInterval(async () => {
+      try {
+        const status = await roadmapsApi.getGenerateStatus(requestId);
+        if (status) {
+          setProgress(status.progress || 0);
+          setMessage(status.message || "Working...");
+          
+          // Heuristic to change icon based on progress
+          if (status.progress < 20) setPhaseIndex(0);
+          else if (status.progress < 60) setPhaseIndex(1);
+          else if (status.progress < 90) setPhaseIndex(2);
+          else if (status.progress < 100) setPhaseIndex(3);
+          else setPhaseIndex(4);
+        }
+      } catch (err) {
+        console.error("Failed to poll status", err);
+      }
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [requestId]);
 
   return (
     <div className="bg-slate-950 min-h-[80vh] rounded-3xl flex flex-col items-center justify-center p-8 overflow-hidden shadow-2xl relative">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-indigo-900/20 via-slate-950 to-slate-950"></div>
       
       <motion.div 
-        key={phase}
-        initial={{ opacity: 0, y: 20, scale: 0.95 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: -20, scale: 0.95 }}
-        transition={{ duration: 0.5 }}
-        className="text-center z-10 flex flex-col items-center"
+        key="generating-container"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="text-center z-10 flex flex-col items-center w-full max-w-lg"
       >
         <div className="relative mb-8">
           <div className="absolute inset-0 bg-indigo-500 blur-xl opacity-30 rounded-full"></div>
-          <div className="relative bg-slate-900 p-6 rounded-full border border-slate-700 shadow-2xl">
-            {phases[phase].icon}
+          <motion.div 
+            key={phaseIndex}
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="relative bg-slate-900 p-6 rounded-full border border-slate-700 shadow-2xl"
+          >
+            {icons[phaseIndex]}
             <div className="absolute top-0 left-0 w-full h-full border-t-2 border-indigo-500 rounded-full animate-spin shadow-[0_0_15px_rgba(99,102,241,0.5)]"></div>
-          </div>
+          </motion.div>
         </div>
         
-        <h2 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-white to-indigo-200 mb-4 tracking-tight">
+        <h2 className="text-2xl md:text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-white to-indigo-200 mb-6 tracking-tight">
           Generating {ecosystem === "General" ? "" : ecosystem} {role}...
         </h2>
         
-        <p className="text-indigo-300 font-mono text-sm max-w-md mx-auto typing-effect h-6">
-          {phases[phase].text}
+        <div className="w-full bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-lg mb-8">
+          <div className="flex justify-between items-center mb-3">
+            <span className="text-slate-400 text-sm font-medium">Live AI Progress</span>
+            <span className="text-indigo-400 text-sm font-bold bg-indigo-500/10 px-2 py-0.5 rounded">
+              {progress}%
+            </span>
+          </div>
+          
+          {/* Progress Bar */}
+          <div className="w-full h-3 bg-slate-800 rounded-full overflow-hidden mb-4 relative">
+            <motion.div 
+              className="absolute top-0 left-0 h-full bg-gradient-to-r from-indigo-600 to-indigo-400 rounded-full"
+              initial={{ width: 0 }}
+              animate={{ width: `${progress}%` }}
+              transition={{ ease: "easeInOut", duration: 0.5 }}
+            />
+          </div>
+          
+          <motion.div
+            key={`msg-${message}`}
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-indigo-300 font-mono text-sm text-left min-h-[1.5rem]"
+          >
+            &gt; {message}
+          </motion.div>
+        </div>
+        
+        <p className="text-slate-500 text-xs max-w-sm mx-auto">
+          We are analyzing live job markets, calculating skill dependencies, and structuring your personalized learning phases.
         </p>
       </motion.div>
     </div>
@@ -64,9 +115,11 @@ export default function RoadmapsPage() {
   const [roadmap, setRoadmap] = useState<any>(null);
   const [analytics, setAnalytics] = useState<any>(null);
   const [expandedNode, setExpandedNode] = useState<string | null>(null);
+  const [currentRequestId, setCurrentRequestId] = useState<string>("");
   
   const [myRoadmaps, setMyRoadmaps] = useState<any[]>([]);
   const [loadingList, setLoadingList] = useState(true);
+  const [weeklyHours, setWeeklyHours] = useState<number>(20);
 
   useEffect(() => {
     const fetchMyRoadmaps = async () => {
@@ -113,7 +166,7 @@ export default function RoadmapsPage() {
     }
   };
 
-  const fetchRoadmap = async (role: string, ecosystem: string) => {
+  const fetchRoadmapWithHours = async (role: string, ecosystem: string, weeklyHours: number = 20) => {
     try {
       const studentId = localStorage.getItem("student_id");
       
@@ -132,8 +185,10 @@ export default function RoadmapsPage() {
       }
 
       // 2. Not found, switch to generation state
+      const newReqId = Date.now().toString() + Math.random().toString(36).substring(2, 9);
+      setCurrentRequestId(newReqId);
       setStep("generating");
-      const genData = await roadmapsApi.generateRoadmap(role, ecosystem, studentId);
+      const genData = await roadmapsApi.generateRoadmap(role, ecosystem, studentId, newReqId, weeklyHours);
       setRoadmap(genData.roadmap);
       setAnalytics(genData.roadmap.analytics_json);
       setStep("roadmap");
@@ -150,9 +205,9 @@ export default function RoadmapsPage() {
     }
   };
 
-  const handleEcosystemSelect = (eco: string) => {
+  const handleEcosystemSelect = (eco: string, weeklyHours: number = 20) => {
     setSelectedEcosystem(eco);
-    fetchRoadmap(selectedRole, eco);
+    fetchRoadmapWithHours(selectedRole, eco, weeklyHours);
   };
   
   if (loadingList) {
@@ -248,21 +303,21 @@ export default function RoadmapsPage() {
               <p className="text-slate-500 text-sm">Frontend + Backend mastery. (Choose Stack)</p>
             </button>
             <button
-              onClick={() => { setSelectedRole("Data Scientist"); setSelectedEcosystem("General"); fetchRoadmap("Data Scientist", "General"); }}
+              onClick={() => { setSelectedRole("Data Scientist"); setStep("ecosystem"); }}
               className="group bg-slate-900 border border-slate-800 hover:border-indigo-500 hover:bg-slate-800 p-8 rounded-2xl text-left transition-all duration-300"
             >
               <h2 className="text-2xl font-bold text-white mb-2 group-hover:text-indigo-400 transition-colors">Data Scientist</h2>
               <p className="text-slate-500 text-sm">Python, ML, and Analytics.</p>
             </button>
             <button
-              onClick={() => { setSelectedRole("Cloud Architect"); setSelectedEcosystem("General"); fetchRoadmap("Cloud Architect", "General"); }}
+              onClick={() => { setSelectedRole("Cloud Architect"); setStep("ecosystem"); }}
               className="group bg-slate-900 border border-slate-800 hover:border-indigo-500 hover:bg-slate-800 p-8 rounded-2xl text-left transition-all duration-300"
             >
               <h2 className="text-2xl font-bold text-white mb-2 group-hover:text-indigo-400 transition-colors">Cloud Architect</h2>
               <p className="text-slate-500 text-sm">AWS, Azure, and infrastructure.</p>
             </button>
             <button
-              onClick={() => { setSelectedRole("Cybersecurity Analyst"); setSelectedEcosystem("General"); fetchRoadmap("Cybersecurity Analyst", "General"); }}
+              onClick={() => { setSelectedRole("Cybersecurity Analyst"); setStep("ecosystem"); }}
               className="group bg-slate-900 border border-slate-800 hover:border-indigo-500 hover:bg-slate-800 p-8 rounded-2xl text-left transition-all duration-300"
             >
               <h2 className="text-2xl font-bold text-white mb-2 group-hover:text-indigo-400 transition-colors">Cybersecurity Analyst</h2>
@@ -277,7 +332,7 @@ export default function RoadmapsPage() {
               const val = (e.currentTarget.elements.namedItem('customRole') as HTMLInputElement).value;
               if (val.trim()) {
                 setSelectedRole(val.trim());
-                fetchRoadmap(val.trim(), "General");
+                setStep("ecosystem");
               }
             }} className="flex max-w-md mx-auto gap-3">
               <input 
@@ -300,34 +355,52 @@ export default function RoadmapsPage() {
     return (
       <div className="bg-slate-950 min-h-[80vh] rounded-3xl flex flex-col items-center justify-center p-8 overflow-hidden shadow-2xl">
         <motion.div initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} className="text-center max-w-2xl mx-auto w-full">
-          <h1 className="text-4xl font-bold text-white mb-6">Define Your Tech Stack</h1>
+          <h1 className="text-4xl font-bold text-white mb-6">Define Your Tech Stack & Commitment</h1>
           <p className="text-lg text-slate-400 mb-12">
-            "Full Stack" is a very broad term. Do you have a specific ecosystem in mind, or do you want the AI to blindly discover the most demanded stack?
+            Customize your learning speed and tech ecosystem to build a mentor-tailored path.
           </p>
 
           <form onSubmit={(e) => {
               e.preventDefault();
               const val = (e.currentTarget.elements.namedItem('customEco') as HTMLInputElement).value;
               const eco = val.trim() || "General";
-              handleEcosystemSelect(eco);
-            }} className="flex max-w-xl mx-auto gap-3">
-              <input 
-                name="customEco"
-                placeholder="e.g. Python/Django, .NET, MERN, Ruby on Rails..." 
-                className="flex-1 bg-slate-900 border border-slate-700 text-white p-4 rounded-xl focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
-              />
-              <button type="submit" className="bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-4 rounded-xl font-bold transition-colors">
+              handleEcosystemSelect(eco, weeklyHours);
+            }} className="flex flex-col max-w-xl mx-auto gap-4">
+              
+              <div className="flex flex-col text-left gap-1.5">
+                <label className="text-sm font-semibold text-slate-300">Weekly Commitment Hours</label>
+                <select 
+                  value={weeklyHours}
+                  onChange={(e) => setWeeklyHours(parseInt(e.target.value))}
+                  className="bg-slate-900 border border-slate-700 text-white p-4 rounded-xl outline-none focus:border-indigo-500"
+                >
+                  <option value={10}>10 Hours / Week (Part-Time / Light)</option>
+                  <option value={20}>20 Hours / Week (Moderate / Standard)</option>
+                  <option value={40}>40 Hours / Week (Full-Time / Intensive)</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col text-left gap-1.5 mb-2">
+                <label className="text-sm font-semibold text-slate-300">Target Tech Stack (Optional)</label>
+                <input 
+                  name="customEco"
+                  placeholder="e.g. Python/Django, .NET, MERN, Ruby on Rails..." 
+                  className="bg-slate-900 border border-slate-700 text-white p-4 rounded-xl focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+                />
+              </div>
+
+              <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-4 rounded-xl font-bold transition-all shadow-lg shadow-indigo-500/20">
                 Generate Path
               </button>
           </form>
             
-          <div className="mt-8 flex flex-wrap justify-center gap-3">
+          <div className="mt-10 flex flex-wrap justify-center gap-3">
               <span className="text-slate-500 text-sm py-2">Quick picks:</span>
-              <button onClick={() => handleEcosystemSelect("MERN")} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm transition-colors">MERN</button>
-              <button onClick={() => handleEcosystemSelect("Java/Spring")} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm transition-colors">Java</button>
-              <button onClick={() => handleEcosystemSelect(".NET/C#")} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm transition-colors">.NET</button>
-              <button onClick={() => handleEcosystemSelect("Python/Django")} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm transition-colors">Python</button>
-              <button onClick={() => handleEcosystemSelect("General")} className="px-4 py-2 border border-slate-700 hover:border-slate-500 text-slate-400 rounded-lg text-sm transition-colors ml-4">
+              <button onClick={() => handleEcosystemSelect("MERN", weeklyHours)} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm transition-colors">MERN</button>
+              <button onClick={() => handleEcosystemSelect("Java/Spring", weeklyHours)} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm transition-colors">Java</button>
+              <button onClick={() => handleEcosystemSelect(".NET/C#", weeklyHours)} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm transition-colors">.NET</button>
+              <button onClick={() => handleEcosystemSelect("Python/Django", weeklyHours)} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm transition-colors">Python</button>
+              <button onClick={() => handleEcosystemSelect("General", weeklyHours)} className="px-4 py-2 border border-slate-700 hover:border-slate-500 text-slate-400 rounded-lg text-sm transition-colors ml-4">
                 Skip / Let AI Discover
               </button>
           </div>
@@ -338,7 +411,7 @@ export default function RoadmapsPage() {
 
   // Phase 3: Generating State
   if (step === "generating") {
-    return <GeneratingScreen role={selectedRole} ecosystem={selectedEcosystem} />;
+    return <GeneratingScreen role={selectedRole} ecosystem={selectedEcosystem || "General"} requestId={currentRequestId} />;
   }
 
   // Phase 4: The Roadmap
@@ -351,11 +424,17 @@ export default function RoadmapsPage() {
       {myRoadmaps.length > 0 && (
         <button 
           onClick={() => setStep("list")}
-          className="absolute top-8 left-8 text-slate-400 hover:text-white flex items-center gap-2 transition-colors z-20"
+          className="absolute top-8 left-8 text-slate-400 hover:text-white flex items-center gap-2 transition-colors z-20 print-hide"
         >
           <ChevronRight className="w-5 h-5 rotate-180" /> Back to My Roadmaps
         </button>
       )}
+      <button 
+        onClick={() => window.print()}
+        className="absolute top-8 right-8 text-slate-400 hover:text-white flex items-center gap-2 transition-colors z-20 bg-slate-900/60 border border-slate-700/50 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-slate-800 print-hide"
+      >
+        <BookOpen className="w-4 h-4 text-indigo-400" /> Export PDF / Print
+      </button>
       <div className="max-w-6xl mx-auto py-12">
         
         {/* Professional Compact Hero Section */}
@@ -438,13 +517,53 @@ export default function RoadmapsPage() {
           </div>
         </motion.div>
 
+        {/* Ingestion Methodology Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+          className="relative rounded-[1.5rem] bg-slate-900/40 border border-slate-800/80 p-5 mb-8 text-left backdrop-blur-md flex flex-col md:flex-row items-start md:items-center justify-between gap-6 group hover:bg-slate-900/60 transition-colors"
+        >
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="w-6 h-6 text-indigo-400" />
+            </div>
+            <div>
+              <h3 className="text-white font-bold text-base mb-0.5">Scraped Industry Verification</h3>
+              <p className="text-xs text-slate-400 max-w-xl">
+                We crawl real-time market data across primary job portals (LinkedIn, Glassdoor, Indeed, Naukri) to verify skill frequencies and composite recommendation demand metrics.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-4 shrink-0 font-mono text-[11px] font-bold text-slate-400 bg-slate-950/80 px-4 py-3 rounded-xl border border-slate-800/60 shadow-inner">
+            <div className="flex flex-col">
+              <span className="text-slate-500 uppercase tracking-widest text-[9px] mb-0.5">Data Sources</span>
+              <span className="text-indigo-400">LinkedIn, Indeed, Glassdoor</span>
+            </div>
+            <div className="w-px h-6 bg-slate-800 self-center hidden md:block"></div>
+            <div className="flex flex-col">
+              <span className="text-slate-500 uppercase tracking-widest text-[9px] mb-0.5">JDs Scraped</span>
+              <span className="text-emerald-400">{roadmap.analytics_json?.total_jds || 76} Job Posts</span>
+            </div>
+            <div className="w-px h-6 bg-slate-800 self-center hidden md:block"></div>
+            <div className="flex flex-col">
+              <span className="text-slate-500 uppercase tracking-widest text-[9px] mb-0.5">Last Updated</span>
+              <span className="text-amber-400">
+                {roadmap.last_updated_at ? new Date(roadmap.last_updated_at).toLocaleDateString(undefined, {month: 'short', year: 'numeric'}) : "Aug 2026"}
+              </span>
+            </div>
+          </div>
+        </motion.div>
+
         {/* 3D Interactive Canvas */}
         <div className="mt-8">
-          <RoadmapCanvas nodes={nodes} />
+          <RoadmapCanvas roadmapData={roadmap.roadmap_json} />
         </div>
 
         {/* AI Market Analysis & Chat */}
-        <RoadmapAnalysis roadmap={roadmap} />
+        <div className="print-hide">
+          <RoadmapAnalysis roadmap={roadmap} />
+        </div>
       </div>
     </div>
   );

@@ -96,6 +96,8 @@ async def dev_login():
 
         return {"message": "Dev Login successful", "user": student_response.data[0]}
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

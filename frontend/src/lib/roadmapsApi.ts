@@ -22,14 +22,20 @@ export const roadmapsApi = {
     }
   },
 
-  generateRoadmap: async (role_name: string, ecosystem: string, student_id: string | null = null) => {
-    try {
-      const payload = student_id ? { role_name, ecosystem, student_id } : { role_name, ecosystem };
-      const res = await api.post('/generate', payload);
-      return res.data;
-    } catch (err) {
-      throw err;
-    }
+  generateRoadmap: async (roleName: string, ecosystem: string, studentId: string | null = null, requestId: string | null = null, weeklyHours: number = 20) => {
+    const res = await api.post('/generate', {
+      role_name: roleName,
+      ecosystem: ecosystem,
+      student_id: studentId,
+      request_id: requestId,
+      weekly_hours: weeklyHours
+    });
+    return res.data;
+  },
+
+  getGenerateStatus: async (requestId: string) => {
+    const res = await api.get(`/generate_status/${requestId}`);
+    return res.data;
   },
 
   getMyRoadmaps: async (student_id: string) => {

@@ -1,357 +1,301 @@
 "use client";
 
 import React, { useState } from "react";
-import { motion } from "framer-motion";
-import { BookOpen, PlayCircle, Target, CheckCircle2, ChevronDown, Sparkles, PowerOff, Star } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { BookOpen, PlayCircle, Target, CheckCircle2, ChevronDown, ChevronRight, Lock } from "lucide-react";
 import Link from "next/link";
 
-function NodeCardContent({ node, isCompact = false, index }: { node: any; isCompact?: boolean; index?: number }) {
-  const phaseDisplay = node.tier || (index !== undefined ? index + 1 : "X");
+function NodeCardContent({ node, index }: { node: any; index?: number }) {
+  const [expanded, setExpanded] = useState(false);
+  
   return (
-    <div className="relative z-10 w-full flex flex-col h-full">
+    <div className="relative z-10 w-full flex flex-col h-full text-slate-200">
       <div className="flex items-center justify-between gap-3 mb-3">
-        <div className="px-3 py-1 rounded-full bg-gradient-to-r from-amber-500 to-orange-600 text-white text-[10px] font-black tracking-widest uppercase shadow-md shadow-orange-500/30">
-          Phase {phaseDisplay}
+        <div className="flex items-center gap-2">
+          <div className="px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wider bg-slate-800 text-slate-400 border border-slate-700">
+            Node {index !== undefined ? index + 1 : "X"}
+          </div>
+          {node.estimated_days && (
+            <div className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+              {node.estimated_days} Days
+            </div>
+          )}
         </div>
         {node.demand_score !== undefined && (
-          <div className="flex items-center gap-1 bg-amber-500/20 text-amber-300 px-2 py-1 rounded-full text-[10px] font-bold border border-amber-500/30 shadow-sm">
-            <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+          <div className="flex items-center gap-1 text-emerald-400 text-xs font-bold">
             {node.demand_score}% Demand
           </div>
         )}
       </div>
 
-      <h2 className={`font-extrabold text-transparent bg-clip-text bg-gradient-to-br from-white to-amber-200 tracking-tight mb-2 group-hover:text-orange-50 transition-colors ${isCompact ? 'text-lg md:text-xl' : 'text-xl md:text-2xl'}`}>
+      <h2 className="font-bold text-lg md:text-xl text-white mb-2 tracking-tight">
         {node.skill}
       </h2>
       
-      {node.topics && node.topics.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-3">
-          {node.topics.map((topic: any, i: number) => {
-            const isObj = typeof topic === 'object' && topic !== null;
-            const name = isObj ? topic.name : topic;
-            const url = isObj ? topic.resource_url : null;
-            
-            if (url) {
-              return (
-                <a key={i} href={url} target="_blank" rel="noreferrer" className="px-2 py-0.5 bg-slate-800/80 border border-slate-700/80 rounded-md text-[10px] text-amber-200/80 font-bold tracking-wide uppercase shadow-sm hover:bg-slate-700 hover:text-amber-100 transition-colors">
-                  {name}
-                </a>
-              );
-            }
-            return (
-              <span key={i} className="px-2 py-0.5 bg-slate-800/80 border border-slate-700/80 rounded-md text-[10px] text-amber-200/80 font-bold tracking-wide uppercase shadow-sm">
-                {name}
-              </span>
-            );
-          })}
-        </div>
-      )}
-      
-      <p className={`text-slate-300/90 font-medium ${isCompact ? 'text-[11px] md:text-xs line-clamp-3 mb-4 flex-grow' : 'text-xs md:text-sm leading-relaxed mb-6'}`}>
+      <p className="text-sm text-slate-400 mb-4 leading-relaxed">
         {node.why}
       </p>
 
-      <div className={`grid grid-cols-2 gap-2 mb-4 ${isCompact ? 'mt-auto' : ''}`}>
-        <a
-          href={node.docs}
-          target="_blank"
-          rel="noreferrer"
-          className="flex items-center justify-center gap-2 p-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-all shadow-sm group/btn hover:border-amber-500/30"
+      {/* Accordion Expand Trigger */}
+      {((node.subskills && node.subskills.length > 0) || (node.labs && node.labs.length > 0) || node.mini_project) && (
+        <button 
+          onClick={() => setExpanded(!expanded)}
+          className="text-xs font-bold text-indigo-400 hover:text-indigo-300 mb-4 flex items-center gap-1 self-start transition-colors"
         >
-          <BookOpen className="w-3.5 h-3.5 text-amber-400 group-hover/btn:scale-110 transition-transform" />
-          <span className="text-white text-xs font-semibold">Docs</span>
-        </a>
+          {expanded ? "Hide Details" : "Show Labs & Details"}
+          <ChevronDown className={`w-3.5 h-3.5 transition-transform ${expanded ? "rotate-180" : ""}`} />
+        </button>
+      )}
 
-        <a
-          href={node.video}
-          target="_blank"
-          rel="noreferrer"
-          className="flex items-center justify-center gap-2 p-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-all shadow-sm group/btn hover:border-rose-500/30"
-        >
-          <PlayCircle className="w-3.5 h-3.5 text-rose-400 group-hover/btn:scale-110 transition-transform" />
-          <span className="text-white text-xs font-semibold">Video</span>
-        </a>
-      </div>
+      {/* Expanded Enriched Content */}
+      <AnimatePresence>
+        {expanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden border-t border-slate-800 pt-4 mb-4 flex flex-col gap-4 text-left"
+          >
+            {/* Subskills list */}
+            {node.subskills && node.subskills.length > 0 && (
+              <div>
+                <h4 className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mb-2">Detailed Subskills:</h4>
+                <div className="flex flex-wrap gap-1.5">
+                  {node.subskills.map((sub: string, idx: number) => (
+                    <span key={idx} className="px-2 py-1 bg-slate-800 border border-slate-700/60 rounded-md text-xs text-slate-300">
+                      {sub}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
 
-      <div className="flex flex-col gap-2 pt-4 border-t border-slate-800">
+            {/* Labs checklist */}
+            {node.labs && node.labs.length > 0 && (
+              <div>
+                <h4 className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest mb-2">Hands-on Labs:</h4>
+                <ul className="space-y-1.5">
+                  {node.labs.map((lab: string, idx: number) => (
+                    <li key={idx} className="flex items-start gap-2 text-xs text-slate-400">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-1.5 shrink-0" />
+                      {lab}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Mini Project block */}
+            {node.mini_project && (
+              <div className="bg-slate-950/60 border border-slate-800 p-3.5 rounded-xl">
+                <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-orange-500/10 text-orange-400 border border-orange-500/20 mb-2 inline-block">
+                  Mini Project Challenge
+                </span>
+                <h5 className="font-bold text-sm text-white mb-1">{node.mini_project.title}</h5>
+                <p className="text-xs text-slate-400 leading-relaxed">{node.mini_project.description}</p>
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="flex flex-col gap-2">
         <Link
-          href={`/assessment/${encodeURIComponent(node.skill)}`}
-          className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white font-bold py-2.5 rounded-xl transition-all shadow-md hover:shadow-orange-500/25 active:scale-95 text-xs md:text-sm"
+          href={`/dashboard/workspace/${encodeURIComponent(node.skill)}`}
+          className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2 rounded transition-colors text-sm"
         >
-          Take Assessment <Target className="w-3.5 h-3.5" />
+          <BookOpen className="w-4 h-4" />
+          Enter Workspace
         </Link>
-        <Link
-          href={`/project-verify/${encodeURIComponent(node.skill)}`}
-          className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-white font-bold py-2.5 rounded-xl transition-all border border-slate-700 active:scale-95 hover:border-orange-500/30 text-xs md:text-sm"
-        >
-          Verify Project <CheckCircle2 className="w-3.5 h-3.5" />
-        </Link>
+        <div className="grid grid-cols-2 gap-2 mt-2">
+          <Link
+            href={`/assessment/${encodeURIComponent(node.skill)}`}
+            className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-medium py-2 rounded transition-colors text-sm"
+          >
+            Assess <Target className="w-3.5 h-3.5" />
+          </Link>
+          <Link
+            href={`/project-verify/${encodeURIComponent(node.skill)}`}
+            className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-medium py-2 rounded transition-colors text-sm"
+          >
+            Verify <CheckCircle2 className="w-3.5 h-3.5" />
+          </Link>
+        </div>
       </div>
     </div>
   );
 }
 
-export default function RoadmapCanvas({ nodes }: { nodes: any[] }) {
-  const [animationsEnabled, setAnimationsEnabled] = useState(true);
+export default function RoadmapCanvas({ roadmapData }: { roadmapData: any }) {
+  // Backwards compatibility: Wrap flat nodes in a single phase if necessary
+  const rawPhases = roadmapData?.phases || (roadmapData?.nodes ? [{ phase_title: "Core Path", description: "Your main learning journey.", nodes: roadmapData.nodes }] : []);
+  
+  // Track which phase is expanded (Accordion state). Default to first phase.
+  const [expandedPhaseIndex, setExpandedPhaseIndex] = useState<number>(0);
   const [activeChoices, setActiveChoices] = useState<Record<string, number>>({});
 
   const handleChoiceSelect = (nodeId: string, altIndex: number) => {
-    setActiveChoices(prev => {
-      // Toggle off if already selected, else set
-      if (prev[nodeId] === altIndex) {
-        const next = { ...prev };
-        delete next[nodeId];
-        return next;
-      }
-      return { ...prev, [nodeId]: altIndex };
-    });
+    setActiveChoices(prev => ({ ...prev, [nodeId]: altIndex }));
   };
 
-  const getRenderableNodes = () => {
-    let renderable: any[] = [];
-    const traverse = (nodeList: any[], depth = 0) => {
-      if (!nodeList) return;
-      for (let i = 0; i < nodeList.length; i++) {
-        const node = nodeList[i];
-        renderable.push(node);
-        
-        if (node.type === "CHOICE" || (node.alternatives && node.alternatives.length > 0)) {
-          const nodeId = node.id || `choice-${depth}-${i}`;
-          // Also set the id on the node if it doesn't have one so we can reference it in rendering
-          if (!node.id) node.id = nodeId; 
-          
-          const activeIndex = activeChoices[nodeId];
-          if (activeIndex !== undefined) {
-            const activeAlt = node.alternatives[activeIndex];
-            if (activeAlt.children && activeAlt.children.length > 0) {
-              traverse(activeAlt.children, depth + 1);
-            }
-          }
-        }
-      }
-    };
-    traverse(nodes);
-    return renderable;
-  };
-
-  if (!nodes || nodes.length === 0) return null;
-  
-  const displayNodes = getRenderableNodes();
+  if (!rawPhases || rawPhases.length === 0) return null;
 
   return (
-    <div className="relative w-full max-w-5xl mx-auto py-12 perspective-1000">
-      
-      {/* Animation Toggle */}
-      <div className="flex justify-center mb-12">
-        <button
-          onClick={() => setAnimationsEnabled(!animationsEnabled)}
-          className={`flex items-center gap-2 px-4 py-2 rounded-full border text-xs font-bold tracking-widest uppercase transition-all duration-300 ${
-            animationsEnabled 
-              ? "bg-orange-500/10 border-orange-500/30 text-orange-400 shadow-[0_0_15px_rgba(249,115,22,0.15)]" 
-              : "bg-slate-800/50 border-slate-700 text-slate-400"
-          }`}
-        >
-          {animationsEnabled ? <Sparkles className="w-4 h-4" /> : <PowerOff className="w-4 h-4" />}
-          3D Travel: {animationsEnabled ? "ON" : "OFF"}
-        </button>
-      </div>
-
-      {/* Scroll indicator */}
-      {animationsEnabled && (
-        <motion.div 
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 1, duration: 1, repeat: Infinity, repeatType: "reverse" }}
-          className="flex flex-col items-center justify-center text-orange-400 mb-16"
-        >
-          <span className="text-sm font-bold uppercase tracking-widest mb-2">Scroll to Travel</span>
-          <ChevronDown className="w-6 h-6" />
-        </motion.div>
-      )}
-
-      {/* SVG Gradient Definitions */}
-      <svg width="0" height="0" className="absolute">
-        <defs>
-          <linearGradient id="orangeGlow" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="#f59e0b" /> {/* amber-500 */}
-            <stop offset="50%" stopColor="#f97316" /> {/* orange-500 */}
-            <stop offset="100%" stopColor="#e11d48" /> {/* rose-600 */}
-          </linearGradient>
-        </defs>
-      </svg>
-
-      <div className="space-y-0">
-        
-        {/* START NODE */}
-        <div className="relative flex items-center justify-center w-full pb-24 pt-12">
-          {/* Connector down to the first real node */}
-          <svg 
-            viewBox="0 0 100 100" 
-            preserveAspectRatio="none" 
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 w-32 md:w-64 pointer-events-none z-0"
-            style={{ height: "100%" }}
-          >
-            <path 
-              d="M 50 0 C 100 30, 100 70, 50 100" 
-              stroke="url(#orangeGlow)" 
-              strokeWidth="6" 
-              fill="none" 
-              vectorEffect="non-scaling-stroke"
-              strokeLinecap="round"
-              style={{ filter: "drop-shadow(0 0 8px rgba(249,115,22,0.6))" }}
-            />
-          </svg>
-          
-          <motion.div 
-            initial={animationsEnabled ? { scale: 0, opacity: 0 } : { scale: 1, opacity: 1 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={animationsEnabled ? { type: "spring", stiffness: 300, damping: 20 } : { duration: 0 }}
-            className="relative z-10 w-24 h-24 rounded-full bg-slate-900 border-[3px] border-orange-400 shadow-[0_0_20px_rgba(249,115,22,0.6)] flex items-center justify-center flex-col gap-1"
-          >
-            <div className="absolute inset-0 bg-gradient-to-br from-amber-400/20 to-rose-600/20 rounded-full animate-pulse" />
-            <Target className="w-6 h-6 text-orange-400" />
-            <span className="text-white font-black tracking-widest text-[10px] uppercase">Start</span>
-          </motion.div>
-        </div>
-
-        {displayNodes.map((node, index) => {
-          const isEven = index % 2 === 0;
-          const isLast = index === displayNodes.length - 1;
-          
-          let effectiveNode = node;
-          let isGroup = false;
-          let groupType = "CHOICE";
-          
-          if (node.type === "CHOICE" || node.type === "PARALLEL" || (node.alternatives && node.alternatives.length > 0)) {
-            if (node.alternatives && node.alternatives.length === 1) {
-              effectiveNode = { ...node, ...node.alternatives[0], type: "SINGLE" };
-            } else {
-              isGroup = true;
-              groupType = node.type === "PARALLEL" ? "PARALLEL" : "CHOICE";
-            }
-          }
-          
-          const nodeId = effectiveNode.id || `node-${index}`;
+    <div className="w-full max-w-4xl mx-auto py-8">
+      <div className="flex flex-col gap-6">
+        {rawPhases.map((phase: any, pIndex: number) => {
+          const isExpanded = expandedPhaseIndex === pIndex;
+          const isLocked = pIndex > expandedPhaseIndex; // Visual lock for future phases
 
           return (
-            <div key={effectiveNode.id || index} className="relative flex items-center justify-center w-full py-24">
+            <div key={pIndex} className="w-full flex flex-col">
               
-              {/* Curvy Path Segment connecting to the NEXT node */}
-              {!isLast && (
-                <svg 
-                  viewBox="0 0 100 100" 
-                  preserveAspectRatio="none" 
-                  className="absolute top-1/2 left-1/2 -translate-x-1/2 w-32 md:w-64 pointer-events-none z-0"
-                  style={{ height: "100%" }} 
-                >
-                  <motion.path 
-                    initial={animationsEnabled ? { pathLength: 0, opacity: 0 } : { pathLength: 1, opacity: 1 }}
-                    animate={!animationsEnabled ? { pathLength: 1, opacity: 1 } : undefined}
-                    whileInView={animationsEnabled ? { pathLength: 1, opacity: 1 } : undefined}
-                    viewport={animationsEnabled ? { once: false, amount: 0.1 } : undefined}
-                    transition={animationsEnabled ? { duration: 1.5, ease: "easeInOut" } : { duration: 0 }}
-                    d={`M 50 0 C ${isEven ? 100 : 0} 30, ${isEven ? 100 : 0} 70, 50 100`} 
-                    stroke="url(#orangeGlow)" 
-                    strokeWidth="6" 
-                    fill="none" 
-                    vectorEffect="non-scaling-stroke"
-                    strokeLinecap="round"
-                    style={{ filter: "drop-shadow(0 0 8px rgba(249,115,22,0.6))" }}
-                  />
-                </svg>
-              )}
-
-              {/* Central connector dot */}
-              <motion.div 
-                initial={animationsEnabled ? { scale: 0, opacity: 0 } : { scale: 1, opacity: 1 }}
-                animate={!animationsEnabled ? { scale: 1, opacity: 1 } : undefined}
-                whileInView={animationsEnabled ? { scale: 1, opacity: 1 } : undefined}
-                viewport={animationsEnabled ? { once: false, amount: 0.5 } : undefined}
-                transition={animationsEnabled ? { type: "spring", stiffness: 300, damping: 20 } : { duration: 0 }}
-                className="absolute left-1/2 -translate-x-1/2 w-6 h-6 rounded-full bg-slate-900 border-4 border-orange-400 shadow-[0_0_20px_rgba(249,115,22,0.8)] z-20"
-              />
-
-              {isGroup ? (
-                // GROUP NODE RENDER (CHOICE OR PARALLEL)
-                <motion.div
-                  initial={index === 0 ? { opacity: 1, scale: 1, y: 0 } : { opacity: 0, scale: 0.8, y: 50 }}
-                  animate={(!animationsEnabled || index === 0) ? { opacity: 1, scale: 1, y: 0 } : undefined}
-                  whileInView={(animationsEnabled && index !== 0) ? { opacity: 1, scale: 1, y: 0 } : undefined}
-                  viewport={(animationsEnabled && index !== 0) ? { once: false, margin: "-100px" } : undefined}
-                  transition={animationsEnabled ? { type: "spring", stiffness: 80, damping: 15 } : { duration: 0 }}
-                  className="relative w-full px-4 md:px-12 flex flex-col items-center z-10"
-                >
-                  <div className="text-orange-400 font-bold mb-6 bg-orange-950/50 px-6 py-2 rounded-full border border-orange-500/30 shadow-[0_0_15px_rgba(249,115,22,0.2)] uppercase tracking-widest text-sm flex items-center gap-2">
-                    <Sparkles className="w-4 h-4" />
-                    {groupType === "PARALLEL" ? "LEARN IN PARALLEL:" : "CHOOSE ONE:"} {effectiveNode.group_name || "Alternative Path"}
+              {/* Phase Header (Accordion Toggle) */}
+              <button 
+                onClick={() => setExpandedPhaseIndex(pIndex)}
+                className={`w-full flex items-center justify-between p-4 md:p-6 text-left border rounded-lg transition-all ${
+                  isExpanded 
+                    ? "bg-indigo-950/30 border-indigo-500/50 shadow-sm" 
+                    : "bg-slate-900 border-slate-800 hover:border-slate-700"
+                }`}
+              >
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl md:text-2xl font-bold text-white tracking-tight">
+                      {phase.phase_title}
+                    </span>
+                    {isLocked && <Lock className="w-4 h-4 text-slate-500" />}
                   </div>
-                  
-                  <div className="flex flex-row flex-nowrap md:flex-wrap gap-4 md:gap-6 w-full overflow-x-auto md:overflow-visible snap-x snap-mandatory justify-start md:justify-center pb-8 md:pb-0 hide-scrollbar">
-                    {effectiveNode.alternatives.map((alt: any, altIndex: number) => {
-                      const isActive = activeChoices[nodeId] === altIndex;
-                      const hasChildren = alt.children && alt.children.length > 0;
-                      return (
-                        <div 
-                          key={altIndex} 
-                          onClick={() => hasChildren && handleChoiceSelect(nodeId, altIndex)}
-                          className={`w-[80vw] md:w-[280px] shrink-0 snap-center flex flex-col backdrop-blur-xl border rounded-2xl p-4 md:p-5 shadow-xl transition-all duration-500 group relative overflow-hidden ${hasChildren ? 'cursor-pointer hover:scale-105' : ''} ${
-                            isActive 
-                              ? 'bg-orange-950/80 border-orange-500 shadow-[0_0_25px_rgba(249,115,22,0.4)]' 
-                              : 'bg-slate-900/80 border-slate-700 hover:border-orange-500/50'
-                          }`}
-                        >
-                          <div className={`absolute inset-0 bg-gradient-to-br from-amber-500/10 to-rose-500/10 transition-opacity duration-500 ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} />
-                          <NodeCardContent node={alt} isCompact={true} index={index} />
-                          
-                          {hasChildren && (
-                            <div className="w-full text-center mt-2 text-xs text-orange-400/80 font-bold uppercase tracking-widest group-hover:text-orange-400 transition-colors">
-                              {isActive ? '▼ Hide Paths' : '▶ Expand Paths'}
+                  {phase.description && (
+                    <span className="text-sm text-slate-400">{phase.description}</span>
+                  )}
+                </div>
+                <div className={`text-slate-400 transition-transform ${isExpanded ? "rotate-180" : ""}`}>
+                  <ChevronDown className="w-6 h-6" />
+                </div>
+              </button>
+
+              {/* Phase Content */}
+              <AnimatePresence>
+                {isExpanded && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.3 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="pt-8 pb-4 pl-4 md:pl-12 flex flex-col relative">
+                      {/* Vertical Connection Line */}
+                      <div className="absolute top-0 bottom-0 left-8 md:left-16 w-0.5 bg-slate-800" />
+
+                      {/* Phase Nodes */}
+                      {phase.nodes?.map((node: any, nIndex: number) => {
+                        let effectiveNode = node;
+                        let isGroup = false;
+                        let groupType = "CHOICE";
+                        
+                        if (node.type === "CHOICE" || node.type === "PARALLEL" || (node.alternatives && node.alternatives.length > 0)) {
+                          if (!node.alternatives || node.alternatives.length === 0) {
+                            effectiveNode = { ...node, type: "SINGLE" };
+                          } else if (node.alternatives.length === 1) {
+                            effectiveNode = { ...node, ...node.alternatives[0], type: "SINGLE" };
+                          } else {
+                            isGroup = true;
+                            groupType = node.type === "PARALLEL" ? "PARALLEL" : "CHOICE";
+                          }
+                        }
+
+                        const nodeId = effectiveNode.id || `p${pIndex}-n${nIndex}`;
+
+                        return (
+                          <div key={nodeId} className="relative flex items-start mb-12 w-full">
+                            {/* Node Dot */}
+                            <div className="absolute left-[-16px] md:left-[-16px] w-4 h-4 rounded-full bg-slate-900 border-2 border-indigo-500 z-10 mt-6" />
+                            
+                            <div className="w-full pl-8 pr-4">
+                              {isGroup ? (
+                                <div className="flex flex-col w-full">
+                                  <div className="text-xs font-bold text-orange-400 uppercase tracking-wider mb-3">
+                                    {groupType === "PARALLEL" ? "LEARN IN PARALLEL" : "CHOOSE ONE PATH"}
+                                  </div>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {(effectiveNode.alternatives || []).map((alt: any, aIndex: number) => {
+                                      const isActive = activeChoices[nodeId] === aIndex;
+                                      return (
+                                        <div 
+                                          key={aIndex}
+                                          onClick={() => handleChoiceSelect(nodeId, aIndex)}
+                                          className={`cursor-pointer rounded-lg border p-5 transition-all ${
+                                            isActive 
+                                              ? "bg-slate-800/80 border-orange-500 shadow-sm" 
+                                              : "bg-slate-900 border-slate-800 hover:border-slate-700"
+                                          }`}
+                                        >
+                                          <NodeCardContent node={alt} index={nIndex} />
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="w-full md:w-2/3 bg-slate-900 border border-slate-800 p-5 rounded-lg shadow-sm">
+                                  <NodeCardContent node={effectiveNode} index={nIndex} />
+                                </div>
+                              )}
                             </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </motion.div>
-              ) : (
-                // SINGLE NODE RENDER
-                <motion.div
-                  initial={index === 0 ? { opacity: 1, scale: 1, y: 0, z: 0, rotateX: 0 } : { opacity: 0, scale: 0.3, y: 150, z: -300, rotateX: 20 }}
-                  animate={(!animationsEnabled || index === 0) ? { opacity: 1, scale: 1, y: 0, z: 0, rotateX: 0 } : undefined}
-                  whileInView={(animationsEnabled && index !== 0) ? { opacity: 1, scale: 1, y: 0, z: 0, rotateX: 0 } : undefined}
-                  viewport={(animationsEnabled && index !== 0) ? { once: false, margin: "-100px" } : undefined}
-                  transition={animationsEnabled ? { type: "spring", stiffness: 80, damping: 15, mass: 1.2 } : { duration: 0 }}
-                  className={`relative w-[85%] md:w-[45%] flex flex-col z-10 ${
-                    isEven ? "mr-auto pr-8 md:pr-12" : "ml-auto pl-8 md:pl-12"
-                  }`}
-                  style={{ transformStyle: "preserve-3d" }}
-                >
-                  {/* Horizontal connection line to trunk */}
-                  <div className={`hidden md:block absolute top-1/2 -translate-y-1/2 w-12 h-1 bg-gradient-to-r ${
-                    isEven ? "right-0 from-transparent to-orange-400" : "left-0 from-orange-400 to-transparent"
-                  } shadow-[0_0_10px_rgba(249,115,22,0.4)]`} />
+                          </div>
+                        );
+                      })}
 
-                  <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-700 hover:border-orange-500/50 rounded-2xl p-6 shadow-xl transition-colors duration-500 group relative overflow-hidden">
-                    <div className="absolute inset-0 bg-gradient-to-br from-amber-500/10 to-rose-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                    <NodeCardContent node={effectiveNode} index={index} />
-                  </div>
-                </motion.div>
-              )}
+                      {/* Milestone Project for Phase (Repositioned to the END of the Phase) */}
+                      {phase.milestone_project && (
+                        <div className="relative mb-8 pl-8 pr-4">
+                          <div className="absolute left-[-16px] md:left-[-16px] w-4 h-4 rounded-full bg-slate-900 border-2 border-emerald-500 z-10 mt-6" />
+                          <div className="w-full md:w-2/3 bg-emerald-500/5 border border-emerald-500/20 p-5 rounded-2xl shadow-lg relative overflow-hidden backdrop-blur-sm">
+                            <div className="absolute -top-12 -right-12 w-24 h-24 bg-emerald-500/10 rounded-full blur-xl"></div>
+                            <div className="flex items-center gap-2 mb-3">
+                              <span className="px-2.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-emerald-500 text-slate-950">
+                                Phase Capstone Graduation Project
+                              </span>
+                            </div>
+                            <h4 className="font-extrabold text-white text-lg mb-2 tracking-tight">{phase.milestone_project.title}</h4>
+                            <p className="text-sm text-slate-400 mb-4 leading-relaxed">{phase.milestone_project.description}</p>
+                            {phase.milestone_project.requirements && phase.milestone_project.requirements.length > 0 && (
+                              <div className="border-t border-slate-800 pt-3">
+                                <h5 className="text-[10px] font-bold text-slate-300 uppercase tracking-widest mb-2">Build Requirements:</h5>
+                                <ul className="space-y-1.5">
+                                  {phase.milestone_project.requirements.map((req: string, idx: number) => (
+                                    <li key={idx} className="flex items-start gap-2 text-xs text-slate-400">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-1.5 shrink-0" />
+                                      {req}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           );
         })}
       </div>
-      
-      <style jsx global>{`
-        .hide-scrollbar::-webkit-scrollbar {
-          display: none;
-        }
-        .hide-scrollbar {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
-      `}</style>
     </div>
   );
 }
+
+/* 
+================================================================================
+LEGACY CODE BACKUP (The old heavy 3D Roadmap Canvas)
+================================================================================
+
+// Preserved old code in case we need to rollback to the heavy 3D gaming theme.
+// The old structure expected { nodes: any[] } and had a continuous curvy SVG.
+
+*/

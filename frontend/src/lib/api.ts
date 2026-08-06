@@ -118,3 +118,9 @@ export const getProjectIdea = async (data: { skill_name: string }) => {
   const response = await api.post('/api/assessment/project-idea', data);
   return response.data;
 };
+
+// --- Resources & Workspace APIs ---
+export const getWorkspaceResources = async (skill_name: string) => {
+  const response = await api.get(`/api/resources/workspace/${encodeURIComponent(skill_name)}`);
+  return response.data;
+};

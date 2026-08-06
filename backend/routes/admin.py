@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from database import supabase
 from typing import Any, Dict
+import os
 
 router = APIRouter()
 
@@ -30,7 +31,8 @@ async def get_all_questions():
 @router.get("/market")
 async def get_market_data():
     try:
-        data = supabase.table("job_market_data").select("*").execute()
+        # Fetch raw JDs from industry_intelligence instead of the legacy job_market_data table
+        data = supabase.table("industry_intelligence").select("*").execute()
         roadmaps = supabase.table("career_paths").select("*").execute()
         return {
             "market_data": data.data,
@@ -92,3 +94,155 @@ async def get_api_usage():
         return {"logs": logs.data}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/apify_usage")
+async def get_apify_usage():
+    import os
+    import requests
+    import concurrent.futures
+    
+    keys_str = os.getenv("APIFY_API_KEYS", os.getenv("APIFY_API_KEY", ""))
+    keys = [k.strip() for k in keys_str.split(",") if k.strip()]
+    if not keys:
+        return {"keys": []}
+        
+    results = []
+    
+    def fetch_key_stats(key):
+        masked_key = f"...{key[-8:]}" if len(key) > 8 else key
+        try:
+            # 1. Fetch User Info
+            user_url = f"https://api.apify.com/v2/users/me?token={key}"
+            user_resp = requests.get(user_url, timeout=5)
+            
+            # 2. Fetch Monthly Usage
+            usage_url = f"https://api.apify.com/v2/users/me/usage/monthly?token={key}"
+            usage_resp = requests.get(usage_url, timeout=5)
+            
+            if user_resp.status_code != 200:
+                return {
+                    "key": masked_key,
+                    "status": "Invalid/Expired",
+                    "username": "N/A",
+                    "email": "N/A",
+                    "limit_usd": 0.00,
+                    "consumed_usd": 0.00,
+                    "percent_used": 0.0
+                }
+                
+            user_data = user_resp.json().get("data", {})
+            username = user_data.get("username", "Unknown")
+            email = user_data.get("email", "N/A")
+            
+            limits = user_data.get("limits", {})
+            limit_usd = limits.get("monthlyPlaygroundUsageUsd", limits.get("monthlyUsageUsd", 5.00))
+            if limit_usd is None or limit_usd == 0:
+                limit_usd = 5.00
+                
+            consumed_usd = 0.0
+            if usage_resp.status_code == 200:
+                usage_data = usage_resp.json().get("data", {})
+                consumed_usd = usage_data.get("totalUsd", 0.0) or 0.0
+                
+            percent_used = round((consumed_usd / limit_usd) * 100, 2) if limit_usd > 0 else 0.0
+            
+            return {
+                "key": masked_key,
+                "status": "Online",
+                "username": username,
+                "email": email,
+                "limit_usd": float(limit_usd),
+                "consumed_usd": float(consumed_usd),
+                "percent_used": percent_used
+            }
+        except Exception as e:
+            return {
+                "key": masked_key,
+                "status": "Offline",
+                "username": "N/A",
+                "email": "N/A",
+                "limit_usd": 0.00,
+                "consumed_usd": 0.00,
+                "percent_used": 0.0
+            }
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        stats = list(executor.map(fetch_key_stats, keys))
+        
+    return {"keys": stats}
+
+@router.get("/scraper_diagnostics")
+async def get_scraper_diagnostics():
+    from utils.scraper_logger import get_scraper_logs
+    try:
+        logs = get_scraper_logs()
+        return {"logs": logs}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/scraper_diagnostics")
+async def clear_scraper_diagnostics():
+    try:
+        if os.path.exists("scraper_logs.json"):
+            os.remove("scraper_logs.json")
+        return {"success": True, "message": "Scraper logs cleared successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/roadmaps/{roadmap_id}")
+async def delete_roadmap_deep(roadmap_id: str):
+    try:
+        # Get the roadmap to know the role_name
+        res = supabase.table("career_paths").select("*").eq("id", roadmap_id).execute()
+        if not res.data:
+            raise HTTPException(status_code=404, detail="Roadmap not found")
+            
+        roadmap = res.data[0]
+        role_name = roadmap["role_name"]
+        
+        # 1. Delete from career_paths
+        supabase.table("career_paths").delete().eq("id", roadmap_id).execute()
+        
+        # 2. Delete from industry_intelligence (JDs)
+        supabase.table("industry_intelligence").delete().ilike("role_name", role_name).execute()
+        
+        # 3. Delete from industry_statistics
+        supabase.table("industry_statistics").delete().ilike("career_name", role_name).execute()
+        
+        return {"success": True, "message": f"Successfully deleted roadmap and all cached analytics for {role_name}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/resources")
+async def get_all_resources():
+    try:
+        res = supabase.table("skill_resources").select("*").execute()
+        return {"resources": res.data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/predict_prerequisites")
+async def get_prerequisite_predictions():
+    try:
+        from services.link_prediction import predict_missing_prerequisites
+        predictions = predict_missing_prerequisites()
+        return {"predictions": predictions}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class ApprovePrerequisiteRequest(BaseModel):
+    skill_id: str
+    prerequisite_id: str
+
+@router.post("/approve_prerequisite")
+async def approve_prerequisite_link(req: ApprovePrerequisiteRequest):
+    try:
+        res = supabase.table("skill_dependencies").insert({
+            "skill_id": req.skill_id,
+            "prerequisite_id": req.prerequisite_id,
+            "dependency_type": "strict"
+        }).execute()
+        return {"success": True, "data": res.data[0]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

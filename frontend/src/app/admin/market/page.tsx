@@ -4,14 +4,16 @@ import React, { useEffect, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
 import { roadmapsApi } from "@/lib/roadmapsApi";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, CartesianGrid } from "recharts";
-import { Briefcase, TrendingUp, PieChart as PieIcon, Download, FileText } from "lucide-react";
+import { Briefcase, TrendingUp, PieChart as PieIcon, Download, FileText, Trash2, AlertCircle } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function AdminMarketPage() {
   const [marketData, setMarketData] = useState<any[]>([]);
   const [roadmaps, setRoadmaps] = useState<any[]>([]);
   const [rawJds, setRawJds] = useState<any[]>([]);
+  const [scraperLogs, setScraperLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [selectedRoadmapId, setSelectedRoadmapId] = useState<string>("all");
 
   useEffect(() => {
@@ -22,10 +24,12 @@ export default function AdminMarketPage() {
     try {
       const data = await adminApi.getMarketData();
       const rawJdsData = await roadmapsApi.getRawJdsAdmin();
+      const logsData = await adminApi.getScraperDiagnostics();
       
       setMarketData(data.market_data || []);
       setRoadmaps(data.roadmaps || []);
       setRawJds(rawJdsData || []);
+      setScraperLogs(logsData.logs || []);
     } catch (error) {
       console.error("Failed to fetch market data", error);
     } finally {
@@ -66,51 +70,92 @@ export default function AdminMarketPage() {
     document.body.removeChild(link);
   };
 
+  const handleDeleteRoadmap = async (id: string, roleName: string) => {
+    if (!window.confirm(`Are you sure you want to completely delete the roadmap for "${roleName}"?\n\nThis will permanently erase the roadmap, all scraped Job Descriptions, and all cached market analytics for this role.`)) {
+      return;
+    }
+    
+    try {
+      setDeletingId(id);
+      await adminApi.deleteRoadmapDeep(id);
+      if (selectedRoadmapId === id) setSelectedRoadmapId("all");
+      fetchMarketData();
+    } catch (error) {
+      console.error("Failed to delete roadmap", error);
+      alert("Failed to delete the roadmap.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleClearLogs = async () => {
+    if (!window.confirm("Are you sure you want to clear all scraper diagnostic history?")) return;
+    try {
+      await adminApi.clearScraperDiagnostics();
+      setScraperLogs([]);
+    } catch (error) {
+      console.error("Failed to clear scraper logs", error);
+    }
+  };
+
   // Process data for charts from dynamically generated roadmaps
   const selectedRoadmap = selectedRoadmapId === "all" ? null : roadmaps.find(r => r.id === selectedRoadmapId);
   const roadmapsToAnalyze = selectedRoadmap ? [selectedRoadmap] : roadmaps;
-  const filteredRawJds = selectedRoadmap ? rawJds.filter(jd => jd.role_name === selectedRoadmap.role_name && jd.ecosystem === selectedRoadmap.ecosystem) : rawJds;
+  const filteredRawJds = selectedRoadmap ? rawJds.filter(jd => jd.role_name === selectedRoadmap.role_name) : rawJds;
 
   const skillCount: Record<string, { demand_percentage: number, count: number }> = {};
   const companiesCount: Record<string, number> = {};
   const urlsCount: Record<string, number> = {};
   const mncsFound: Set<string> = new Set();
   const allCompaniesFound: Set<string> = new Set();
+  const allExtractedSkills: Set<string> = new Set();
 
   roadmapsToAnalyze.forEach(r => {
-    if (r.analytics_json) {
-      // Top skills aggregation
-      const coreSkills = r.analytics_json.core_skills || [];
-      const recSkills = r.analytics_json.recommended_skills || [];
-      const allSkills = [...coreSkills, ...recSkills];
-      
-      allSkills.forEach((s: any) => {
-        if (!skillCount[s.skill]) {
-          skillCount[s.skill] = { demand_percentage: 0, count: 0 };
-        }
-        // Score is directly given as percentage from backend
-        skillCount[s.skill].demand_percentage += (s.percentage || 0);
-        skillCount[s.skill].count += 1;
-      });
+    // Top skills aggregation
+    const coreSkills = r.core_skills || [];
+    const recSkills = r.recommended_skills || [];
+    const allSkills = [...coreSkills, ...recSkills];
+    
+    allSkills.forEach((s: any) => {
+      if (!skillCount[s.skill]) {
+        skillCount[s.skill] = { demand_percentage: 0, count: 0 };
+      }
+      // Score is directly given as percentage from backend
+      skillCount[s.skill].demand_percentage += (s.percentage || 0);
+      skillCount[s.skill].count += 1;
+    });
+  });
 
-      // Data sources/companies aggregation
-      const mncs = r.analytics_json.companies_analyzed || r.analytics_json.mncs_found || [];
-      mncs.forEach((mnc: string) => {
-        const capitalized = mnc.charAt(0).toUpperCase() + mnc.slice(1);
-        companiesCount[capitalized] = (companiesCount[capitalized] || 0) + 1;
-        allCompaniesFound.add(capitalized);
-      });
+  filteredRawJds.forEach(jd => {
+    // Data sources/companies aggregation
+    if (jd.company_name) {
+      const capitalized = jd.company_name.charAt(0).toUpperCase() + jd.company_name.slice(1);
+      companiesCount[capitalized] = (companiesCount[capitalized] || 0) + 1;
+      allCompaniesFound.add(capitalized);
       
-      // URLs/Domains aggregation
-      const sources = r.analytics_json.sources || [];
-      sources.forEach((src: string) => {
-        urlsCount[src] = (urlsCount[src] || 0) + 1;
-      });
-      
-      // Track actual MNCs found
-      const actualMncs = r.analytics_json.mncs_found || [];
-      actualMncs.forEach((m: string) => mncsFound.add(m.charAt(0).toUpperCase() + m.slice(1)));
+      // Determine if it's an MNC (basic check for demo purposes, or we could list actual MNCs)
+      const knownMncs = ["apple", "google", "microsoft", "amazon", "meta", "netflix", "ibm", "oracle", "tesla"];
+      if (knownMncs.includes(jd.company_name.toLowerCase())) {
+        mncsFound.add(capitalized);
+      }
     }
+    
+    // URLs/Domains aggregation
+    if (jd.source_url) {
+      try {
+        const urlString = jd.source_url.startsWith('http') ? jd.source_url : `https://${jd.source_url}`;
+        const url = new URL(urlString);
+        let domain = url.hostname.replace('www.', '');
+        urlsCount[domain] = (urlsCount[domain] || 0) + 1;
+      } catch (e) {
+        urlsCount[jd.source_url] = (urlsCount[jd.source_url] || 0) + 1;
+      }
+    }
+    
+    // Extract true number of unique skills discovered
+    (jd.extracted_skills || []).forEach((skill: string) => {
+      allExtractedSkills.add(skill);
+    });
   });
 
   const aggregatedSkills = Object.keys(skillCount).map(key => ({
@@ -182,7 +227,7 @@ export default function AdminMarketPage() {
           </div>
           <div>
             <p className="text-slate-400 text-sm">Skills Extracted</p>
-            <h3 className="text-3xl font-bold text-white">{Object.keys(skillCount).length}</h3>
+            <h3 className="text-3xl font-bold text-white">{allExtractedSkills.size > 0 ? allExtractedSkills.size : Object.keys(skillCount).length}</h3>
           </div>
         </motion.div>
       </div>
@@ -314,14 +359,28 @@ export default function AdminMarketPage() {
               <div className="text-slate-500">No roadmaps generated yet.</div>
             ) : (
               roadmaps.map((r) => (
-                <div key={r.id} className="p-4 bg-slate-950 border border-slate-800 rounded-xl flex justify-between items-center">
+                <div key={r.id} className="p-4 bg-slate-950 border border-slate-800 rounded-xl flex justify-between items-center group transition-colors hover:border-slate-700">
                   <div>
                     <h3 className="font-bold text-white text-lg">{r.role_name}</h3>
-                    <p className="text-slate-400 text-sm">Ecosystem: {r.ecosystem} | {r.roadmap_json.nodes?.length || 0} Skills</p>
+                    <p className="text-slate-400 text-sm">Ecosystem: {r.ecosystem} | {r.roadmap_json?.nodes?.length || 0} Skills</p>
                   </div>
-                  <div className="text-right">
-                    <div className="text-indigo-400 font-medium">{r.roadmap_json?.estimated_months || 6} Months</div>
-                    <div className="text-xs text-slate-500">Est. Time to Complete</div>
+                  <div className="flex items-center gap-6">
+                    <div className="text-right hidden sm:block">
+                      <div className="text-indigo-400 font-medium">{r.roadmap_json?.estimated_months || 6} Months</div>
+                      <div className="text-xs text-slate-500">Est. Time to Complete</div>
+                    </div>
+                    <button
+                      onClick={() => handleDeleteRoadmap(r.id, r.role_name)}
+                      disabled={deletingId === r.id}
+                      className="bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white p-2.5 rounded-lg transition-colors border border-red-500/20 disabled:opacity-50 flex items-center justify-center group-hover:opacity-100 sm:opacity-50"
+                      title="Delete roadmap and clear all associated caches"
+                    >
+                      {deletingId === r.id ? (
+                        <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <Trash2 className="w-5 h-5" />
+                      )}
+                    </button>
                   </div>
                 </div>
               ))
@@ -330,7 +389,7 @@ export default function AdminMarketPage() {
         </motion.div>
 
         {/* Raw Dataset Table */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 overflow-hidden flex flex-col">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 overflow-hidden flex flex-col mb-8">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
             <div>
               <h2 className="text-xl font-bold text-white flex items-center gap-2">
@@ -391,6 +450,91 @@ export default function AdminMarketPage() {
                       </td>
                       <td className="px-4 py-3 text-xs whitespace-nowrap">
                         {new Date(jd.created_at).toLocaleDateString()}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </motion.div>
+
+        {/* Scraper Diagnostics Panel */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 overflow-hidden flex flex-col">
+          <div className="flex justify-between items-center mb-6">
+            <div>
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-rose-500" /> Scraper Diagnostics & Failures
+              </h2>
+              <p className="text-slate-400 text-sm">Real-time status tracking of all JobSpy & Apify runs (last 200).</p>
+            </div>
+            <div className="flex gap-2">
+              <button 
+                onClick={handleClearLogs}
+                className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white text-xs font-bold rounded-lg transition-all border border-red-500/20"
+              >
+                Clear History
+              </button>
+              <button 
+                onClick={fetchMarketData}
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-lg transition-colors border border-slate-700"
+              >
+                Refresh Logs
+              </button>
+            </div>
+          </div>
+          
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm text-slate-400">
+              <thead className="text-xs uppercase bg-slate-950/50 text-slate-300">
+                <tr>
+                  <th className="px-4 py-3 rounded-tl-lg">Timestamp</th>
+                  <th className="px-4 py-3">Engine</th>
+                  <th className="px-4 py-3">Search Term</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Items</th>
+                  <th className="px-4 py-3 rounded-tr-lg">Failure Reason / Diagnostics</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800">
+                {scraperLogs.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-8 text-center text-slate-500">No scraper diagnostic runs logged yet. Try generating a new roadmap!</td>
+                  </tr>
+                ) : (
+                  scraperLogs.map((log, i) => (
+                    <tr key={i} className="hover:bg-slate-800/20 transition-colors">
+                      <td className="px-4 py-3 text-xs whitespace-nowrap">
+                        {new Date(log.timestamp).toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 font-semibold text-slate-200">
+                        {log.engine}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs text-indigo-300">
+                        {log.search_term}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                          log.status === "Success" 
+                            ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" 
+                            : log.status === "No Results"
+                              ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                              : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                        }`}>
+                          {log.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 font-mono text-slate-300">
+                        {log.items_scraped}
+                      </td>
+                      <td className="px-4 py-3 text-xs">
+                        {log.error_message ? (
+                          <span className="text-rose-400 bg-rose-500/5 px-2 py-1 rounded border border-rose-500/10 block max-w-sm truncate" title={log.error_message}>
+                            {log.error_message}
+                          </span>
+                        ) : (
+                          <span className="text-slate-600 italic">None</span>
+                        )}
                       </td>
                     </tr>
                   ))

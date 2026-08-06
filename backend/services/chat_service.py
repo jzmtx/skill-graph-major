@@ -1,8 +1,14 @@
 import os
 from groq import Groq
+from dotenv import dotenv_values
 
 # Initialize Groq client
-groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+from dotenv import dotenv_values
+import random
+env_vars = dotenv_values(".env")
+keys_str = env_vars.get("GROQ_API_KEYS", env_vars.get("GROQ_API_KEY", ""))
+key_list = [k.strip() for k in keys_str.split(",") if k.strip()]
+groq_client = Groq(api_key=random.choice(key_list) if key_list else None)
 
 def get_chat_response(roadmap_json: dict, messages: list):
     system_prompt = f"""You are an expert AI Career Assistant and Tech Architect.

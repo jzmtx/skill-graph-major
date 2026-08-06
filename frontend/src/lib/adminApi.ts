@@ -34,4 +34,29 @@ export const adminApi = {
     const res = await api.get('/api_usage');
     return res.data;
   },
+
+  deleteRoadmapDeep: async (id: string) => {
+    const res = await api.delete(`/roadmaps/${id}`);
+    return res.data;
+  },
+
+  getResources: async () => {
+    const res = await api.get('/resources');
+    return res.data;
+  },
+
+  getApifyUsage: async () => {
+    const res = await api.get('/apify_usage');
+    return res.data;
+  },
+
+  getScraperDiagnostics: async () => {
+    const res = await api.get('/scraper_diagnostics');
+    return res.data;
+  },
+
+  clearScraperDiagnostics: async () => {
+    const res = await api.delete('/scraper_diagnostics');
+    return res.data;
+  },
 };
