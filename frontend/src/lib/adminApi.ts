@@ -59,4 +59,24 @@ export const adminApi = {
     const res = await api.delete('/scraper_diagnostics');
     return res.data;
   },
+
+getPendingVerifications: async () => {
+    const res = await api.get('/pending_verifications');
+    return res.data;
+  },
+
+  verifyCompany: async (id: string) => {
+    const res = await api.patch(`/verify/company/${id}`);
+    return res.data;
+  },
+
+  verifyTPO: async (id: string) => {
+    const res = await api.patch(`/verify/tpo/${id}`);
+    return res.data;
+  },
+
+  verifyAlumni: async (id: string) => {
+    const res = await api.patch(`/verify/alumni/${id}`);
+    return res.data;
+  },
 };

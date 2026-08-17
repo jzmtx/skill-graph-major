@@ -246,3 +246,64 @@ async def approve_prerequisite_link(req: ApprovePrerequisiteRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# ============================================================
+# Ecosystem Verification (Company / TPO / Alumni)
+# ============================================================
+
+@router.get("/pending_verifications")
+async def get_pending_verifications():
+    """Fetches all unverified companies, TPO officials, and alumni for admin review."""
+    try:
+        companies = supabase.table("companies").select("*").eq("is_verified", False).execute()
+        tpo_officials = supabase.table("tpo_officials").select("*, colleges(name)").eq("is_verified", False).execute()
+        alumni = supabase.table("alumni").select("*, colleges(name)").eq("is_verified", False).execute()
+
+        return {
+            "companies": companies.data,
+            "tpo_officials": tpo_officials.data,
+            "alumni": alumni.data
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.patch("/verify/company/{company_id}")
+async def verify_company(company_id: str):
+    """Admin approves a company, unlocking job posting for its recruiters."""
+    try:
+        result = supabase.table("companies").update({"is_verified": True}).eq("id", company_id).execute()
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Company not found")
+        return {"message": "Company verified", "company": result.data[0]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.patch("/verify/tpo/{tpo_id}")
+async def verify_tpo(tpo_id: str):
+    """Admin approves a TPO official, unlocking their student cluster dashboard."""
+    try:
+        result = supabase.table("tpo_officials").update({"is_verified": True}).eq("id", tpo_id).execute()
+        if not result.data:
+            raise HTTPException(status_code=404, detail="TPO official not found")
+        return {"message": "TPO official verified", "tpo_official": result.data[0]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.patch("/verify/alumni/{alumni_id}")
+async def verify_alumni(alumni_id: str):
+    """Admin approves an alumnus, unlocking opportunity posting."""
+    try:
+        result = supabase.table("alumni").update({"is_verified": True}).eq("id", alumni_id).execute()
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Alumni not found")
+        return {"message": "Alumni verified", "alumni": result.data[0]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

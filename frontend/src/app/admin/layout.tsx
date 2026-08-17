@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, FileQuestion, Lock, LogOut, BarChart as ChartIcon, Activity, Library } from "lucide-react";
+import { LayoutDashboard, Users, FileQuestion, Lock, LogOut, BarChart as ChartIcon, Activity, Library, ShieldCheck } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -74,8 +74,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     );
   }
 
-  const navItems = [
+ const navItems = [
     { name: "Users", href: "/admin", icon: Users },
+    { name: "Verifications", href: "/admin/verifications", icon: ShieldCheck },
     { name: "Question Bank", href: "/admin/questions", icon: FileQuestion },
     { name: "Market Analytics", href: "/admin/market", icon: ChartIcon },
     { name: "Resource Cache", href: "/admin/resources", icon: Library },
