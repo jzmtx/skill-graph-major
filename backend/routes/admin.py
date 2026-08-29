@@ -10,8 +10,23 @@ router = APIRouter()
 async def get_all_users():
     try:
         # Fetch students and their verified skills
-        res = supabase.table("students").select("*, student_skills(skill_name, verification_level, skill_score)").execute()
-        return {"users": res.data}
+        students = supabase.table("students").select("*, student_skills(skill_name, verification_level, skill_score)").execute()
+
+        # Fetch companies (via recruiters, since companies table itself has no auth_id)
+        recruiters = supabase.table("recruiters").select("*, companies(name, is_verified)").execute()
+
+        # Fetch TPO officials
+        tpo_officials = supabase.table("tpo_officials").select("*, colleges(name)").execute()
+
+        # Fetch alumni
+        alumni = supabase.table("alumni").select("*, colleges(name)").execute()
+
+        return {
+            "users": students.data,
+            "recruiters": recruiters.data,
+            "tpo_officials": tpo_officials.data,
+            "alumni": alumni.data
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -269,3 +284,80 @@ async def get_knowledge_graph_data():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+# ============================================================
+# Ecosystem Verification (Company / TPO / Alumni)
+# ============================================================
+
+@router.get("/pending_verifications")
+async def get_pending_verifications():
+    """Fetches all unverified companies, TPO officials, and alumni for admin review."""
+    try:
+        companies = supabase.table("companies").select("*").eq("is_verified", False).execute()
+        tpo_officials = supabase.table("tpo_officials").select("*, colleges(name)").eq("is_verified", False).execute()
+        alumni = supabase.table("alumni").select("*, colleges(name)").eq("is_verified", False).execute()
+
+        return {
+            "companies": companies.data,
+            "tpo_officials": tpo_officials.data,
+            "alumni": alumni.data
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.patch("/verify/company/{company_id}")
+async def verify_company(company_id: str):
+    """Admin approves a company, unlocking job posting for its recruiters."""
+    try:
+        result = supabase.table("companies").update({"is_verified": True}).eq("id", company_id).execute()
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Company not found")
+        return {"message": "Company verified", "company": result.data[0]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.patch("/verify/tpo/{tpo_id}")
+async def verify_tpo(tpo_id: str):
+    """Admin approves a TPO official, unlocking their student cluster dashboard."""
+    try:
+        result = supabase.table("tpo_officials").update({"is_verified": True}).eq("id", tpo_id).execute()
+        if not result.data:
+            raise HTTPException(status_code=404, detail="TPO official not found")
+        return {"message": "TPO official verified", "tpo_official": result.data[0]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.patch("/verify/alumni/{alumni_id}")
+async def verify_alumni(alumni_id: str):
+    """Admin approves an alumnus, unlocking opportunity posting."""
+    try:
+        result = supabase.table("alumni").update({"is_verified": True}).eq("id", alumni_id).execute()
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Alumni not found")
+        return {"message": "Alumni verified", "alumni": result.data[0]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+class FetchExternalJobsRequest(BaseModel):
+    role: str
+    location: str = "India"
+    results_wanted: int = 15
+
+@router.post("/fetch_external_jobs")
+async def fetch_external_jobs(req: FetchExternalJobsRequest):
+    """Admin-triggered: scrapes real job listings from LinkedIn/Indeed/Glassdoor
+    and inserts them into the jobs table as external listings."""
+    try:
+        from services.external_jobs_engine import fetch_and_store_external_jobs
+        result = fetch_and_store_external_jobs(req.role, req.location, req.results_wanted)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

@@ -83,8 +83,8 @@ async def login_student(req: StudentLoginRequest):
         return {"message": "Login successful", "user": student_response.data[0]}
 
     except Exception as e:
+        print("LOGIN ERROR:", repr(e))
         raise HTTPException(status_code=401, detail="Invalid email or password. Or you might need to confirm your email.")
-
 @router.post("/dev-login")
 async def dev_login():
     try:

@@ -600,3 +600,5 @@ def update_industry_statistics(career_name: str, force_refresh: bool = False):
 
     print(f"Updated industry stats for {career_name} based on {total_jds} JDs.")
     return skill_counts
+
+
