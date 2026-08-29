@@ -1,3 +1,4 @@
+from groq_models import GROQ_PRIMARY, GROQ_FAST
 import os
 from groq import Groq
 from dotenv import dotenv_values
@@ -27,7 +28,7 @@ Use this information to answer their questions accurately. Do not invent skills 
         
     completion = groq_client.chat.completions.create(
         messages=formatted_messages,
-        model="llama-3.3-70b-versatile",
+        model=GROQ_PRIMARY,
         temperature=0.7
     )
     

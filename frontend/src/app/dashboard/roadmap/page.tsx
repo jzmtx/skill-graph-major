@@ -7,106 +7,7 @@ import { ArrowRight, BookOpen, PlayCircle, Target, CheckCircle2, ChevronRight, B
 import Link from "next/link";
 import RoadmapCanvas from "@/components/roadmap/RoadmapCanvas";
 import RoadmapAnalysis from "@/components/roadmap/RoadmapAnalysis";
-
-function GeneratingScreen({ role, ecosystem, requestId }: { role: string; ecosystem: string; requestId: string }) {
-  const [progress, setProgress] = useState(0);
-  const [message, setMessage] = useState("Initializing...");
-  const [phaseIndex, setPhaseIndex] = useState(0);
-
-  const icons = [
-    <Database key="1" className="w-8 h-8 text-blue-400" />,
-    <Cpu key="2" className="w-8 h-8 text-purple-400" />,
-    <GitBranch key="3" className="w-8 h-8 text-amber-400" />,
-    <Sparkles key="4" className="w-8 h-8 text-indigo-400" />,
-    <CheckCircle2 key="5" className="w-8 h-8 text-emerald-400" />,
-  ];
-
-  React.useEffect(() => {
-    // Polling timer
-    const timer = setInterval(async () => {
-      try {
-        const status = await roadmapsApi.getGenerateStatus(requestId);
-        if (status) {
-          setProgress(status.progress || 0);
-          setMessage(status.message || "Working...");
-          
-          // Heuristic to change icon based on progress
-          if (status.progress < 20) setPhaseIndex(0);
-          else if (status.progress < 60) setPhaseIndex(1);
-          else if (status.progress < 90) setPhaseIndex(2);
-          else if (status.progress < 100) setPhaseIndex(3);
-          else setPhaseIndex(4);
-        }
-      } catch (err) {
-        console.error("Failed to poll status", err);
-      }
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [requestId]);
-
-  return (
-    <div className="bg-slate-950 min-h-[80vh] rounded-3xl flex flex-col items-center justify-center p-8 overflow-hidden shadow-2xl relative">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-indigo-900/20 via-slate-950 to-slate-950"></div>
-      
-      <motion.div 
-        key="generating-container"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="text-center z-10 flex flex-col items-center w-full max-w-lg"
-      >
-        <div className="relative mb-8">
-          <div className="absolute inset-0 bg-indigo-500 blur-xl opacity-30 rounded-full"></div>
-          <motion.div 
-            key={phaseIndex}
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="relative bg-slate-900 p-6 rounded-full border border-slate-700 shadow-2xl"
-          >
-            {icons[phaseIndex]}
-            <div className="absolute top-0 left-0 w-full h-full border-t-2 border-indigo-500 rounded-full animate-spin shadow-[0_0_15px_rgba(99,102,241,0.5)]"></div>
-          </motion.div>
-        </div>
-        
-        <h2 className="text-2xl md:text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-white to-indigo-200 mb-6 tracking-tight">
-          Generating {ecosystem === "General" ? "" : ecosystem} {role}...
-        </h2>
-        
-        <div className="w-full bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-lg mb-8">
-          <div className="flex justify-between items-center mb-3">
-            <span className="text-slate-400 text-sm font-medium">Live AI Progress</span>
-            <span className="text-indigo-400 text-sm font-bold bg-indigo-500/10 px-2 py-0.5 rounded">
-              {progress}%
-            </span>
-          </div>
-          
-          {/* Progress Bar */}
-          <div className="w-full h-3 bg-slate-800 rounded-full overflow-hidden mb-4 relative">
-            <motion.div 
-              className="absolute top-0 left-0 h-full bg-gradient-to-r from-indigo-600 to-indigo-400 rounded-full"
-              initial={{ width: 0 }}
-              animate={{ width: `${progress}%` }}
-              transition={{ ease: "easeInOut", duration: 0.5 }}
-            />
-          </div>
-          
-          <motion.div
-            key={`msg-${message}`}
-            initial={{ opacity: 0, y: 5 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-indigo-300 font-mono text-sm text-left min-h-[1.5rem]"
-          >
-            &gt; {message}
-          </motion.div>
-        </div>
-        
-        <p className="text-slate-500 text-xs max-w-sm mx-auto">
-          We are analyzing live job markets, calculating skill dependencies, and structuring your personalized learning phases.
-        </p>
-      </motion.div>
-    </div>
-  );
-}
+import LoadingSpectacle from "@/components/roadmap/LoadingSpectacle";
 
 export default function RoadmapsPage() {
   const [step, setStep] = useState<"list" | "role" | "ecosystem" | "generating" | "roadmap">("list");
@@ -189,18 +90,22 @@ export default function RoadmapsPage() {
       setCurrentRequestId(newReqId);
       setStep("generating");
       const genData = await roadmapsApi.generateRoadmap(role, ecosystem, studentId, newReqId, weeklyHours);
-      setRoadmap(genData.roadmap);
-      setAnalytics(genData.roadmap.analytics_json);
-      setStep("roadmap");
+      
+      if (genData?.status === "cached" && genData?.roadmap) {
+          setRoadmap(genData.roadmap);
+          setAnalytics(genData.roadmap.analytics_json);
+          setStep("roadmap");
+      }
+      // If status === "queued", the polling loop handles the rest.
       
       // Refresh the list
       if (studentId) {
-          roadmapsApi.getMyRoadmaps(studentId).then(r => setMyRoadmaps(r));
+          roadmapsApi.getMyRoadmaps(studentId).then(r => setMyRoadmaps(r)).catch(console.error);
       }
 
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert("Failed to load or generate roadmap. Please check API keys.");
+      alert(`Failed to load or generate roadmap: ${err?.message || err}`);
       setStep("role");
     }
   };
@@ -235,9 +140,11 @@ export default function RoadmapsPage() {
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {myRoadmaps.map((r) => (
+            {myRoadmaps.map((item) => {
+              const r = item.career_paths ? item.career_paths : item;
+              return (
               <div 
-                key={r.id} 
+                key={item.id} 
                 onClick={() => {
                   setRoadmap(r);
                   setAnalytics(r.analytics_json);
@@ -248,7 +155,7 @@ export default function RoadmapsPage() {
                 <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                 
                 <button 
-                  onClick={(e) => handleDelete(e, r.id)}
+                  onClick={(e) => handleDelete(e, item.id)}
                   className="absolute top-4 right-4 text-slate-600 hover:text-red-500 hover:bg-red-500/10 p-2 rounded-lg transition-colors z-10 opacity-0 group-hover:opacity-100"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -274,7 +181,7 @@ export default function RoadmapsPage() {
                   </span>
                 </div>
               </div>
-            ))}
+            )})}
           </div>
         </div>
       </div>
@@ -411,7 +318,21 @@ export default function RoadmapsPage() {
 
   // Phase 3: Generating State
   if (step === "generating") {
-    return <GeneratingScreen role={selectedRole} ecosystem={selectedEcosystem || "General"} requestId={currentRequestId} />;
+    return (
+      <LoadingSpectacle 
+        role={selectedRole}
+        requestId={currentRequestId}
+        onComplete={(data) => {
+          setRoadmap(data);
+          setAnalytics(data.analytics_json);
+          setStep("roadmap");
+        }}
+        onError={(msg) => {
+          alert("Generation failed: " + msg);
+          setStep("role");
+        }}
+      />
+    );
   }
 
   // Phase 4: The Roadmap

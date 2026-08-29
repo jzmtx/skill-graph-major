@@ -1,3 +1,4 @@
+from groq_models import GROQ_PRIMARY, GROQ_FAST
 import os
 import json
 from groq import Groq
@@ -305,7 +306,7 @@ def generate_roadmap_from_ecosystem(ecosystem_data: dict, weekly_hours: int = 20
     try:
         response = groq_client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
-            model="llama-3.1-8b-instant",
+            model=GROQ_FAST,
             temperature=0.2,
             max_tokens=2000,
             response_format={"type": "json_object"}

@@ -1,3 +1,4 @@
+from groq_models import GROQ_PRIMARY, GROQ_FAST
 import urllib.parse
 import re
 import os
@@ -249,7 +250,7 @@ def generate_role_synonyms(career_name: str) -> list:
         
         completion = groq_client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
-            model="llama-3.1-8b-instant",
+            model=GROQ_FAST,
             temperature=0.3
         )
         content = completion.choices[0].message.content.strip()
@@ -278,7 +279,7 @@ def generate_india_hiring_companies(career_name: str) -> list:
         
         completion = groq_client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
-            model="llama-3.1-8b-instant",
+            model=GROQ_FAST,
             temperature=0.3
         )
         content = completion.choices[0].message.content.strip()
@@ -317,7 +318,7 @@ def extract_new_skills_from_jds(jds: list, career_name: str) -> list:
         
         completion = groq_client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
-            model="llama-3.1-8b-instant",
+            model=GROQ_FAST,
             temperature=0.1
         )
         content = completion.choices[0].message.content.strip()
@@ -439,7 +440,7 @@ def update_industry_statistics(career_name: str, force_refresh: bool = False):
                 """
                 completion = groq_client.chat.completions.create(
                     messages=[{"role": "user", "content": prompt}],
-                    model="llama-3.1-8b-instant",
+                    model=GROQ_FAST,
                     temperature=0.2,
                     response_format={"type": "json_object"}
                 )
@@ -483,7 +484,13 @@ def update_industry_statistics(career_name: str, force_refresh: bool = False):
     res = supabase.table("skill_knowledge_graph").select("id, normalized_name, aliases, category, parent_skill_id").execute()
     skill_dict = res.data
     skill_by_id = {s["id"]: s for s in skill_dict}
-    
+    # Build parent-to-children mapping
+    parent_to_children = {}
+    for skill in skill_dict:
+        pid = skill.get("parent_skill_id")
+        if pid:
+            parent_to_children.setdefault(pid, []).append(skill["id"])
+            
     skill_counts = {}
     total_jds = len(jds)
     jd_payloads = []
@@ -518,6 +525,35 @@ def update_industry_statistics(career_name: str, force_refresh: bool = False):
                 curr = pid
         
         found_ids.update(parents_to_add)
+        
+        # Roll down to children (e.g. if Machine Learning is found, imply Pandas/NumPy)
+        # Only roll down ML/Cyber/Web parents if they match the user's career domain
+        children_to_add = set()
+        for sid in found_ids:
+            if sid in parent_to_children:
+                parent_node = skill_by_id.get(sid)
+                if parent_node:
+                    pname = parent_node["normalized_name"].lower()
+                    career_lower = career_name.lower()
+                    
+                    is_ml_parent = "machine learning" in pname or "data science" in pname or "deep learning" in pname
+                    is_web_parent = "web development" in pname or "frontend development" in pname or "backend development" in pname
+                    is_cyber_parent = "cybersecurity" in pname or "security" in pname
+                    
+                    should_roll_down = False
+                    if is_ml_parent and ("data" in career_lower or "machine" in career_lower or "ai" in career_lower or "analyst" in career_lower):
+                        should_roll_down = True
+                    elif is_web_parent and ("developer" in career_lower or "engineer" in career_lower or "web" in career_lower or "fullstack" in career_lower):
+                        should_roll_down = True
+                    elif is_cyber_parent and ("security" in career_lower or "cyber" in career_lower or "infosec" in career_lower):
+                        should_roll_down = True
+                    elif not is_ml_parent and not is_web_parent and not is_cyber_parent:
+                        should_roll_down = True
+                        
+                    if should_roll_down:
+                        children_to_add.update(parent_to_children[sid])
+                
+        found_ids.update(children_to_add)
         
         for sid in found_ids:
             skill_counts[sid] = skill_counts.get(sid, 0) + 1

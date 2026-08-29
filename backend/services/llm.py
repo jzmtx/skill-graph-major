@@ -1,3 +1,4 @@
+from groq_models import GROQ_PRIMARY, GROQ_FAST
 import os
 from groq import Groq
 from dotenv import load_dotenv, dotenv_values
@@ -36,7 +37,7 @@ def verify_questions(skill_name: str, questions: list) -> list:
     """
     try:
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model=GROQ_PRIMARY,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.2,
             response_format={"type": "json_object"}
@@ -54,13 +55,17 @@ def verify_questions(skill_name: str, questions: list) -> list:
     return questions
 
 
-def generate_questions(skill_name: str, count: int = 5, seen_topics: list = None, target_difficulty: int = 1) -> list:
+def generate_questions(skill_name: str, count: int = 5, seen_topics: list = None, target_difficulty: int = 1, target_topics: list = None) -> list:
     """
     Generates technical MCQs for a specific skill and difficulty level using Groq (llama3).
     """
     seen_context = ""
-    if seen_topics:
+    if seen_topics and not target_topics:
         seen_context = f"\nCRITICAL: Do NOT generate questions about these topics as the user has already seen them recently: {', '.join(seen_topics)}.\nGenerate highly unique and diverse questions covering other areas of {skill_name}."
+        
+    topic_context = ""
+    if target_topics:
+        topic_context = f"\nCRITICAL TOPIC ENFORCEMENT: You MUST generate questions exclusively focused on the following specific sub-topics of {skill_name}: {', '.join(target_topics)}.\nDo NOT generate generic {skill_name} questions."
         
     diff_desc = {
         1: "Level 1 (Beginner): Fundamentals, basic syntax, and simple concepts.",
@@ -89,6 +94,7 @@ def generate_questions(skill_name: str, count: int = 5, seen_topics: list = None
     Do NOT generate a mix of difficulties. ALL {count} questions must be exactly difficulty level {target_difficulty}.
     {advanced_enforcement}
     {seen_context}
+    {topic_context}
     
     Output strictly as a JSON array of objects with the following keys:
     - "question_base_text": The complete question string.
@@ -114,7 +120,7 @@ def generate_questions(skill_name: str, count: int = 5, seen_topics: list = None
     
     try:
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model=GROQ_PRIMARY,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
             response_format={"type": "json_object"}
@@ -150,7 +156,7 @@ def generate_questions(skill_name: str, count: int = 5, seen_topics: list = None
     # Fallback non-json mode if above fails
     try:
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model=GROQ_PRIMARY,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7
         )
@@ -189,7 +195,7 @@ def analyze_performance(skill_name: str, history: list) -> str:
     
     try:
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model=GROQ_PRIMARY,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7
         )
@@ -256,7 +262,7 @@ def analyze_github_repo(github_url: str, skill_name: str, project_abstract: str)
     
     try:
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model=GROQ_PRIMARY,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.2,
             response_format={"type": "json_object"}
@@ -277,12 +283,15 @@ def generate_coding_questions(skill_name: str, difficulty_type: str = "basic") -
     """
     prompt = f"""
     You are an expert technical interviewer.
-    Generate ONE programming problem to test a candidate's practical coding ability in '{skill_name}'.
+    Generate ONE advanced problem to test a candidate's practical ability in '{skill_name}'.
     The difficulty should be '{difficulty_type}'.
+    
+    CRITICAL: If '{skill_name}' is a programming language or framework (like Python, React, SQL), generate a practical CODING problem.
+    However, if '{skill_name}' is a purely theoretical/conceptual skill (like Agile, SDLC, REST API Design, System Architecture), generate an ADVANCED CONCEPTUAL/SYSTEM DESIGN problem where they must write out an architectural response instead of code.
     
     Output strictly as a JSON object with:
     - "question_base_text": The problem statement, requirements, and examples (use markdown if needed).
-    - "starter_code": A template or function signature for the candidate to start with (e.g., "def fibonacci(n):\n    # Your code here").
+    - "starter_code": A template or function signature for the candidate to start with (e.g., "def fibonacci(n):\n    # Your code here"). If conceptual, provide a text template like "# Outline your architecture here...".
     - "correct_answer": A reference solution or key aspects you look for (not shown to candidate).
     - "difficulty": 4 if basic, 5 if conceptual.
     - "topic": The specific concept being tested.
@@ -292,7 +301,7 @@ def generate_coding_questions(skill_name: str, difficulty_type: str = "basic") -
     
     try:
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model=GROQ_PRIMARY,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
             response_format={"type": "json_object"}
@@ -302,7 +311,7 @@ def generate_coding_questions(skill_name: str, difficulty_type: str = "basic") -
         print("JSON mode failed, retrying without JSON mode:", e)
         try:
             response = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
+                model=GROQ_PRIMARY,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.7
             )
@@ -388,7 +397,7 @@ def simulate_code_execution(skill_name: str, code: str) -> str:
     """
     try:
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model=GROQ_PRIMARY,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0
         )
@@ -444,7 +453,7 @@ def evaluate_code_submission(skill_name: str, question_text: str, student_code: 
             """
             
             test_res = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
+                model=GROQ_PRIMARY,
                 messages=[{"role": "user", "content": test_gen_prompt}],
                 temperature=0.0
             )
@@ -517,7 +526,7 @@ def evaluate_code_submission(skill_name: str, question_text: str, student_code: 
     
     try:
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model=GROQ_PRIMARY,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0,
             response_format={"type": "json_object"}
@@ -542,7 +551,7 @@ def generate_project_idea(skill_name: str) -> str:
     """
     try:
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model=GROQ_PRIMARY,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7
         )
@@ -635,7 +644,7 @@ def analyze_github_repo(github_url: str, skill_name: str, project_abstract: str)
     
     try:
         res = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model=GROQ_PRIMARY,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
             response_format={"type": "json_object"}

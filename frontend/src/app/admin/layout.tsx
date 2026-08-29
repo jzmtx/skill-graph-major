@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, FileQuestion, Lock, LogOut, BarChart as ChartIcon, Activity, Library } from "lucide-react";
+import { LayoutDashboard, Users, FileQuestion, Lock, LogOut, BarChart as ChartIcon, Activity, Library, GitGraph } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -80,6 +80,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { name: "Market Analytics", href: "/admin/market", icon: ChartIcon },
     { name: "Resource Cache", href: "/admin/resources", icon: Library },
     { name: "API Usage", href: "/admin/api", icon: Activity },
+    { name: "Knowledge Graph", href: "/admin/graph", icon: GitGraph },
   ];
 
   return (

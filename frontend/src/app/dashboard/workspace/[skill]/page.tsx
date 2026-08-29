@@ -17,29 +17,52 @@ export default function WorkspacePage() {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<number>(-1); // -1 = Main skill, 0+ = Sub-topic
+  const [displaySkillName, setDisplaySkillName] = useState(skillName);
 
   useEffect(() => {
-    if (!skillName) return;
-    setLoading(true);
-    getWorkspaceResources(skillName)
-      .then((res) => {
-        setData(res.resources);
-      })
-      .catch((err) => {
+    if (!rawSkill) return;
+    
+    let intervalId: NodeJS.Timeout;
+    
+    const fetchResources = async () => {
+      try {
+        const res = await getWorkspaceResources(rawSkill);
+        
+        if (res.status === "generating") {
+          // Keep polling
+          setLoading(true);
+        } else {
+          // Done
+          setData(res.resources);
+          if (res.resources?.skill_name) {
+            setDisplaySkillName(res.resources.skill_name);
+          }
+          setLoading(false);
+          clearInterval(intervalId);
+        }
+      } catch (err) {
         console.error("Workspace error:", err);
         setError("Failed to load workspace resources. Please try again.");
-      })
-      .finally(() => {
         setLoading(false);
-      });
-  }, [skillName]);
+        clearInterval(intervalId);
+      }
+    };
+    
+    // Initial fetch
+    fetchResources();
+    
+    // Poll every 3 seconds
+    intervalId = setInterval(fetchResources, 3000);
+    
+    return () => clearInterval(intervalId);
+  }, [rawSkill]);
 
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-slate-300">
-        <Loader2 className="w-12 h-12 text-orange-500 animate-spin mb-6" />
-        <h2 className="text-2xl font-bold tracking-tight mb-2">Building Concept Tree...</h2>
-        <p className="text-slate-400">Curating the absolute best resources for {skillName}</p>
+        <Loader2 className="w-12 h-12 text-indigo-500 animate-spin mb-6" />
+        <h2 className="text-2xl font-bold tracking-tight mb-2">Curating Resources...</h2>
+        <p className="text-slate-400">AI is fetching the absolute best resources for {displaySkillName}. This takes about 10-15 seconds.</p>
       </div>
     );
   }
@@ -63,10 +86,10 @@ export default function WorkspacePage() {
   // Build the array of concepts starting with the Main Concept
   const concepts = [
     {
-      name: `Core ${skillName}`,
+      name: `Core ${displaySkillName}`,
       official_docs_url: data.official_docs_url,
       best_video_url: data.best_video_url,
-      best_video_title: data.best_video_title || `${skillName} Full Course`,
+      best_video_title: data.best_video_title || `${displaySkillName} Full Course`,
       practice_project: data.practice_project
     },
     ...(data.sub_topics || [])
@@ -85,8 +108,8 @@ export default function WorkspacePage() {
           <ArrowLeft className="w-5 h-5 text-slate-300" />
         </button>
         <div>
-          <h1 className="text-3xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-rose-500">
-            {skillName} Workspace
+          <h1 className="text-3xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400">
+            {displaySkillName} Workspace
           </h1>
           <p className="text-slate-400 mt-1">Master this technology step-by-step</p>
         </div>

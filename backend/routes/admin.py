@@ -246,3 +246,26 @@ async def approve_prerequisite_link(req: ApprovePrerequisiteRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@router.get("/graph-data")
+async def get_knowledge_graph_data():
+    """
+    Returns all technologies, learning nodes, and prerequisite edges
+    for visualization in the admin Knowledge Graph Explorer.
+    """
+    try:
+        technologies = supabase.table("technologies").select("id, normalized_name, category").execute()
+        nodes = supabase.table("learning_nodes").select("id, technology_id, concept_name, difficulty_level").execute()
+        prereqs = supabase.table("learning_prerequisites").select("node_id, prerequisite_node_id").execute()
+        occupations = supabase.table("occupations").select("id, title").execute()
+        occ_skills = supabase.table("occupation_skills").select("occupation_id, skill_id").execute()
+
+        return {
+            "technologies": technologies.data,
+            "nodes": nodes.data,
+            "edges": prereqs.data,
+            "occupations": occupations.data,
+            "occupation_skills": occ_skills.data,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

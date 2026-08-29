@@ -12,6 +12,8 @@ class GetQuestionRequest(BaseModel):
     difficulty_level: int
     student_id: str = None
     exclude_question_ids: list[str] = []
+    topics: list[str] = []
+    node_id: str = None
 
 class SubmitAnswerRequest(BaseModel):
     student_id: str
@@ -32,16 +34,17 @@ async def get_adaptive_question(req: GetQuestionRequest):
         all_excludes = list(set(req.exclude_question_ids + global_seen_ids))
         
         seen_texts = set()
-        seen_topics = []
+        seen_topics = req.topics if req.topics else []
         if all_excludes:
             # Note: Supabase limits in_ filter to 100-200 items in URL length usually, but it's safe for now
             # Alternatively, we just rely on DB unique constraints if we add one, but let's filter in memory
             seen_texts_res = supabase.table("questions").select("question_base_text, options_json").in_("id", all_excludes).execute()
             if hasattr(seen_texts_res, 'data'):
                 seen_texts = set(sq['question_base_text'].strip() for sq in seen_texts_res.data if sq.get('question_base_text'))
-                seen_topics = [sq.get('options_json', {}).get('topic') for sq in seen_texts_res.data if sq.get('options_json') and sq.get('options_json').get('topic')]
-                # Keep only unique recent topics
-                seen_topics = list(set([t for t in seen_topics if t]))[:5]
+                if not seen_topics:
+                    seen_topics_db = [sq.get('options_json', {}).get('topic') for sq in seen_texts_res.data if sq.get('options_json') and sq.get('options_json').get('topic')]
+                    # Keep only unique recent topics
+                    seen_topics = list(set([t for t in seen_topics_db if t]))[:5]
         
         # 1. Try to fetch an existing question from Cache (DB)
         query = supabase.table("questions").select("*").eq("skill_name", req.skill_name).eq("difficulty_level", req.difficulty_level)
@@ -56,7 +59,7 @@ async def get_adaptive_question(req: GetQuestionRequest):
             
             # Retry loop up to 3 times to get valid unique questions
             for attempt in range(3):
-                new_qs = generate_questions(req.skill_name, count=5, seen_topics=seen_topics, target_difficulty=req.difficulty_level)
+                new_qs = generate_questions(req.skill_name, count=5, seen_topics=seen_topics, target_difficulty=req.difficulty_level, target_topics=req.topics)
                 insert_data = []
                 for q in new_qs:
                     diff = max(1, min(5, int(q.get("difficulty", req.difficulty_level))))
@@ -115,11 +118,14 @@ async def get_adaptive_question(req: GetQuestionRequest):
             if avail_fallback:
                 available_questions = avail_fallback
             else:
-                # If truly out of unique questions for this difficulty, clear the seen history dynamically to allow retakes
-                if all_excludes and fallback.data:
-                    available_questions = fallback.data
+                # If truly out of unique questions for this difficulty, clear the GLOBAL seen history dynamically to allow retakes,
+                # BUT STRICTLY ENFORCE the current session's exclude_question_ids to prevent repetition in the same test.
+                session_excludes = set(req.exclude_question_ids)
+                session_safe_fallback = [q for q in fallback.data if q['id'] not in session_excludes]
+                if session_safe_fallback:
+                    available_questions = session_safe_fallback
                 else:
-                    raise HTTPException(status_code=500, detail="Failed to fetch or generate questions")
+                    raise HTTPException(status_code=500, detail="Failed to fetch or generate unique questions for this session. Please try again.")
 
         # 4. Pick a random question
         chosen_q = random.choice(available_questions)
@@ -134,6 +140,17 @@ async def get_adaptive_question(req: GetQuestionRequest):
             topic = "General"
             
         random.shuffle(options)
+
+        # 6. Anti-Cheat: Mark as seen IMMEDIATELY upon fetch
+        if req.student_id:
+            try:
+                supabase.table("student_seen_questions").insert({
+                    "student_id": req.student_id,
+                    "skill_name": req.skill_name,
+                    "question_id": chosen_q['id']
+                }).execute()
+            except Exception as se:
+                print("Already seen or error recording:", se)
 
         return {
             "question_id": chosen_q['id'],
@@ -200,16 +217,7 @@ def pregenerate_questions_task(skill_name: str, difficulty_level: int):
 @router.post("/submit-answer")
 async def submit_answer(req: SubmitAnswerRequest, background_tasks: BackgroundTasks):
     try:
-        # Mark question as seen globally
-        if req.student_id:
-            try:
-                supabase.table("student_seen_questions").insert({
-                    "student_id": req.student_id,
-                    "skill_name": req.skill_name,
-                    "question_id": req.question_id
-                }).execute()
-            except Exception as se:
-                print("Already seen or error recording:", se)
+        # Note: question is now marked as seen globally in get-question to prevent proctoring cheats
 
         # 1. Fetch correct answer from DB
         q_res = supabase.table("questions").select("correct_answer").eq("id", req.question_id).execute()
@@ -336,6 +344,8 @@ class CompleteAssessmentRequest(BaseModel):
     skill_name: str
     score_percentage: float
     history: list[dict]
+    node_id: str = None
+    roadmap_id: str = None
 
 class SimulateCodeRequest(BaseModel):
     skill_name: str
@@ -393,6 +403,21 @@ async def complete_assessment(req: CompleteAssessmentRequest):
                     "verification_level": 1,
                     "skill_score": new_score
                 }).eq("id", skill_res.data[0]['id']).execute()
+                
+                # Roadmap Integration: Mark node as assessed
+                if req.node_id and req.roadmap_id and req.student_id:
+                    try:
+                        supabase.table("student_roadmap_nodes").update({
+                            "status": "assessed",
+                            "assessment_score": int(req.score_percentage)
+                        }).eq("roadmap_id", req.roadmap_id).eq("student_id", req.student_id).eq("node_id", req.node_id).execute()
+                        
+                        # In a full implementation, we would also:
+                        # 1. Fetch roadmap_json
+                        # 2. Check edges to find dependent nodes
+                        # 3. Update their status to 'unlocked' in student_roadmap_nodes
+                    except Exception as roadmap_e:
+                        print("Roadmap node update failed (table might not exist yet):", roadmap_e)
                 
                 return {
                     "message": "Assessment passed! Skill upgraded to Level 1.",

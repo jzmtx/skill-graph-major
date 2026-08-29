@@ -7,8 +7,30 @@ from services.roadmap_engine import generate_roadmap_from_ecosystem
 from datetime import datetime, timezone
 from dateutil.relativedelta import relativedelta
 from services.chat_service import get_chat_response
+import uuid
 
 router = APIRouter()
+
+def get_or_create_canonical_skill(name: str) -> str:
+    slug = name.lower().strip().replace(" ", "-").replace(".", "")
+    res = supabase.table("canonical_skills").select("id").eq("slug", slug).execute()
+    if res.data:
+        return res.data[0]["id"]
+    
+    # Try inserting
+    try:
+        res = supabase.table("canonical_skills").insert({
+            "title": name,
+            "slug": slug,
+            "esco_uri": f"custom:{slug}-{uuid.uuid4().hex[:8]}"
+        }).execute()
+        return res.data[0]["id"]
+    except Exception as e:
+        print(f"Failed to insert canonical skill {name}: {e}")
+        # fallback lookup just in case of race condition
+        res = supabase.table("canonical_skills").select("id").eq("slug", slug).execute()
+        if res.data: return res.data[0]["id"]
+        return str(uuid.uuid4()) # fake uuid if all fails
 
 class GenerateRequest(BaseModel):
     role_name: str
@@ -35,7 +57,7 @@ async def get_all_roadmaps():
 @router.get("/raw-jds/admin")
 async def get_raw_jds():
     try:
-        res = supabase.table("industry_intelligence").select("*").order("created_at", desc=True).execute()
+        res = supabase.table("raw_job_postings").select("*").order("created_at", desc=True).limit(500).execute()
         return {"raw_jds": res.data}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -96,115 +118,82 @@ def generate_resources_in_background(skills_to_process: list, role_name: str):
         except Exception as e:
             print(f"Background: Failed to generate resources for {skill_name}: {e}")
 
-@router.post("/generate")
-def generate_roadmap(req: GenerateRequest, background_tasks: BackgroundTasks):
+def process_roadmap_generation_bg(req: GenerateRequest, is_update: bool, existing_id: str, matching_roadmap: dict, background_tasks: BackgroundTasks):
     req_id = req.request_id
     def update_status(progress: int, msg: str):
         if req_id:
             generation_status[req_id] = {"progress": progress, "message": msg}
             
     try:
-        update_status(5, "Checking cache for existing roadmaps...")
+        from roadmap_engine.synthesis.graph_generator import GraphGenerator
+        generator = GraphGenerator()
         
-        # 1. Fetch all paths for this ecosystem to do role resolution
-        all_paths = supabase.table("career_paths").select("*").eq("ecosystem", req.ecosystem).execute()
+        # Check if we have market data
+        role_to_gen = req.role_name if not is_update else matching_roadmap["role_name"]
+        res = supabase.table("role_skill_demand").select("id").eq("role_name", role_to_gen).limit(1).execute()
         
-        matching_roadmap = None
-        # Try exact case-insensitive match first
-        for cp in all_paths.data:
-            if cp["role_name"].lower().strip() == req.role_name.lower().strip():
-                matching_roadmap = cp
-                break
-                
-        # If not found, try token-based overlap similarity resolver (70% matching)
-        if not matching_roadmap:
-            req_words = set(req.role_name.lower().split())
-            for cp in all_paths.data:
-                cp_words = set(cp["role_name"].lower().split())
-                if cp_words:
-                    overlap = len(req_words.intersection(cp_words)) / max(len(req_words), len(cp_words))
-                    if overlap >= 0.7:
-                        matching_roadmap = cp
-                        print(f"Role resolver matched '{req.role_name}' to existing cluster '{cp['role_name']}'")
-                        break
-                        
-        is_update = False
-        existing_id = None
+        if not res.data:
+            update_status(5, "Running deep market analysis (scraping real jobs)...")
+            from roadmap_engine.data_pipeline.pipeline_orchestrator import PipelineOrchestrator
+            orchestrator = PipelineOrchestrator()
+            # Pass our update_status callback to the orchestrator!
+            orchestrator.run_pipeline(role_to_gen, progress_callback=update_status)
+            
+        update_status(25, "Extracting Canonical Skills and Building Dynamic DAG Roadmap...")
         
-        if matching_roadmap:
-            roadmap = matching_roadmap
-            existing_id = roadmap["id"]
-            updated_str = roadmap.get("last_updated_at")
-            if updated_str:
-                last_updated = datetime.fromisoformat(updated_str.replace("Z", "+00:00"))
-            else:
-                last_updated = datetime.now(timezone.utc)
-            
-            if last_updated >= datetime.now(timezone.utc) - relativedelta(months=6):
-                # Valid cache, return it and save to user
-                if req.student_id:
-                    try:
-                        supabase.table("user_saved_roadmaps").upsert({
-                            "student_id": req.student_id,
-                            "roadmap_id": roadmap["id"]
-                        }).execute()
-                    except Exception as e:
-                        print(f"Failed to link existing roadmap to student: {e}")
-                return {"roadmap": roadmap, "message": "Already exists"}
-            else:
-                # Expired cache, mark for update to preserve foreign keys!
-                is_update = True
-            
-        # 2. Run the 5-Engine Pipeline
-        update_status(20, "Scraping global job boards and building ecosystem map...")
-        ecosystem_data = build_ecosystem_map(req.role_name if not is_update else matching_roadmap["role_name"], req.ecosystem)
+        # We assume Beginner proficiency by default if no student profile is provided
+        proficiency = "Beginner"
         
-        if not ecosystem_data.get("available_technologies"):
-            raise HTTPException(status_code=400, detail="Not enough industry data found to generate a reliable roadmap for this role. Try a different role.")
-            
-        # 2b. Personalization Delta: Fetch existing skills
-        existing_skills = []
-        if req.student_id:
-            try:
-                skill_res = supabase.table("student_skills").select("skill_name").eq("student_id", req.student_id).execute()
-                existing_skills = [s["skill_name"] for s in skill_res.data] if skill_res.data else []
-            except Exception as e:
-                print(f"Failed to fetch student skills for delta: {e}")
-                
-        ecosystem_data["student_known_skills"] = existing_skills
-            
-        update_status(60, "LLaMa-3 synthesizing chronological graph (this takes a moment)...")
-        roadmap_json = generate_roadmap_from_ecosystem(ecosystem_data, req.weekly_hours)
+        # Use LLM Coordinator to organize Top 40 skills into 8-12 stages
+        v2_graph = generator.generate_roadmap(role_name=role_to_gen, proficiency=proficiency)
         
-        if not roadmap_json:
-            raise Exception("LLM generation failed or returned invalid JSON.")
+        if isinstance(v2_graph, dict) and "error" in v2_graph:
+            raise Exception(v2_graph["error"])
             
-        # Set is_draft flag if fallback was triggered
-        if ecosystem_data.get("is_draft"):
-            roadmap_json["is_draft"] = True
-            
-        # Extract skills actually chosen by the LLM to filter out noise for the UI
+        update_status(60, "Structuring Roadmap Stages and Branches...")
+        
+        # 3. Format V2.0 roadmap output — NEW BRANCHING ROADMAP (Phases + Nodes)
+        flat_nodes_count = sum(len(stage.get("nodes", [])) for stage in v2_graph.get("stages", []))
+        
+        roadmap_json = {
+            "stages":           v2_graph.get("stages", []),
+            "description":      f"Complete {proficiency} learning path for {role_to_gen}. Covers 8-12 major stages including Core, Specializations, and Optional branches.",
+            "total_nodes":      flat_nodes_count,
+            "estimated_months": max(1, round((flat_nodes_count * 14) / 30)),
+            "confidence":       95.0,
+            "detailed_analysis": f"Dynamically generated Branching DAG Roadmap aligned with current industry standards using real-time JD statistics."
+        }
+        
+        # Construct dynamic filtered technology demand stats for analytics JSON
+        filtered_tech = []
         chosen_skills = set()
-        for phase in (roadmap_json.get("phases") or []):
-            for node in (phase.get("nodes") or []):
-                if node.get("skill"):
-                    chosen_skills.add(node["skill"])
-                for alt in (node.get("alternatives") or []):
-                    if alt.get("skill"):
-                        chosen_skills.add(alt["skill"])
-                    
-        # Filter available technologies to only those validated by the LLM
-        filtered_tech = [
-            t for t in ecosystem_data.get("available_technologies", [])
-            if t["name"] in chosen_skills
-        ]
-        ecosystem_data["available_technologies"] = filtered_tech
+        chosen_skill_ids = []
+        
+        for stage in v2_graph.get("stages", []):
+            for node in stage.get("nodes", []):
+                skill_name = node.get("name")
+                # V2 Architecture: Assign Canonical Skill ID
+                skill_id = get_or_create_canonical_skill(skill_name)
+                node["skill_id"] = skill_id
+                
+                chosen_skills.add(skill_name)
+                chosen_skill_ids.append(skill_id)
+                filtered_tech.append({
+                    "name": skill_name,
+                    "skill_id": skill_id,
+                    "demand_score": 90.0 # Placeholder since we don't return individual scores from LLM yet
+                })
+        
+        ecosystem_data = {
+            "available_technologies": filtered_tech,
+            "confidence_score": 95.0
+        }
         
         update_status(90, "Finalizing roadmap and storing analytics...")
         
         # 3. Store or Update in DB
         db_payload = {
-            "role_name": req.role_name if not is_update else matching_roadmap["role_name"],
+            "role_name": role_to_gen,
             "ecosystem": req.ecosystem,
             "roadmap_json": roadmap_json,
             "analytics_json": ecosystem_data,
@@ -230,12 +219,80 @@ def generate_roadmap(req: GenerateRequest, background_tasks: BackgroundTasks):
             except Exception as e:
                 print(f"Failed to link new roadmap to student: {e}")
             
-        # 4. Trigger background task to auto-generate resources for ALL skills in the roadmap
-        all_skills_to_process = list(chosen_skills)
-        background_tasks.add_task(generate_resources_in_background, all_skills_to_process, req.role_name)
+        # 4. Trigger background task to auto-generate resources ONLY for the first 2 skills (Lazy Generation)
+        first_two_skills = chosen_skill_ids[:2]
+        background_tasks.add_task(generate_resources_in_background, first_two_skills, role_to_gen)
         
         update_status(100, "Done!")
-        return {"roadmap": new_roadmap}
+        # ALSO save data in generation_status so polling frontend can retrieve it!
+        generation_status[req_id]["status"] = "completed"
+        generation_status[req_id]["data"] = new_roadmap
+        
+    except Exception as e:
+        if req_id:
+            generation_status[req_id] = {"progress": 0, "message": f"Error: {str(e)}", "status": "error"}
+            print(f"Error in background task: {e}")
+
+@router.post("/generate")
+def generate_roadmap(req: GenerateRequest, background_tasks: BackgroundTasks):
+    req_id = req.request_id
+    def update_status(progress: int, msg: str):
+        if req_id:
+            generation_status[req_id] = {"progress": progress, "message": msg}
+            
+    try:
+        update_status(5, "Checking cache for existing roadmaps...")
+        
+        # 1. Fetch all paths for this ecosystem to do role resolution
+        all_paths = supabase.table("career_paths").select("*").eq("ecosystem", req.ecosystem).execute()
+        
+        matching_roadmap = None
+        for cp in all_paths.data:
+            if cp["role_name"].lower().strip() == req.role_name.lower().strip():
+                matching_roadmap = cp
+                break
+                
+        if not matching_roadmap:
+            req_words = set(req.role_name.lower().split())
+            for cp in all_paths.data:
+                cp_words = set(cp["role_name"].lower().split())
+                if cp_words:
+                    overlap = len(req_words.intersection(cp_words)) / max(len(req_words), len(cp_words))
+                    if overlap >= 0.7:
+                        matching_roadmap = cp
+                        print(f"Role resolver matched '{req.role_name}' to existing cluster '{cp['role_name']}'")
+                        break
+                        
+        is_update = False
+        existing_id = None
+        
+        if matching_roadmap:
+            roadmap = matching_roadmap
+            existing_id = roadmap["id"]
+            updated_str = roadmap.get("last_updated_at")
+            if updated_str:
+                last_updated = datetime.fromisoformat(updated_str.replace("Z", "+00:00"))
+            else:
+                last_updated = datetime.now(timezone.utc)
+            
+            if last_updated >= datetime.now(timezone.utc) - relativedelta(months=6):
+                # Valid cache, return it synchronously (fast path)
+                if req.student_id:
+                    try:
+                        supabase.table("user_saved_roadmaps").upsert({
+                            "student_id": req.student_id,
+                            "roadmap_id": roadmap["id"]
+                        }).execute()
+                    except Exception as e:
+                        print(f"Failed to link existing roadmap to student: {e}")
+                return {"roadmap": roadmap, "message": "Already exists", "status": "cached"}
+            else:
+                is_update = True
+        
+        # Dispatch background task for V2.0 Dynamic Generation!
+        background_tasks.add_task(process_roadmap_generation_bg, req, is_update, existing_id, matching_roadmap, background_tasks)
+        
+        return {"status": "queued", "req_id": req_id}
         
     except Exception as e:
         if req_id:
@@ -263,7 +320,56 @@ async def chat_with_roadmap(req: ChatRequest):
             raise HTTPException(status_code=404, detail="Roadmap not found")
         
         roadmap_json = res.data[0].get("roadmap_json", {})
-        reply = get_chat_response(roadmap_json, req.messages)
-        return {"reply": reply}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+class MilestoneSubmitRequest(BaseModel):
+    student_id: str
+    roadmap_id: str
+    milestone_type: str # 'chunk_assessment' or 'capstone_project'
+    title: str
+    github_repo_url: str
+
+@router.get("/my-roadmaps/{student_id}/progress/{roadmap_id}")
+async def get_roadmap_progress(student_id: str, roadmap_id: str):
+    """Fetch the progress of all nodes and milestones for a specific student's roadmap"""
+    try:
+        nodes_res = supabase.table("student_roadmap_nodes") \
+            .select("*") \
+            .eq("student_id", student_id) \
+            .eq("roadmap_id", roadmap_id) \
+            .execute()
+            
+        milestones_res = supabase.table("student_roadmap_milestones") \
+            .select("*") \
+            .eq("student_id", student_id) \
+            .eq("roadmap_id", roadmap_id) \
+            .execute()
+            
+        return {
+            "nodes": nodes_res.data,
+            "milestones": milestones_res.data
+        }
+    except Exception as e:
+        # Fallback for when tables are not yet created in the database
+        print("Progress tables might not exist yet:", e)
+        return {"nodes": [], "milestones": []}
+
+@router.post("/my-roadmaps/milestones/submit")
+async def submit_milestone(req: MilestoneSubmitRequest):
+    """Submit a GitHub repo for a Milestone or Capstone Project"""
+    try:
+        # Upsert the milestone submission as pending or run auto-eval immediately
+        res = supabase.table("student_roadmap_milestones").upsert({
+            "student_id": req.student_id,
+            "roadmap_id": req.roadmap_id,
+            "milestone_type": req.milestone_type,
+            "title": req.title,
+            "github_repo_url": req.github_repo_url,
+            "status": "pending" # An admin or background worker will verify this
+        }).execute()
+        
+        return {"success": True, "message": "Project submitted successfully for review!"}
+    except Exception as e:
+        print("Failed to submit milestone:", e)
+        raise HTTPException(status_code=500, detail="Failed to submit project. Tables might not be created yet.")

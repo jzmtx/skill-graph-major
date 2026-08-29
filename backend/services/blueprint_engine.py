@@ -1,3 +1,4 @@
+from groq_models import GROQ_PRIMARY, GROQ_FAST
 import json
 from database import supabase
 from typing import List, Optional
@@ -79,7 +80,7 @@ def generate_dynamic_blueprint(career_name: str) -> List[str]:
         
         completion = groq_client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
-            model="llama-3.1-8b-instant",
+            model=GROQ_FAST,
             temperature=0.2,
             response_format={"type": "json_object"}
         )

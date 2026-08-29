@@ -59,4 +59,9 @@ export const adminApi = {
     const res = await api.delete('/scraper_diagnostics');
     return res.data;
   },
+
+  getGraphData: async () => {
+    const res = await api.get('/graph-data');
+    return res.data;
+  },
 };

@@ -120,7 +120,7 @@ export const getProjectIdea = async (data: { skill_name: string }) => {
 };
 
 // --- Resources & Workspace APIs ---
-export const getWorkspaceResources = async (skill_name: string) => {
-  const response = await api.get(`/api/resources/workspace/${encodeURIComponent(skill_name)}`);
+export const getWorkspaceResources = async (skill_id: string, role_name: string = "Software Engineering") => {
+  const response = await api.get(`/api/resources/skills/${encodeURIComponent(skill_id)}/workspace?role_name=${encodeURIComponent(role_name)}`);
   return response.data;
 };
