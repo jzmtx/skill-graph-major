@@ -10,8 +10,23 @@ router = APIRouter()
 async def get_all_users():
     try:
         # Fetch students and their verified skills
-        res = supabase.table("students").select("*, student_skills(skill_name, verification_level, skill_score)").execute()
-        return {"users": res.data}
+        students = supabase.table("students").select("*, student_skills(skill_name, verification_level, skill_score)").execute()
+
+        # Fetch companies (via recruiters, since companies table itself has no auth_id)
+        recruiters = supabase.table("recruiters").select("*, companies(name, is_verified)").execute()
+
+        # Fetch TPO officials
+        tpo_officials = supabase.table("tpo_officials").select("*, colleges(name)").execute()
+
+        # Fetch alumni
+        alumni = supabase.table("alumni").select("*, colleges(name)").execute()
+
+        return {
+            "users": students.data,
+            "recruiters": recruiters.data,
+            "tpo_officials": tpo_officials.data,
+            "alumni": alumni.data
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -305,5 +320,20 @@ async def verify_alumni(alumni_id: str):
         return {"message": "Alumni verified", "alumni": result.data[0]}
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+class FetchExternalJobsRequest(BaseModel):
+    role: str
+    location: str = "India"
+    results_wanted: int = 15
+
+@router.post("/fetch_external_jobs")
+async def fetch_external_jobs(req: FetchExternalJobsRequest):
+    """Admin-triggered: scrapes real job listings from LinkedIn/Indeed/Glassdoor
+    and inserts them into the jobs table as external listings."""
+    try:
+        from services.external_jobs_engine import fetch_and_store_external_jobs
+        result = fetch_and_store_external_jobs(req.role, req.location, req.results_wanted)
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

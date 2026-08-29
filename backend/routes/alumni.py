@@ -18,6 +18,7 @@ class AlumniRegister(BaseModel):
     current_company: Optional[str] = None
     current_job_role: Optional[str] = None
     linkedin_url: Optional[str] = None
+    proof_document_url: Optional[str] = None
 
 class AlumniLogin(BaseModel):
     email: str
@@ -75,6 +76,7 @@ async def register_alumni(payload: AlumniRegister):
             "current_company": payload.current_company,
             "current_job_role": payload.current_job_role,
             "linkedin_url": payload.linkedin_url,
+            "proof_document_url": payload.proof_document_url,
             "is_verified": False
         }).execute()
 

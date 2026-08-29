@@ -11,3 +11,4 @@ if not SUPABASE_URL or not SUPABASE_KEY:
     raise Exception("SUPABASE_URL or SUPABASE_KEY is missing from environment variables.")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+

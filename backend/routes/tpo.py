@@ -15,6 +15,7 @@ class TPORegister(BaseModel):
     email: str
     password: str
     designation: Optional[str] = None
+    proof_document_url: Optional[str] = None
 
 class TPOLogin(BaseModel):
     email: str
@@ -59,6 +60,7 @@ async def register_tpo(payload: TPORegister):
             "name": payload.name,
             "email": payload.email,
             "designation": payload.designation,
+            "proof_document_url": payload.proof_document_url,
             "is_verified": False
         }).execute()
 

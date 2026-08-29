@@ -79,4 +79,25 @@ getPendingVerifications: async () => {
     const res = await api.patch(`/verify/alumni/${id}`);
     return res.data;
   },
+  fetchExternalJobs: async (role: string, location: string, results_wanted: number) => {
+    const res = await api.post('/fetch_external_jobs', { role, location, results_wanted });
+    return res.data;
+  },
+    getPendingColleges: async () => {
+    const res = await api.get('/colleges/pending');
+    return res.data;
+  },
+
+  approveCollege: async (id: string) => {
+    const res = await api.patch(`/colleges/approve/${id}`);
+    return res.data;
+  },
+
+  addCollege: async (name: string, state: string, district?: string) => {
+    const res = await api.post('/colleges/add', { name, state, district });
+    return res.data;
+  },
 };
+
+  
+  

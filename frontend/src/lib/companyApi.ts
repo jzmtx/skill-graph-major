@@ -5,6 +5,7 @@ export const registerCompany = async (data: {
   name: string;
   website?: string;
   industry?: string;
+   proof_document_url?: string;
 }) => {
   const response = await api.post('/api/company/register', data);
   return response.data;
@@ -46,6 +47,7 @@ export const createJob = async (data: {
   location?: string;
   ctc?: string;
   deadline?: string;
+  external_url?: string;
 }) => {
   const response = await api.post('/api/company/jobs', data);
   return response.data;
@@ -66,7 +68,10 @@ export const getApplicants = async (job_id: string) => {
   const response = await api.get(`/api/company/jobs/${job_id}/applicants`);
   return response.data.applicants;
 };
-
+export const getRecentApplicants = async (recruiter_id: string) => {
+  const response = await api.get(`/api/company/applicants/recent/${recruiter_id}`);
+  return response.data.applicants;
+};
 export const updateApplicationStatus = async (application_id: string, status: string) => {
   const response = await api.patch(`/api/company/applications/${application_id}/status`, { status });
   return response.data;

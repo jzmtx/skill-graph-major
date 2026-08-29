@@ -24,7 +24,7 @@ cd backend
 
 # Create a virtual environment (optional but recommended)
 python -m venv venv
-source venv/bin/activate  # On Windows use: venv\Scripts\activate
+source venv/bin/activate  # On Windows use: venv\Scripts\activate  #   .\venv313\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt

@@ -140,6 +140,37 @@ export default function TPODashboardPage() {
               </div>
             )}
 
+                        {/* Hiring Funnel Chart */}
+            {analytics && (
+              <div className="bg-white rounded-xl border border-slate-200 p-5 mb-6">
+                <h3 className="text-sm font-semibold text-slate-700 mb-4">Placement Funnel</h3>
+                <div className="space-y-3">
+                  {[
+                    { label: 'Applied', value: analytics.placement_stats.total_applications, color: 'bg-slate-400' },
+                    { label: 'Shortlisted', value: analytics.placement_stats.shortlisted, color: 'bg-amber-400' },
+                    { label: 'Hired', value: analytics.placement_stats.hired, color: 'bg-green-500' },
+                  ].map((stage, i) => {
+                    const max = analytics.placement_stats.total_applications || 1;
+                    const widthPct = Math.max((stage.value / max) * 100, stage.value > 0 ? 4 : 0);
+                    return (
+                      <div key={i}>
+                        <div className="flex justify-between text-xs text-slate-500 mb-1">
+                          <span>{stage.label}</span>
+                          <span className="font-medium text-slate-700">{stage.value}</span>
+                        </div>
+                        <div className="w-full bg-slate-100 rounded-full h-3">
+                          <div
+                            className={`h-3 rounded-full ${stage.color} transition-all`}
+                            style={{ width: `${widthPct}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Student List */}
             <h2 className="text-lg font-semibold text-slate-800 mb-4">Students ({students.length})</h2>
             {students.length === 0 ? (

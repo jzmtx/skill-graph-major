@@ -14,6 +14,8 @@ interface Job {
   deadline?: string;
   is_active: boolean;
   company_name?: string;
+  source?: string;
+  external_url?: string;
 }
 
 interface Application {
@@ -109,8 +111,13 @@ export default function JobsPage() {
               <div key={job.id} className="bg-white rounded-xl border border-slate-200 p-5">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-2">
                       <h3 className="font-semibold text-slate-800">{job.title}</h3>
+                      {job.source === 'external' && (
+                        <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-xs rounded-full">
+                          {job.company_name || 'External'}
+                        </span>
+                      )}
                       {elig && (
                         <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
                           elig.match_percentage >= 70 ? 'bg-green-50 text-green-700' :
@@ -155,8 +162,15 @@ export default function JobsPage() {
                     )}
                   </div>
 
-                  <div className="shrink-0 ml-4">
-                    {applied ? (
+                                    <div className="shrink-0 ml-4">
+                    {job.source === 'external' ? (
+                      <button
+                        onClick={() => window.open(job.external_url, '_blank')}
+                        className="flex items-center gap-1.5 px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-900"
+                      >
+                        View Job ↗
+                      </button>
+                    ) : applied ? (
                       <span className="flex items-center gap-1.5 px-4 py-2 bg-green-50 text-green-700 text-sm font-medium rounded-lg">
                         <CheckCircle2 className="w-4 h-4" /> Applied
                       </span>
@@ -171,6 +185,7 @@ export default function JobsPage() {
                       </button>
                     )}
                   </div>
+
                 </div>
               </div>
             );

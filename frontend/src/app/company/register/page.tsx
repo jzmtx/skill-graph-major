@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { registerCompany, registerRecruiter, searchCompanies } from '@/lib/companyApi';
 import Link from 'next/link';
 import { Building2, LogIn } from 'lucide-react';
+import FileUploadField from '@/components/FileUploadField';
 
 export default function CompanyRegisterPage() {
   const [mode, setMode] = useState<'new' | 'existing'>('new');
@@ -27,6 +28,7 @@ export default function CompanyRegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [roleTitle, setRoleTitle] = useState('');
+  const [proofDocumentUrl, setProofDocumentUrl] = useState('');
 
   const handleCompanySearch = async (query: string) => {
     setCompanyQuery(query);
@@ -59,6 +61,8 @@ export default function CompanyRegisterPage() {
           name: companyName,
           website: website || undefined,
           industry: industry || undefined,
+          proof_document_url: proofDocumentUrl || undefined,
+        
         });
         companyId = companyResponse.company.id;
       } else {
@@ -189,6 +193,11 @@ export default function CompanyRegisterPage() {
                     />
                   </div>
                 </div>
+                <FileUploadField
+                  label="Proof Document (business registration, ID, or website screenshot)"
+                  onUploaded={setProofDocumentUrl}
+                  value={proofDocumentUrl}
+                />
               </>
             ) : (
               <div className="relative">

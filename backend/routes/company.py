@@ -13,6 +13,7 @@ class CompanyRegister(BaseModel):
     name: str
     website: Optional[str] = None
     industry: Optional[str] = None
+    proof_document_url: Optional[str] = None
 
 class RecruiterRegister(BaseModel):
     company_id: str
@@ -32,7 +33,8 @@ class JobCreate(BaseModel):
     required_skills: List[str] = []
     location: Optional[str] = None
     ctc: Optional[str] = None
-    deadline: Optional[str] = None  # ISO date string, e.g. "2026-12-31"
+    deadline: Optional[str] = None
+    external_url: Optional[str] = None
 
 class ApplicationStatusUpdate(BaseModel):
     status: str  # 'applied' | 'shortlisted' | 'rejected' | 'hired'
@@ -55,6 +57,7 @@ async def register_company(payload: CompanyRegister):
             "name": payload.name,
             "website": payload.website,
             "industry": payload.industry,
+            "proof_document_url": payload.proof_document_url,
             "is_verified": False
         }).execute()
 
@@ -94,6 +97,7 @@ async def register_recruiter(payload: RecruiterRegister):
             raise HTTPException(status_code=400, detail="A recruiter with this email already exists")
 
         # 1. Register with Supabase Auth (Admin API) — same pattern as register_student
+               # 1. Register with Supabase Auth (Admin API) — same pattern as register_student
         user_id = None
         try:
             auth_response = supabase.auth.admin.create_user({
@@ -103,8 +107,9 @@ async def register_recruiter(payload: RecruiterRegister):
             })
             if auth_response.user:
                 user_id = auth_response.user.id
+                print("RECRUITER AUTH CREATED, user_id:", user_id)
         except Exception as auth_err:
-            print("Supabase Auth Error (bypassing for test):", auth_err)
+            print("RECRUITER AUTH CREATE ERROR:", repr(auth_err))
 
         # 2. Insert into public.recruiters
         result = supabase.table("recruiters").insert({
@@ -194,19 +199,27 @@ def _assert_recruiter_can_post(recruiter_id: str):
 
 @router.post("/jobs")
 async def create_job(payload: JobCreate):
-    """Creates a new job posting. Requires the recruiter's company to be verified."""
+    """Creates a new job posting. Requires the recruiter's company to be verified.
+    Auto-extracts required_skills from description via AI if none were provided manually."""
     try:
         _assert_recruiter_can_post(payload.recruiter_id)
+
+        final_skills = payload.required_skills
+        if not final_skills and payload.description:
+            from services.llm import extract_skills_from_description
+            final_skills = extract_skills_from_description(payload.description)
 
         result = supabase.table("jobs").insert({
             "recruiter_id": payload.recruiter_id,
             "title": payload.title,
             "description": payload.description,
-            "required_skills": payload.required_skills,
+            "required_skills": final_skills,
             "location": payload.location,
             "ctc": payload.ctc,
             "deadline": payload.deadline,
-            "is_active": True
+            "is_active": True,
+            "external_url": payload.external_url,
+            "source": "external" if payload.external_url else "internal"
         }).execute()
 
         return {"job": result.data[0]}
@@ -301,5 +314,48 @@ async def update_application_status(application_id: str, payload: ApplicationSta
         return {"application": result.data[0]}
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+@router.get("/applicants/recent/{recruiter_id}")
+async def get_recent_applicants(recruiter_id: str):
+    """Lists the most recent applicants across ALL jobs posted by this recruiter,
+    with full student details, for the dashboard's applicant overview panel."""
+    try:
+        jobs_res = supabase.table("jobs").select("id, title, required_skills").eq("recruiter_id", recruiter_id).execute()
+        job_map = {j["id"]: j for j in jobs_res.data}
+        job_ids = list(job_map.keys())
+
+        if not job_ids:
+            return {"applicants": []}
+
+        applications = supabase.table("applications").select("*").in_("job_id", job_ids).order("applied_at", desc=True).limit(20).execute()
+
+        enriched = []
+        for app in applications.data:
+            student = supabase.table("students").select("id, name, email, branch, year, github_url").eq("id", app["student_id"]).execute()
+            if not student.data:
+                continue
+            student_data = student.data[0]
+
+            skills = supabase.table("student_skills").select("skill_name, verification_level").eq("student_id", app["student_id"]).execute()
+
+            job = job_map.get(app["job_id"], {})
+            required_skills = set(s.lower() for s in (job.get("required_skills") or []))
+            student_skill_names = set(s["skill_name"].lower() for s in skills.data)
+            matched = required_skills.intersection(student_skill_names)
+            match_percentage = round((len(matched) / len(required_skills) * 100), 1) if required_skills else 0
+
+            enriched.append({
+                "application_id": app["id"],
+                "status": app["status"],
+                "applied_at": app["applied_at"],
+                "job_title": job.get("title", "Unknown"),
+                "job_id": app["job_id"],
+                "student": student_data,
+                "skills": skills.data,
+                "match_percentage": match_percentage
+            })
+
+        return {"applicants": enriched}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

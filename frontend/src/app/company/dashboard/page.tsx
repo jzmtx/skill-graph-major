@@ -31,9 +31,10 @@ export default function CompanyDashboardPage() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [skillsInput, setSkillsInput] = useState('');
-  const [location, setLocation] = useState('');
+   const [location, setLocation] = useState('');
   const [ctc, setCtc] = useState('');
   const [deadline, setDeadline] = useState('');
+  const [externalUrl, setExternalUrl] = useState('');
 
   useEffect(() => {
     const load = async () => {
@@ -74,12 +75,13 @@ export default function CompanyDashboardPage() {
         location: location || undefined,
         ctc: ctc || undefined,
         deadline: deadline || undefined,
+        external_url: externalUrl || undefined,
       });
 
       const jobList = await getMyJobs(recruiter.id);
       setJobs(jobList);
       setShowForm(false);
-      setTitle(''); setDescription(''); setSkillsInput(''); setLocation(''); setCtc(''); setDeadline('');
+      setTitle(''); setDescription(''); setSkillsInput(''); setLocation(''); setCtc(''); setDeadline('');setExternalUrl('');
     } catch (err: unknown) {
       const error = err as { response?: { data?: { detail?: string } } };
       setFormError(error.response?.data?.detail || 'Failed to post job');
@@ -202,6 +204,16 @@ export default function CompanyDashboardPage() {
                     value={deadline} onChange={e => setDeadline(e.target.value)}
                   />
                 </div>
+              </div>
+               <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">External Job Link (optional)</label>
+                <input
+                  type="text"
+                  placeholder="e.g. your LinkedIn job posting or careers page URL"
+                  className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                  value={externalUrl} onChange={e => setExternalUrl(e.target.value)}
+                />
+                <p className="text-xs text-slate-400 mt-1">If provided, students will be sent to this link instead of applying through SkillGraph.</p>
               </div>
               <button
                 type="submit"
