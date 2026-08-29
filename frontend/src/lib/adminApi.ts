@@ -55,6 +55,16 @@ export const adminApi = {
     return res.data;
   },
 
+  getPipelineErrors: async () => {
+    const res = await api.get('/pipeline_errors');
+    return res.data;
+  },
+
+  runPipeline: async (roleName: string) => {
+    const res = await api.post('/run_pipeline', { role_name: roleName });
+    return res.data;
+  },
+
   clearScraperDiagnostics: async () => {
     const res = await api.delete('/scraper_diagnostics');
     return res.data;
