@@ -28,7 +28,7 @@ class OpportunityCreate(BaseModel):
     alumni_id: str
     title: str
     description: Optional[str] = None
-    type: str = "referral"  # 'referral' | 'internship' | 'mentorship'
+    type: str = "referral"  # 'referral' | 'internship' | 'mentorship' | 'job' | 'opensource'
 
 class ExpressInterest(BaseModel):
     opportunity_id: str
@@ -53,20 +53,24 @@ async def register_alumni(payload: AlumniRegister):
         if existing.data:
             raise HTTPException(status_code=400, detail="An alumni profile with this email already exists")
 
-        # 1. Register with Supabase Auth (Admin API) — same pattern as register_student
-        user_id = None
+        # 1. Register with Supabase Auth (Admin API)
+        # FIXED: no longer swallows the error. If Auth creation fails,
+        # the function stops here instead of inserting a broken alumni row.
         try:
             auth_response = supabase.auth.admin.create_user({
                 "email": payload.email,
                 "password": payload.password,
                 "email_confirm": True
             })
-            if auth_response.user:
-                user_id = auth_response.user.id
         except Exception as auth_err:
-            print("Supabase Auth Error (bypassing for test):", auth_err)
+            raise HTTPException(status_code=500, detail=f"Failed to create auth account: {str(auth_err)}")
 
-        # 2. Insert into public.alumni
+        if not auth_response.user:
+            raise HTTPException(status_code=500, detail="Auth account creation returned no user.")
+
+        user_id = auth_response.user.id
+
+        # 2. Insert into public.alumni — only reached if Auth creation truly succeeded
         result = supabase.table("alumni").insert({
             "auth_id": user_id,
             "college_id": payload.college_id,
@@ -181,8 +185,10 @@ def _assert_alumni_verified(alumni_id: str) -> dict:
 
 @router.post("/opportunities")
 async def create_opportunity(payload: OpportunityCreate):
-    """Creates a new opportunity (referral/internship/mentorship). Requires verified alumni."""
-    valid_types = {"referral", "internship", "mentorship"}
+    """Creates a new opportunity (referral/internship/mentorship/job/opensource). Requires verified alumni."""
+    # UPDATED: added "job" and "opensource" to the allowed types.
+    # Existing types are untouched so anything already posted keeps working.
+    valid_types = {"referral", "internship", "mentorship", "job", "opensource"}
     if payload.type not in valid_types:
         raise HTTPException(status_code=400, detail=f"Type must be one of {valid_types}")
 
@@ -206,7 +212,8 @@ async def create_opportunity(payload: OpportunityCreate):
 
 @router.get("/opportunities/browse")
 async def browse_opportunities():
-    """Lists all active opportunities with alumni poster info, for the student-facing board."""
+    """Lists all active opportunities with alumni poster info, for the student-facing board.
+    UNCHANGED — kept exactly as before, no college filter, all types."""
     try:
         opps = supabase.table("opportunities").select("*").eq("is_active", True).order("created_at", desc=True).execute()
 
@@ -219,6 +226,57 @@ async def browse_opportunities():
             })
 
         return {"opportunities": enriched}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================
+# NEW: Same-college Job / Open Source board (student-facing)
+# ============================================================
+
+@router.get("/opportunities/for-student/{student_id}")
+async def get_opportunities_for_student(student_id: str):
+    """Student-facing board of alumni-posted Job and Open Source opportunities,
+    restricted to alumni from the SAME college as the student.
+
+    Takes the student's primary students.id directly (matches how this app
+    already stores it in localStorage and uses it elsewhere, e.g. applyToJob).
+    """
+    try:
+        student = supabase.table("students").select("id, college_id").eq("id", student_id).execute()
+        if not student.data:
+            raise HTTPException(status_code=404, detail="Student profile not found")
+
+        college_id = student.data[0]["college_id"]
+
+        college_alumni = supabase.table("alumni").select("id, name, current_company, current_job_role, linkedin_url").eq("college_id", college_id).execute()
+        alumni_ids = [a["id"] for a in college_alumni.data]
+        alumni_by_id = {a["id"]: a for a in college_alumni.data}
+
+        if not alumni_ids:
+            return {"opportunities": []}
+
+        opps = supabase.table("opportunities").select("*") \
+            .in_("alumni_id", alumni_ids) \
+            .in_("type", ["job", "opensource"]) \
+            .eq("is_active", True) \
+            .order("created_at", desc=True) \
+            .execute()
+
+        interest = supabase.table("opportunity_interest").select("opportunity_id").eq("student_id", student_id).execute()
+        interested_opp_ids = {row["opportunity_id"] for row in interest.data}
+
+        enriched = []
+        for opp in opps.data:
+            enriched.append({
+                **opp,
+                "posted_by": alumni_by_id.get(opp["alumni_id"]),
+                "already_interested": opp["id"] in interested_opp_ids
+            })
+
+        return {"opportunities": enriched}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

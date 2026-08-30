@@ -66,3 +66,9 @@ export const getInterestedStudents = async (opportunity_id: string) => {
   const response = await api.get(`/api/alumni/opportunities/${opportunity_id}/interested-students`);
   return response.data.interested_students;
 };
+
+// --- Student-facing: same-college Job/Open Source board ---
+export const getOpportunitiesForStudent = async (student_id: string) => {
+  const response = await api.get(`/api/alumni/opportunities/for-student/${student_id}`);
+  return response.data.opportunities;
+};
