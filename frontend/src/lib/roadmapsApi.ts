@@ -74,6 +74,15 @@ export const roadmapsApi = {
     }
   },
 
+  getMarketStatsAdmin: async () => {
+    try {
+      const res = await api.get('/market-stats/admin');
+      return res.data;
+    } catch (err) {
+      throw err;
+    }
+  },
+
   chatWithRoadmap: async (roadmap_id: string, messages: any[]) => {
     try {
       const res = await api.post('/chat', { roadmap_id, messages });

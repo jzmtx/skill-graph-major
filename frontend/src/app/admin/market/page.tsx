@@ -11,6 +11,7 @@ export default function AdminMarketPage() {
   const [marketData, setMarketData] = useState<any[]>([]);
   const [roadmaps, setRoadmaps] = useState<any[]>([]);
   const [rawJds, setRawJds] = useState<any[]>([]);
+  const [marketStats, setMarketStats] = useState<any>(null);
   const [scraperLogs, setScraperLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -24,11 +25,13 @@ export default function AdminMarketPage() {
     try {
       const data = await adminApi.getMarketData();
       const rawJdsData = await roadmapsApi.getRawJdsAdmin();
+      const statsData = await roadmapsApi.getMarketStatsAdmin();
       const logsData = await adminApi.getScraperDiagnostics();
       
       setMarketData(data.market_data || []);
       setRoadmaps(data.roadmaps || []);
       setRawJds(rawJdsData || []);
+      setMarketStats(statsData);
       setScraperLogs(logsData.logs || []);
     } catch (error) {
       console.error("Failed to fetch market data", error);
@@ -101,8 +104,6 @@ export default function AdminMarketPage() {
   const filteredRawJds = selectedRoadmap ? rawJds.filter(jd => jd.role_name === selectedRoadmap.role_name) : rawJds;
 
   const skillCount: Record<string, { demand_percentage: number, count: number }> = {};
-  const companiesCount: Record<string, number> = {};
-  const urlsCount: Record<string, number> = {};
   
   roadmapsToAnalyze.forEach(r => {
     const allSkills = [...(r.core_skills || []), ...(r.recommended_skills || [])];
@@ -113,29 +114,13 @@ export default function AdminMarketPage() {
     });
   });
 
-  filteredRawJds.forEach(jd => {
-    if (jd.company_name) {
-      const cap = jd.company_name.charAt(0).toUpperCase() + jd.company_name.slice(1);
-      companiesCount[cap] = (companiesCount[cap] || 0) + 1;
-    }
-    if (jd.url) {
-      try {
-        const urlObj = new URL(jd.url.startsWith('http') ? jd.url : `https://${jd.url}`);
-        let domain = urlObj.hostname.replace('www.', '');
-        urlsCount[domain] = (urlsCount[domain] || 0) + 1;
-      } catch (e) {
-        urlsCount[jd.url] = (urlsCount[jd.url] || 0) + 1;
-      }
-    }
-  });
-
   const aggregatedSkills = Object.keys(skillCount).map(key => ({
     skill_name: key,
     demand_percentage: Math.round(skillCount[key].demand_percentage / skillCount[key].count)
   })).sort((a, b) => b.demand_percentage - a.demand_percentage).slice(0, 10);
   
-  const companiesPieData = Object.keys(companiesCount).map(key => ({ name: key, value: companiesCount[key] }));
-  const urlsPieData = Object.keys(urlsCount).map(key => ({ name: key, value: urlsCount[key] }));
+  const companiesPieData = marketStats?.companies ? Object.keys(marketStats.companies).map(key => ({ name: key, value: marketStats.companies[key] })) : [];
+  const urlsPieData = marketStats?.urls ? Object.keys(marketStats.urls).map(key => ({ name: key, value: marketStats.urls[key] })) : [];
   const COLORS = ['#6366f1', '#06b6d4', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6'];
 
   return (
@@ -168,8 +153,8 @@ export default function AdminMarketPage() {
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
         {[
-          { label: "JDs Extracted", value: filteredRawJds.length, icon: FileText, color: "text-indigo-400", bg: "bg-indigo-500/10", border: "border-indigo-500/20" },
-          { label: "Companies Scraped", value: Object.keys(companiesCount).length, icon: Briefcase, color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20" },
+          { label: "Total JDs Scraped", value: marketStats?.total_count || 0, icon: FileText, color: "text-indigo-400", bg: "bg-indigo-500/10", border: "border-indigo-500/20" },
+          { label: "Companies Scraped", value: marketStats?.companies ? Object.keys(marketStats.companies).length : 0, icon: Briefcase, color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20" },
           { label: "Skills Ranked", value: Object.keys(skillCount).length, icon: TrendingUp, color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/20" },
         ].map((kpi, i) => (
           <motion.div key={i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} 
@@ -186,7 +171,7 @@ export default function AdminMarketPage() {
       </div>
 
       {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10">
         
         {/* Bar Chart */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} 
@@ -222,8 +207,33 @@ export default function AdminMarketPage() {
           </div>
         </motion.div>
 
-        {/* Pie Chart */}
+        {/* Company Pie Chart */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} 
+          className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-3xl p-8 shadow-xl">
+          <div className="flex items-center gap-3 mb-8">
+            <Briefcase className="w-6 h-6 text-indigo-400" />
+            <h2 className="text-2xl font-bold text-white tracking-tight">Top Companies</h2>
+          </div>
+          <div className="h-60 flex justify-center items-center">
+            {companiesPieData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={companiesPieData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={8} dataKey="value" stroke="none">
+                    {companiesPieData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '12px' }} />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="text-slate-500 font-medium">No company data found.</div>
+            )}
+          </div>
+        </motion.div>
+
+        {/* Ecosystem Pie Chart */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} 
           className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-3xl p-8 shadow-xl">
           <div className="flex items-center gap-3 mb-8">
             <Briefcase className="w-6 h-6 text-emerald-400" />

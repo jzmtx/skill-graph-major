@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from database import supabase
-from services.llm import generate_questions, analyze_performance, generate_coding_questions, evaluate_code_submission, generate_project_idea
+from services.llm import generate_questions, analyze_performance, generate_coding_questions, evaluate_code_submission, generate_project_idea, generate_explanation_fast, is_skill_programmable
 import random
 import json
 
@@ -23,7 +23,7 @@ class SubmitAnswerRequest(BaseModel):
     current_difficulty: int
 
 @router.post("/get-question")
-async def get_adaptive_question(req: GetQuestionRequest):
+def get_adaptive_question(req: GetQuestionRequest):
     try:
         # Get globally seen questions for this student
         global_seen_ids = []
@@ -215,12 +215,12 @@ def pregenerate_questions_task(skill_name: str, difficulty_level: int):
         print(f"[Background] Pre-generation failed: {e}")
 
 @router.post("/submit-answer")
-async def submit_answer(req: SubmitAnswerRequest, background_tasks: BackgroundTasks):
+def submit_answer(req: SubmitAnswerRequest, background_tasks: BackgroundTasks):
     try:
         # Note: question is now marked as seen globally in get-question to prevent proctoring cheats
 
         # 1. Fetch correct answer from DB
-        q_res = supabase.table("questions").select("correct_answer").eq("id", req.question_id).execute()
+        q_res = supabase.table("questions").select("correct_answer, question_base_text").eq("id", req.question_id).execute()
         if not q_res.data:
             raise HTTPException(status_code=404, detail="Question not found")
             
@@ -238,11 +238,20 @@ async def submit_answer(req: SubmitAnswerRequest, background_tasks: BackgroundTa
             
         # Spawn background task to pre-generate for next_difficulty
         background_tasks.add_task(pregenerate_questions_task, req.skill_name, next_difficulty)
+        
+        # Fast Explanation Generation using Groq
+        explanation = generate_explanation_fast(
+            skill_name=req.skill_name,
+            question_text=q_res.data[0].get('question_base_text', ''),
+            options=[],  # We can omit options to save tokens if we just want a generic explanation of the answer
+            correct_answer=correct_ans
+        )
             
         return {
             "is_correct": is_correct,
             "correct_answer": correct_ans,
-            "next_difficulty": next_difficulty
+            "next_difficulty": next_difficulty,
+            "explanation": explanation
         }
         
     except Exception as e:
@@ -254,8 +263,11 @@ class GetCodingQuestionRequest(BaseModel):
     student_id: str = None
 
 @router.post("/get-coding-question")
-async def get_coding_question(req: GetCodingQuestionRequest):
+def get_coding_question(req: GetCodingQuestionRequest):
     try:
+        if not is_skill_programmable(req.skill_name):
+            return {"is_programmable": False}
+
         difficulty_level = 4 if req.difficulty_type == "basic" else 5
         selected_q = None
         
@@ -327,7 +339,7 @@ class EvaluateCodeRequest(BaseModel):
     student_code: str
 
 @router.post("/evaluate-code")
-async def evaluate_code(req: EvaluateCodeRequest):
+def evaluate_code(req: EvaluateCodeRequest):
     try:
         eval_data = evaluate_code_submission(req.skill_name, req.question_text, req.student_code)
         return eval_data
@@ -357,7 +369,7 @@ class ReportQuestionRequest(BaseModel):
     reason: str
 
 @router.post("/report-question")
-async def report_question(req: ReportQuestionRequest):
+def report_question(req: ReportQuestionRequest):
     try:
         import json
         import os
@@ -389,7 +401,7 @@ async def report_question(req: ReportQuestionRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/complete")
-async def complete_assessment(req: CompleteAssessmentRequest):
+def complete_assessment(req: CompleteAssessmentRequest):
     try:
         analytics = analyze_performance(req.skill_name, req.history)
         
@@ -435,7 +447,7 @@ async def complete_assessment(req: CompleteAssessmentRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/simulate-code")
-async def simulate_code(req: SimulateCodeRequest):
+def simulate_code(req: SimulateCodeRequest):
     try:
         from services.llm import simulate_code_execution
         output = simulate_code_execution(req.skill_name, req.code)
@@ -447,10 +459,25 @@ class ProjectIdeaRequest(BaseModel):
     skill_name: str
 
 @router.post("/project-idea")
-async def get_project_idea(req: ProjectIdeaRequest):
+def get_project_idea(req: ProjectIdeaRequest):
     try:
         idea = generate_project_idea(req.skill_name)
         return {"idea": idea}
     except Exception as e:
         print("Project idea error:", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+class ExplainRequest(BaseModel):
+    skill_name: str
+    question_text: str
+    options: list[str]
+    correct_answer: str
+
+@router.post("/explain")
+def explain_question(req: ExplainRequest):
+    try:
+        explanation = generate_explanation_fast(req.skill_name, req.question_text, req.options, req.correct_answer)
+        return {"explanation": explanation}
+    except Exception as e:
+        print("Explain error:", e)
         raise HTTPException(status_code=500, detail=str(e))

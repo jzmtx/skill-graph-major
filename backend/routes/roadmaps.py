@@ -57,8 +57,47 @@ async def get_all_roadmaps():
 @router.get("/raw-jds/admin")
 async def get_raw_jds():
     try:
-        res = supabase.table("raw_job_postings").select("*").order("created_at", desc=True).limit(500).execute()
+        res = supabase.table("raw_job_postings").select("*").order("created_at", desc=True).limit(50).execute()
         return {"raw_jds": res.data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/market-stats/admin")
+async def get_market_stats():
+    try:
+        # Fetch only required columns to minimize payload, without limit to aggregate all data
+        res = supabase.table("raw_job_postings").select("company_name, url").execute()
+        
+        from collections import Counter
+        from urllib.parse import urlparse
+        
+        companies = Counter()
+        urls = Counter()
+        
+        for row in res.data:
+            c = row.get("company_name")
+            if c:
+                companies[c.strip().title()] += 1
+                
+            u = row.get("url")
+            if u:
+                try:
+                    if not u.startswith("http"):
+                        u = "https://" + u
+                    domain = urlparse(u).hostname
+                    if domain:
+                        domain = domain.replace("www.", "")
+                        urls[domain] += 1
+                    else:
+                        urls[u] += 1
+                except:
+                    urls[u] += 1
+                    
+        return {
+            "total_count": len(res.data),
+            "companies": dict(companies),
+            "urls": dict(urls)
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

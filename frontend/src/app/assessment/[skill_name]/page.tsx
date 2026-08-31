@@ -9,6 +9,7 @@ import { Target, ArrowLeft, CheckCircle2, XCircle, Code, Loader2, Brain, ShieldA
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Editor from '@monaco-editor/react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function AssessmentPage({ params }: { params: Promise<{ skill_name: string }> }) {
   const router = useRouter();
@@ -25,7 +26,8 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
   
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [feedback, setFeedback] = useState<{isCorrect: boolean, correctAnswer: string} | null>(null);
+  const [evaluationPhase, setEvaluationPhase] = useState<'idle' | 'evaluating' | 'fetching' | 'ready'>('idle');
+  const [feedback, setFeedback] = useState<{isCorrect: boolean, correctAnswer: string, explanation?: string} | null>(null);
   const [isFinished, setIsFinished] = useState(false);
   const [finalPassed, setFinalPassed] = useState(false);
   const [analytics, setAnalytics] = useState<string | null>(null);
@@ -94,18 +96,34 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
 
   const fetchNextQuestion = async (currentDiff: number, excludeIds: string[], count: number) => {
     try {
-      setLoading(true);
+      if (count === 1) setLoading(true);
       const studentId = localStorage.getItem('student_id');
       
       if (count > 10) {
         // Coding questions (11, 12)
         const diffType = count === 11 ? 'basic' : 'conceptual';
         const res = await getCodingQuestion({ skill_name: skillName, difficulty_type: diffType, student_id: studentId });
-        setQuestion({ ...res, isCoding: true });
-        setSelectedOption(null);
-        setStudentCode(res.starter_code || '');
-        setExecutionOutput(null);
-        setFeedback(null);
+        
+        if (res.is_programmable === false) {
+          // Fallback to Level 5 MCQ
+          const fallbackRes = await getAdaptiveQuestion({
+            skill_name: skillName,
+            difficulty_level: 5,
+            student_id: studentId,
+            exclude_question_ids: excludeIds
+          });
+          setQuestion(fallbackRes);
+          setDifficulty(5);
+          setSeenIds([...excludeIds, fallbackRes.question_id]);
+          setSelectedOption(null);
+          setTimeLeft(105);
+        } else {
+          setQuestion({ ...res, isCoding: true });
+          setSelectedOption(null);
+          setStudentCode(res.starter_code || '');
+          setExecutionOutput(null);
+          setTimeLeft(300); // 5 minutes for coding
+        }
       } else {
         // MCQs (1-10)
         const res = await getAdaptiveQuestion({
@@ -117,12 +135,8 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
         setQuestion(res);
         setSeenIds([...excludeIds, res.question_id]);
         setSelectedOption(null);
-        setFeedback(null);
-        if (count > 10) {
-          setTimeLeft(300); // 5 minutes for coding
-        } else {
-          setTimeLeft(30 + (currentDiff * 15)); // 45s to 105s based on level
-        }
+        // Do NOT clear feedback here, let the user dismiss the bottom sheet manually
+        setTimeLeft(30 + (currentDiff * 15)); // 45s to 105s based on level
       }
     } catch (e) {
       console.error(e);
@@ -164,13 +178,14 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
       if (!question.isCoding && !selectedOption) return;
       if (question.isCoding && !studentCode.trim()) return;
     }
-    
     setIsSubmitting(true);
+    setEvaluationPhase('evaluating');
     try {
       const studentId = localStorage.getItem('student_id');
       let isCorrect = false;
       let correctAns = "";
       let nextDiff = difficulty;
+      let explanation = "This is the standard approach.";
       
       if (question.isCoding) {
         if (isTimeout) {
@@ -185,6 +200,7 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
           });
           isCorrect = evalRes.is_correct;
           correctAns = evalRes.feedback;
+          explanation = "Code execution evaluated successfully.";
         }
       } else {
         const res = await submitAnswer({
@@ -197,12 +213,16 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
         isCorrect = res.is_correct;
         correctAns = isTimeout ? "Time's up! The correct answer was: " + res.correct_answer : res.correct_answer;
         nextDiff = res.next_difficulty;
+        explanation = res.explanation || explanation;
       }
       
       setFeedback({
         isCorrect: isCorrect,
-        correctAnswer: correctAns
+        correctAnswer: correctAns,
+        explanation: explanation
       });
+      
+      setEvaluationPhase('fetching');
       
       const topic = question.topic || (question.isCoding ? "Coding" : "General");
       const newHistory = [...history, { topic, is_correct: isCorrect, difficulty: question.isCoding ? 5 : difficulty }];
@@ -216,19 +236,29 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
       
       setDifficulty(nextDiff);
       
-      setTimeout(() => {
-        if (questionCount >= 12) {
-          handleFinish(newScore, newHistory);
-        } else {
-          setQuestionCount(c => c + 1);
-          fetchNextQuestion(nextDiff, seenIds, questionCount + 1);
-        }
-        setIsSubmitting(false);
-      }, question.isCoding ? 4000 : 2000); // Give more time to read coding feedback
+      // Await next question fetch while they read the feedback on the loader screen
+      if (questionCount < 12) {
+        setQuestionCount(c => c + 1);
+        await fetchNextQuestion(nextDiff, seenIds, questionCount + 1);
+      } else {
+        setQuestionCount(13); // Mark as done
+      }
+      
+      setEvaluationPhase('ready');
+      setIsSubmitting(false);
       
     } catch (e) {
       console.error(e);
       setIsSubmitting(false);
+    }
+  };
+
+  const handleContinue = () => {
+    if (questionCount > 12) {
+      handleFinish(score, history);
+    } else {
+      setEvaluationPhase('idle');
+      setFeedback(null);
     }
   };
 
@@ -331,6 +361,49 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
       </div>
     );
   }
+  if (evaluationPhase !== 'idle') {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
+        <div className="w-full max-w-2xl bg-white rounded-2xl shadow-sm border border-slate-200 p-12 text-center animate-in zoom-in-95 duration-300">
+           {evaluationPhase === 'evaluating' && (
+              <>
+                 <Loader2 className="w-16 h-16 text-indigo-500 animate-spin mx-auto mb-6" />
+                 <h2 className="text-2xl font-bold text-slate-800 mb-2">Evaluating your answer...</h2>
+                 <p className="text-slate-500">Checking your solution with our AI...</p>
+              </>
+           )}
+           {(evaluationPhase === 'fetching' || evaluationPhase === 'ready') && feedback && (
+              <>
+                 <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full mb-6 ${feedback.isCorrect ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
+                    {feedback.isCorrect ? <CheckCircle2 className="w-8 h-8" /> : <XCircle className="w-8 h-8" />}
+                 </div>
+                 <h2 className={`text-2xl font-bold mb-4 ${feedback.isCorrect ? 'text-emerald-700' : 'text-red-700'}`}>
+                    {feedback.isCorrect ? 'Spot on!' : 'Not quite!'}
+                 </h2>
+                 {!feedback.isCorrect && (
+                    <div className="bg-red-50 text-red-900 p-4 rounded-xl mb-6 text-sm font-medium">
+                       Correct Answer: {feedback.correctAnswer}
+                    </div>
+                 )}
+                 <div className="bg-slate-50 border border-slate-100 rounded-xl p-6 text-slate-700 text-left mb-8 whitespace-pre-wrap prose prose-sm max-w-none prose-slate">
+                    <ReactMarkdown>{feedback.explanation || ''}</ReactMarkdown>
+                 </div>
+                 
+                 {evaluationPhase === 'fetching' ? (
+                    <div className="flex items-center justify-center gap-3 text-slate-500 font-medium">
+                       <Loader2 className="w-5 h-5 animate-spin" /> Preparing next question...
+                    </div>
+                 ) : (
+                    <button onClick={handleContinue} className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition-colors shadow-lg shadow-indigo-200">
+                       Continue to Next Question
+                    </button>
+                 )}
+              </>
+           )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -369,7 +442,7 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
       {/* Main Content */}
       <main className="flex-1 flex items-center justify-center p-4">
         <div className="w-full max-w-3xl">
-          {loading ? (
+          {loading && !question ? (
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-12 text-center animate-pulse">
               <div className="w-16 h-16 bg-slate-200 rounded-full mx-auto mb-6"></div>
               <div className="h-6 bg-slate-200 rounded w-1/2 mx-auto mb-4"></div>
@@ -471,7 +544,7 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
                     disabled={(question.isCoding ? !studentCode.trim() : !selectedOption) || isSubmitting || !!feedback}
                     className="px-8 py-3 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
-                    {isSubmitting ? "Submitting..." : feedback ? "Loading Next..." : "Submit Answer"}
+                    {isSubmitting ? "Submitting..." : "Submit Answer"}
                   </button>
                 </div>
               </div>
@@ -482,6 +555,7 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
           )}
         </div>
       </main>
+
 
       {/* Report Issue Modal */}
       {isReporting && (

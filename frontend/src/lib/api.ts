@@ -60,6 +60,11 @@ export const getAdaptiveQuestion = async (data: Record<string, unknown>) => {
   return response.data;
 };
 
+export const getExplanation = async (data: { skill_name: string, question_text: string, options: string[], correct_answer: string }) => {
+  const response = await api.post('/api/assessment/explain', data);
+  return response.data;
+};
+
 export const submitAnswer = async (data: Record<string, unknown>) => {
   const response = await api.post('/api/assessment/submit-answer', data);
   return response.data;

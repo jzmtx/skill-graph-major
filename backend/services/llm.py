@@ -13,6 +13,52 @@ keys_str = env_vars.get("GROQ_API_KEYS", env_vars.get("GROQ_API_KEY", ""))
 key_list = [k.strip() for k in keys_str.split(",") if k.strip()]
 client = Groq(api_key=random.choice(key_list) if key_list else None)
 
+is_programmable_cache = {}
+
+def is_skill_programmable(skill_name: str) -> bool:
+    if skill_name in is_programmable_cache:
+        return is_programmable_cache[skill_name]
+    
+    prompt = f"Does the technical skill '{skill_name}' involve writing syntax code (like Python, Java, SQL, React)? Answer exactly 'YES' or 'NO'."
+    try:
+        res = call_groq_with_retries(
+            model=GROQ_FAST,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1
+        )
+        ans = res.choices[0].message.content.strip().upper()
+        result = 'YES' in ans
+        is_programmable_cache[skill_name] = result
+        return result
+    except Exception as e:
+        print("Error checking if skill is programmable:", e)
+        return True # Default to True to preserve original behavior if error
+
+def call_groq_with_retries(**kwargs):
+    global client
+    import time
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            return client.chat.completions.create(**kwargs)
+        except Exception as e:
+            error_str = str(e).lower()
+            if '429' in error_str or 'rate limit' in error_str or '500' in error_str or '503' in error_str:
+                if key_list and len(key_list) > 1:
+                    # Pick a different key
+                    available_keys = [k for k in key_list if k != client.api_key]
+                    if available_keys:
+                        new_key = random.choice(available_keys)
+                        from groq import Groq
+                        client = Groq(api_key=new_key)
+                        print(f"Groq API Error {e}. Swapped to new key. Retrying ({attempt+1}/{max_retries})...")
+                        time.sleep(1)
+                        continue
+            if attempt == max_retries - 1:
+                raise e
+            time.sleep(1)
+
+
 def verify_questions(skill_name: str, questions: list) -> list:
     """
     Validates and corrects MCQs to ensure the correct_answer is truly correct.
@@ -36,7 +82,7 @@ def verify_questions(skill_name: str, questions: list) -> list:
     Return ONLY the valid JSON array without markdown formatting.
     """
     try:
-        response = client.chat.completions.create(
+        response = call_groq_with_retries(
             model=GROQ_PRIMARY,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.2,
@@ -119,7 +165,7 @@ def generate_questions(skill_name: str, count: int = 5, seen_topics: list = None
     """
     
     try:
-        response = client.chat.completions.create(
+        response = call_groq_with_retries(
             model=GROQ_PRIMARY,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
@@ -155,7 +201,7 @@ def generate_questions(skill_name: str, count: int = 5, seen_topics: list = None
         
     # Fallback non-json mode if above fails
     try:
-        response = client.chat.completions.create(
+        response = call_groq_with_retries(
             model=GROQ_PRIMARY,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7
@@ -194,7 +240,7 @@ def analyze_performance(skill_name: str, history: list) -> str:
     """
     
     try:
-        response = client.chat.completions.create(
+        response = call_groq_with_retries(
             model=GROQ_PRIMARY,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7
@@ -261,7 +307,7 @@ def analyze_github_repo(github_url: str, skill_name: str, project_abstract: str)
     """
     
     try:
-        response = client.chat.completions.create(
+        response = call_groq_with_retries(
             model=GROQ_PRIMARY,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.2,
@@ -300,7 +346,7 @@ def generate_coding_questions(skill_name: str, difficulty_type: str = "basic") -
     """
     
     try:
-        response = client.chat.completions.create(
+        response = call_groq_with_retries(
             model=GROQ_PRIMARY,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
@@ -310,7 +356,7 @@ def generate_coding_questions(skill_name: str, difficulty_type: str = "basic") -
     except Exception as e:
         print("JSON mode failed, retrying without JSON mode:", e)
         try:
-            response = client.chat.completions.create(
+            response = call_groq_with_retries(
                 model=GROQ_PRIMARY,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.7
@@ -396,7 +442,7 @@ def simulate_code_execution(skill_name: str, code: str) -> str:
     If the code does not print or output anything, output nothing.
     """
     try:
-        response = client.chat.completions.create(
+        response = call_groq_with_retries(
             model=GROQ_PRIMARY,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0
@@ -452,7 +498,7 @@ def evaluate_code_submission(skill_name: str, question_text: str, student_code: 
             Output ONLY the raw code. Do not include markdown code blocks or explanations.
             """
             
-            test_res = client.chat.completions.create(
+            test_res = call_groq_with_retries(
                 model=GROQ_PRIMARY,
                 messages=[{"role": "user", "content": test_gen_prompt}],
                 temperature=0.0
@@ -525,7 +571,7 @@ def evaluate_code_submission(skill_name: str, question_text: str, student_code: 
     """
     
     try:
-        response = client.chat.completions.create(
+        response = call_groq_with_retries(
             model=GROQ_PRIMARY,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0,
@@ -550,7 +596,7 @@ def generate_project_idea(skill_name: str) -> str:
     Do NOT use any markdown formatting, just plain text.
     """
     try:
-        response = client.chat.completions.create(
+        response = call_groq_with_retries(
             model=GROQ_PRIMARY,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7
@@ -643,7 +689,7 @@ def analyze_github_repo(github_url: str, skill_name: str, project_abstract: str)
     """
     
     try:
-        res = client.chat.completions.create(
+        res = call_groq_with_retries(
             model=GROQ_PRIMARY,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
@@ -657,3 +703,29 @@ def analyze_github_repo(github_url: str, skill_name: str, project_abstract: str)
     except Exception as e:
         print("LLM Error in analyze_github_repo:", e)
         return {"passed_checks": False, "feedback": "Failed to analyze repository with AI."}
+
+def generate_explanation_fast(skill_name: str, question_text: str, options: list, correct_answer: str) -> str:
+    """
+    Ultra-fast background agent to generate a 1-sentence explanation of why an answer is correct.
+    """
+    prompt = f"""
+    You are an expert technical tutor for '{skill_name}'.
+    
+    Question: {question_text}
+    Options: {', '.join(options)}
+    Correct Answer: {correct_answer}
+    
+    Write EXACTLY ONE concise, friendly sentence explaining WHY the correct answer is correct. 
+    Do not use introductory phrases like 'The correct answer is correct because'. 
+    Just give the explanation directly.
+    """
+    try:
+        res = call_groq_with_retries(
+            model=GROQ_FAST,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3
+        )
+        return res.choices[0].message.content.strip()
+    except Exception as e:
+        print("LLM Error in generate_explanation_fast:", e)
+        return "This is the correct standard approach for this technology."
