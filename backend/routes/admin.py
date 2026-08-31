@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from database import supabase
 from typing import Any, Dict
@@ -46,12 +46,35 @@ async def get_all_questions():
 @router.get("/market")
 async def get_market_data():
     try:
-        # Fetch raw JDs from industry_intelligence instead of the legacy job_market_data table
-        data = supabase.table("industry_intelligence").select("*").execute()
+        # Fetch real-time data from the new Adzuna/JobSpy pipeline
+        raw_jds_res = supabase.table("raw_job_postings").select("*").order("created_at", desc=True).limit(2000).execute()
+        legacy_jds_res = supabase.table("industry_intelligence").select("*").limit(1000).execute()
+        
         roadmaps = supabase.table("career_paths").select("*").execute()
+        demand_scores = supabase.table("role_skill_demand").select("*, canonical_skills(title, esco_uri)").execute()
+        
+        # Merge legacy data into raw_jds so user doesn't lose old Frontend Dev data
+        raw_jds = raw_jds_res.data if raw_jds_res.data else []
+        if legacy_jds_res.data:
+            for l in legacy_jds_res.data:
+                # Ensure structure matches raw_job_postings
+                raw_jds.append({
+                    "id": l.get("id"),
+                    "role_name": l.get("role_name"),
+                    "company_name": l.get("company_name", "Unknown"),
+                    "job_title": l.get("job_title", l.get("role_name")),
+                    "description": l.get("description", ""),
+                    "url": l.get("url", ""),
+                    "source": l.get("source", "Legacy"),
+                    "created_at": l.get("created_at"),
+                    "extracted_skills": l.get("extracted_skills", [])
+                })
+        
         return {
-            "market_data": data.data,
-            "roadmaps": roadmaps.data
+            "market_data": [], # Legacy backward compatibility
+            "roadmaps": roadmaps.data,
+            "raw_jds": raw_jds,
+            "demand_scores": demand_scores.data
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -195,12 +218,40 @@ async def get_scraper_diagnostics():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/pipeline_errors")
+async def get_pipeline_errors():
+    import os, json
+    log_file = os.path.abspath(os.path.join(os.path.dirname(__file__), '../logs/pipeline_errors.json'))
+    if not os.path.exists(log_file):
+        return {"errors": []}
+    try:
+        with open(log_file, 'r') as f:
+            return {"errors": json.load(f)}
+    except:
+        return {"errors": []}
+
 @router.delete("/scraper_diagnostics")
 async def clear_scraper_diagnostics():
     try:
         if os.path.exists("scraper_logs.json"):
             os.remove("scraper_logs.json")
         return {"success": True, "message": "Scraper logs cleared successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class RunPipelineRequest(BaseModel):
+    role_name: str
+
+@router.post("/run_pipeline")
+async def run_pipeline(req: RunPipelineRequest, background_tasks: BackgroundTasks):
+    try:
+        import sys
+        sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+        from roadmap_engine.data_pipeline.pipeline_orchestrator import PipelineOrchestrator
+        
+        orchestrator = PipelineOrchestrator()
+        background_tasks.add_task(orchestrator.run_pipeline, req.role_name)
+        return {"success": True, "message": f"Started pipeline for {req.role_name} in the background."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
