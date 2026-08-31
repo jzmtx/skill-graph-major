@@ -57,27 +57,36 @@ async def get_all_roadmaps():
 @router.get("/raw-jds/admin")
 async def get_raw_jds():
     try:
-        res = supabase.table("raw_job_postings").select("*").order("created_at", desc=True).limit(50).execute()
+        res = supabase.table("raw_job_postings").select("*").order("created_at", desc=True).limit(500).execute()
         return {"raw_jds": res.data}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/market-stats/admin")
-async def get_market_stats():
+async def get_market_stats(role: str = None):
     try:
         # Fetch only required columns to minimize payload, without limit to aggregate all data
-        res = supabase.table("raw_job_postings").select("company_name, url").execute()
+        query = supabase.table("raw_job_postings").select("company_name, url, role_name")
+        if role:
+            query = query.ilike("role_name", f"%{role}%")
+            
+        res = query.execute()
         
         from collections import Counter
         from urllib.parse import urlparse
         
         companies = Counter()
         urls = Counter()
+        roles = Counter()
         
         for row in res.data:
             c = row.get("company_name")
             if c:
                 companies[c.strip().title()] += 1
+                
+            r_name = row.get("role_name")
+            if r_name:
+                roles[r_name.strip().title()] += 1
                 
             u = row.get("url")
             if u:
@@ -96,7 +105,8 @@ async def get_market_stats():
         return {
             "total_count": len(res.data),
             "companies": dict(companies),
-            "urls": dict(urls)
+            "urls": dict(urls),
+            "roles": dict(roles)
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

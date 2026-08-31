@@ -74,9 +74,10 @@ export const roadmapsApi = {
     }
   },
 
-  getMarketStatsAdmin: async () => {
+  getMarketStatsAdmin: async (role?: string) => {
     try {
-      const res = await api.get('/market-stats/admin');
+      const url = role ? `/market-stats/admin?role=${encodeURIComponent(role)}` : '/market-stats/admin';
+      const res = await api.get(url);
       return res.data;
     } catch (err) {
       throw err;
