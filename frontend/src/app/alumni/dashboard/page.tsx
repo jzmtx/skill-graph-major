@@ -1,9 +1,16 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-import { getAlumniProfile, getMyOpportunities, createOpportunity, deactivateOpportunity, getInterestedStudents } from '@/lib/alumniApi';
+import {
+  getAlumniProfile,
+  getMyOpportunities,
+  createOpportunity,
+  deactivateOpportunity,
+  getInterestedStudents,
+  getCollegeStudents,
+} from '@/lib/alumniApi';
 import { useRouter } from 'next/navigation';
-import { Users, Plus, X, UserCheck, Briefcase } from 'lucide-react';
+import { Users, Plus, X, UserCheck, Briefcase, GraduationCap, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface Opportunity {
   id: string;
@@ -15,10 +22,9 @@ interface Opportunity {
   interested_count: number;
 }
 
-interface InterestedStudent {
+interface StudentWithSkills {
   student: { id: string; name: string; email: string; branch?: string; year?: number; github_url?: string };
   skills: { skill_name: string; verification_level: number }[];
-  expressed_at: string;
 }
 
 export default function AlumniDashboardPage() {
@@ -37,8 +43,14 @@ export default function AlumniDashboardPage() {
   const [type, setType] = useState('referral');
 
   const [expandedOppId, setExpandedOppId] = useState<string | null>(null);
-  const [interestedStudents, setInterestedStudents] = useState<InterestedStudent[]>([]);
+  const [interestedStudents, setInterestedStudents] = useState<StudentWithSkills[]>([]);
   const [interestedLoading, setInterestedLoading] = useState(false);
+
+  // --- College Students section ---
+  const [showCollegeStudents, setShowCollegeStudents] = useState(false);
+  const [collegeStudents, setCollegeStudents] = useState<StudentWithSkills[]>([]);
+  const [collegeStudentsLoading, setCollegeStudentsLoading] = useState(false);
+  const [collegeStudentsLoaded, setCollegeStudentsLoaded] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -114,6 +126,23 @@ export default function AlumniDashboardPage() {
       setInterestedStudents([]);
     } finally {
       setInterestedLoading(false);
+    }
+  };
+
+  const toggleCollegeStudents = async () => {
+    const next = !showCollegeStudents;
+    setShowCollegeStudents(next);
+    if (next && !collegeStudentsLoaded && alumni) {
+      setCollegeStudentsLoading(true);
+      try {
+        const data = await getCollegeStudents(alumni.id);
+        setCollegeStudents(data);
+        setCollegeStudentsLoaded(true);
+      } catch {
+        setCollegeStudents([]);
+      } finally {
+        setCollegeStudentsLoading(false);
+      }
     }
   };
 
@@ -196,6 +225,8 @@ export default function AlumniDashboardPage() {
                       <option value="referral">Referral</option>
                       <option value="internship">Internship</option>
                       <option value="mentorship">Mentorship</option>
+                      <option value="job">Job</option>
+                      <option value="opensource">Open Source</option>
                     </select>
                   </div>
                   <button
@@ -215,7 +246,7 @@ export default function AlumniDashboardPage() {
                 No opportunities posted yet. Click &quot;Post Opportunity&quot; to get started.
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-3 mb-10">
                 {opportunities.map(opp => (
                   <div key={opp.id} className="bg-white rounded-xl border border-slate-200 p-5">
                     <div className="flex items-start justify-between">
@@ -276,6 +307,56 @@ export default function AlumniDashboardPage() {
                     )}
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* College Students Section */}
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                <GraduationCap className="w-5 h-5" /> Students at {college?.name}
+              </h2>
+              <button
+                onClick={toggleCollegeStudents}
+                className="flex items-center gap-1.5 px-4 py-2 bg-slate-100 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-200"
+              >
+                {showCollegeStudents ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                {showCollegeStudents ? 'Hide' : 'View Students'}
+              </button>
+            </div>
+
+            {showCollegeStudents && (
+              <div className="bg-white rounded-xl border border-slate-200 p-5">
+                {collegeStudentsLoading ? (
+                  <p className="text-sm text-slate-400">Loading students...</p>
+                ) : collegeStudents.length === 0 ? (
+                  <p className="text-sm text-slate-400">No students found from your college yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {collegeStudents.map((s, i) => (
+                      <div key={i} className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2">
+                        <div>
+                          <p className="text-sm font-medium text-slate-800">{s.student.name}</p>
+                          <p className="text-xs text-slate-400">
+                            {s.student.email}
+                            {s.student.branch ? ` · ${s.student.branch}` : ''}
+                            {s.student.year ? ` · Year ${s.student.year}` : ''}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-1 justify-end max-w-xs">
+                          {s.skills.length === 0 ? (
+                            <span className="text-xs text-slate-300">No skills yet</span>
+                          ) : (
+                            s.skills.slice(0, 5).map((sk, j) => (
+                              <span key={j} className="px-1.5 py-0.5 bg-white text-slate-500 text-xs rounded border border-slate-200">
+                                {sk.skill_name}{sk.verification_level >= 1 ? ' ✓' : ''}
+                              </span>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </>

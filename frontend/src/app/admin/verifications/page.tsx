@@ -201,9 +201,7 @@ export default function AdminVerificationsPage() {
 
      
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl">
-          <div className="text-slate-400 text-sm font-medium mb-1">Pending Companies</div>
+     
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-8">
         <h2 className="text-lg font-semibold text-white mb-1">Add a College</h2>
         <p className="text-slate-400 text-sm mb-4">Manually add a college — it's added pre-approved.</p>

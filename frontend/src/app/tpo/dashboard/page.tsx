@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { getTPOProfile, getCollegeStudents, getCollegeAnalytics } from '@/lib/tpoApi';
 import { useRouter } from 'next/navigation';
 import { GraduationCap, Users, TrendingUp, Award } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface Student {
   id: string;
@@ -127,18 +128,33 @@ export default function TPODashboardPage() {
             )}
 
             {/* Top Skills */}
-            {analytics && analytics.top_skills.length > 0 && (
-              <div className="bg-white rounded-xl border border-slate-200 p-5 mb-6">
-                <h3 className="text-sm font-semibold text-slate-700 mb-3">Top Skills Across College</h3>
-                <div className="flex flex-wrap gap-2">
-                  {analytics.top_skills.map((s, i) => (
-                    <span key={i} className="px-2.5 py-1 bg-indigo-50 text-indigo-700 text-xs rounded-full">
-                      {s.skill_name} <span className="text-indigo-400">· {s.student_count}</span>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
+            {/* Skill Distribution Chart */}
+{analytics && analytics.top_skills.length > 0 && (
+  <div className="bg-white rounded-xl border border-slate-200 p-5 mb-6">
+    <h3 className="text-sm font-semibold text-slate-700 mb-4">Students by Skill</h3>
+    <ResponsiveContainer width="100%" height={Math.max(analytics.top_skills.length * 40, 200)}>
+      <BarChart
+        data={analytics.top_skills}
+        layout="vertical"
+        margin={{ top: 5, right: 20, left: 10, bottom: 5 }}
+      >
+        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
+        <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12, fill: '#94a3b8' }} />
+        <YAxis
+          type="category"
+          dataKey="skill_name"
+          tick={{ fontSize: 12, fill: '#475569' }}
+          width={100}
+        />
+        <Tooltip
+          formatter={(value: number) => [`${value} student${value === 1 ? '' : 's'}`, 'Count']}
+          contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}
+        />
+        <Bar dataKey="student_count" fill="#4f46e5" radius={[0, 4, 4, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  </div>
+)}
 
                         {/* Hiring Funnel Chart */}
             {analytics && (

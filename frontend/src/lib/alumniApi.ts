@@ -30,6 +30,12 @@ export const getAlumniDirectory = async (college_id: string) => {
   return response.data.alumni;
 };
 
+// --- College Students (alumni-facing: ALL students from own college) ---
+export const getCollegeStudents = async (alumni_id: string) => {
+  const response = await api.get(`/api/alumni/college-students/${alumni_id}`);
+  return response.data.students;
+};
+
 // --- Opportunities ---
 export const createOpportunity = async (data: {
   alumni_id: string;

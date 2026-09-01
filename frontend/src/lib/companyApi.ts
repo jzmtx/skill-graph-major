@@ -16,6 +16,13 @@ export const searchCompanies = async (query: string) => {
   return response.data.results;
 };
 
+export const searchExternalJobs = async (recruiter_id: string, title: string, location?: string) => {
+  const params = new URLSearchParams({ recruiter_id, title });
+  if (location) params.append('location', location);
+  const response = await api.get(`/api/company/jobs/search-external?${params.toString()}`);
+  return response.data.results;
+};
+
 // --- Recruiter Registration & Login ---
 export const registerRecruiter = async (data: {
   company_id: string;

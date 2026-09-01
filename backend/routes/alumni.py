@@ -161,7 +161,36 @@ async def get_alumni_directory(college_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/college-students/{alumni_id}")
+async def get_college_students(alumni_id: str):
+    """Alumni-facing: lists ALL students from the alumnus's own college
+    (not just the ones interested in a specific opportunity), with their
+    skill profiles. Requires verified alumni — same gate as posting."""
+    alumni_data = _assert_alumni_verified(alumni_id)
+    college_id = alumni_data["college_id"]
+    print(f"DEBUG: querying students with college_id = {repr(college_id)}")
 
+    try:
+        students = supabase.table("students").select(
+            "id, name, email, branch, year, github_url"
+        ).eq("college_id", college_id).execute()
+
+        enriched = []
+        for s in students.data:
+            skills = supabase.table("student_skills").select(
+                "skill_name, verification_level"
+            ).eq("student_id", s["id"]).execute()
+
+            enriched.append({
+                "student": s,
+                "skills": skills.data
+            })
+
+        return {"students": enriched}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 # ============================================================
 # Access Gate
 # ============================================================

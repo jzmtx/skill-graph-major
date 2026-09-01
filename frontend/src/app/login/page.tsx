@@ -69,7 +69,7 @@ export default function LoginPage() {
           localStorage.setItem('alumni_id', response.alumni.id);
           localStorage.setItem('alumni_auth_id', response.alumni.auth_id);
         }
-        window.location.href = '/dashboard/alumni';
+        window.location.href = '/alumni/dashboard';
       }
     } catch (err: unknown) {
       const error = err as { response?: { data?: { detail?: string } } };

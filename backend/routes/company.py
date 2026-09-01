@@ -206,8 +206,13 @@ async def create_job(payload: JobCreate):
 
         final_skills = payload.required_skills
         if not final_skills and payload.description:
-            from services.llm import extract_skills_from_description
-            final_skills = extract_skills_from_description(payload.description)
+            try:
+                from services.llm import extract_skills_from_description
+                final_skills = extract_skills_from_description(payload.description)
+            except ImportError:
+                # extract_skills_from_description doesn't exist yet in services/llm.py —
+                # skip auto-extraction gracefully instead of crashing the job post.
+                final_skills = []
 
         result = supabase.table("jobs").insert({
             "recruiter_id": payload.recruiter_id,
@@ -359,3 +364,26 @@ async def get_recent_applicants(recruiter_id: str):
         return {"applicants": enriched}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/jobs/search-external")
+async def search_external_jobs(recruiter_id: str, title: str, location: Optional[str] = None):
+    """Searches real job postings (LinkedIn/Glassdoor/Indeed via JSearch) for the
+    recruiter's OWN company only. Used by the 'Fetch Real Jobs' button on the
+    Post Job form, so the recruiter can autofill from a real listing instead
+    of typing everything manually."""
+    recruiter = supabase.table("recruiters").select("company_id").eq("id", recruiter_id).execute()
+    if not recruiter.data:
+        raise HTTPException(status_code=404, detail="Recruiter not found")
+
+    company = supabase.table("companies").select("name").eq("id", recruiter.data[0]["company_id"]).execute()
+    if not company.data:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    company_name = company.data[0]["name"]
+
+    try:
+        from services.job_search import search_company_jobs
+        results = search_company_jobs(company_name, title, location)
+        return {"results": results}
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"External job search failed: {str(e)}")

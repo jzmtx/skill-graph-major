@@ -2,7 +2,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { browseJobs, checkEligibility, applyToJob, getMyApplications } from '@/lib/jobsApi';
-import { Briefcase, MapPin, Building2, CheckCircle2 } from 'lucide-react';
+import { getOpportunitiesForStudent, expressInterest } from '@/lib/alumniApi';
+import { Briefcase, MapPin, Building2, CheckCircle2, Users2 } from 'lucide-react';
 
 interface Job {
   id: string;
@@ -24,6 +25,16 @@ interface Application {
   status: string;
 }
 
+interface AlumniOpportunity {
+  id: string;
+  title: string;
+  description?: string;
+  type: string;
+  is_active: boolean;
+  posted_by?: { name: string; current_company?: string; current_job_role?: string; linkedin_url?: string };
+  already_interested: boolean;
+}
+
 export default function JobsPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
@@ -33,6 +44,9 @@ export default function JobsPage() {
 
   const [eligibility, setEligibility] = useState<Record<string, { match_percentage: number; matched_skills: string[]; missing_skills: string[] }>>({});
   const [applyingId, setApplyingId] = useState<string | null>(null);
+
+  const [alumniOpportunities, setAlumniOpportunities] = useState<AlumniOpportunity[]>([]);
+  const [expressingId, setExpressingId] = useState<string | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -59,6 +73,13 @@ export default function JobsPage() {
             })
           );
           setEligibility(eligibilityMap);
+
+          try {
+            const oppList = await getOpportunitiesForStudent(sid);
+            setAlumniOpportunities(oppList);
+          } catch {
+            // skip if it fails, jobs board still works without it
+          }
         }
       } catch {
         setError('Failed to load jobs.');
@@ -82,6 +103,21 @@ export default function JobsPage() {
     }
   };
 
+  const handleExpressInterest = async (oppId: string) => {
+    if (!studentId) return;
+    setExpressingId(oppId);
+    try {
+      await expressInterest(oppId, studentId);
+      setAlumniOpportunities(prev =>
+        prev.map(o => o.id === oppId ? { ...o, already_interested: true } : o)
+      );
+    } catch {
+      // silently ignore for now
+    } finally {
+      setExpressingId(null);
+    }
+  };
+
   const hasApplied = (jobId: string) => applications.some(a => a.job_id === jobId);
 
   if (loading) {
@@ -95,6 +131,57 @@ export default function JobsPage() {
 
       {error && (
         <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm mb-6">{error}</div>
+      )}
+
+      {/* Alumni Network Opportunities */}
+      {alumniOpportunities.length > 0 && (
+        <div className="mb-8">
+          <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2 mb-3">
+            <Users2 className="w-5 h-5" /> From Your Alumni Network
+          </h2>
+          <div className="space-y-3">
+            {alumniOpportunities.map(opp => (
+              <div key={opp.id} className="bg-white rounded-xl border border-indigo-100 p-5">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold text-slate-800">{opp.title}</h3>
+                      <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 text-xs rounded-full capitalize">{opp.type}</span>
+                    </div>
+                    {opp.description && <p className="text-sm text-slate-600 mt-1">{opp.description}</p>}
+                    {opp.posted_by && (
+                      <p className="text-xs text-slate-400 mt-2 flex items-center gap-1">
+                        Posted by {opp.posted_by.name}
+                        {opp.posted_by.current_job_role && ` · ${opp.posted_by.current_job_role}`}
+                        {opp.posted_by.current_company && ` at ${opp.posted_by.current_company}`}
+                       {opp.posted_by.linkedin_url && (
+  <a href={opp.posted_by.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-indigo-500 hover:text-indigo-700 ml-1 underline">
+    LinkedIn
+  </a>
+)}
+                      </p>
+                    )}
+                  </div>
+                  <div className="shrink-0 ml-4">
+                    {opp.already_interested ? (
+                      <span className="flex items-center gap-1.5 px-4 py-2 bg-green-50 text-green-700 text-sm font-medium rounded-lg">
+                        <CheckCircle2 className="w-4 h-4" /> Interested
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => handleExpressInterest(opp.id)}
+                        disabled={expressingId === opp.id}
+                        className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                      >
+                        {expressingId === opp.id ? 'Sending...' : "I'm Interested"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {jobs.length === 0 ? (

@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-import { getRecruiterProfile, getMyJobs, createJob, deactivateJob } from '@/lib/companyApi';
+import { getRecruiterProfile, getMyJobs, createJob, deactivateJob, searchExternalJobs } from '@/lib/companyApi';
 import { useRouter } from 'next/navigation';
-import { Briefcase, Plus, X, Users, MapPin, Building2 } from 'lucide-react';
+import { Briefcase, Plus, X, Users, MapPin, Building2, Search, Loader2 } from 'lucide-react';
 
 interface Job {
   id: string;
@@ -15,6 +15,17 @@ interface Job {
   deadline?: string;
   is_active: boolean;
   created_at: string;
+}
+
+interface ExternalJobResult {
+  title: string;
+  employer_name: string;
+  description?: string;
+  location?: string;
+  salary_display?: string;
+  apply_link?: string;
+  source?: string;
+  skills: string[];
 }
 
 export default function CompanyDashboardPage() {
@@ -31,10 +42,17 @@ export default function CompanyDashboardPage() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [skillsInput, setSkillsInput] = useState('');
-   const [location, setLocation] = useState('');
+  const [location, setLocation] = useState('');
   const [ctc, setCtc] = useState('');
   const [deadline, setDeadline] = useState('');
   const [externalUrl, setExternalUrl] = useState('');
+
+  // --- Fetch Real Jobs ---
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState('');
+  const [searchResults, setSearchResults] = useState<ExternalJobResult[]>([]);
+  const [searchAttempted, setSearchAttempted] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -81,7 +99,8 @@ export default function CompanyDashboardPage() {
       const jobList = await getMyJobs(recruiter.id);
       setJobs(jobList);
       setShowForm(false);
-      setTitle(''); setDescription(''); setSkillsInput(''); setLocation(''); setCtc(''); setDeadline('');setExternalUrl('');
+      setTitle(''); setDescription(''); setSkillsInput(''); setLocation(''); setCtc(''); setDeadline(''); setExternalUrl('');
+      setSearchResults([]); setSearchAttempted(false); setShowSearch(false);
     } catch (err: unknown) {
       const error = err as { response?: { data?: { detail?: string } } };
       setFormError(error.response?.data?.detail || 'Failed to post job');
@@ -98,6 +117,37 @@ export default function CompanyDashboardPage() {
       // silently ignore for now
     }
   };
+
+  const handleFetchRealJobs = async () => {
+    if (!recruiter || !title.trim()) {
+      setSearchError('Enter a Job Title above first, then fetch real listings.');
+      return;
+    }
+    setSearchLoading(true);
+    setSearchError('');
+    setSearchAttempted(true);
+    try {
+      const results = await searchExternalJobs(recruiter.id, title.trim(), location.trim() || undefined);
+      setSearchResults(results);
+      setShowSearch(true);
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { detail?: string } } };
+      setSearchError(error.response?.data?.detail || 'Could not fetch real listings right now.');
+      setSearchResults([]);
+      setShowSearch(true);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+const handleUseResult = (job: ExternalJobResult) => {
+  setTitle(job.title || title);
+  if (job.description) setDescription(job.description);
+  if (job.skills?.length) setSkillsInput(job.skills.join(', '));
+  if (job.location) setLocation(job.location);
+  if (job.salary_display) setCtc(job.salary_display);
+  if (job.apply_link) setExternalUrl(job.apply_link);
+  setShowSearch(false);
+};
 
   if (loading) {
     return <div className="min-h-screen bg-slate-50 flex items-center justify-center text-slate-500">Loading dashboard...</div>;
@@ -154,13 +204,70 @@ export default function CompanyDashboardPage() {
             )}
             <form onSubmit={handleCreateJob} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Job Title</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-sm font-medium text-slate-700">Job Title</label>
+                  <button
+                    type="button"
+                    onClick={handleFetchRealJobs}
+                    disabled={searchLoading || !title.trim()}
+                    className="flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {searchLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                    {searchLoading ? 'Searching...' : 'Fetch Real Jobs'}
+                  </button>
+                </div>
                 <input
                   type="text" required
+                  placeholder="e.g. QA Engineer"
                   className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                   value={title} onChange={e => setTitle(e.target.value)}
                 />
+                <p className="text-xs text-slate-400 mt-1">Type a title, then click &quot;Fetch Real Jobs&quot; to pull real listings from {company?.name || 'your company'} off LinkedIn, Glassdoor and other job boards.</p>
               </div>
+
+              {searchError && (
+                <div className="bg-amber-50 text-amber-700 p-3 rounded-lg text-sm">{searchError}</div>
+              )}
+
+              {showSearch && (
+                <div className="border border-indigo-100 bg-indigo-50/50 rounded-lg p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-medium text-indigo-800">
+                      {searchResults.length > 0
+                        ? `${searchResults.length} real listing${searchResults.length > 1 ? 's' : ''} found for ${company?.name}`
+                        : `No real listings found for ${company?.name} right now`}
+                    </p>
+                    <button type="button" onClick={() => setShowSearch(false)} className="text-xs text-slate-400 hover:text-slate-600">
+                      Dismiss
+                    </button>
+                  </div>
+                  {searchResults.map((r, i) => (
+                    <div key={i} className="bg-white rounded-lg border border-slate-200 p-3 flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-slate-800 truncate">{r.title}</p>
+                        <p className="text-xs text-slate-400">
+                          {r.employer_name}{r.location ? ` · ${r.location}` : ''}{r.source ? ` · via ${r.source}` : ''}
+                        </p>
+                        {r.skills?.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {r.skills.slice(0, 5).map((sk, j) => (
+                              <span key={j} className="px-1.5 py-0.5 bg-slate-50 text-slate-500 text-[11px] rounded border border-slate-200">{sk}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleUseResult(r)}
+                        className="shrink-0 px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700"
+                      >
+                        Use This
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
                 <textarea
@@ -205,7 +312,7 @@ export default function CompanyDashboardPage() {
                   />
                 </div>
               </div>
-               <div>
+              <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">External Job Link (optional)</label>
                 <input
                   type="text"
