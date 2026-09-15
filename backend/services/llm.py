@@ -43,20 +43,24 @@ def call_groq_with_retries(**kwargs):
             return client.chat.completions.create(**kwargs)
         except Exception as e:
             error_str = str(e).lower()
+            if attempt == max_retries - 1:
+                raise e
+                
+            print(f"Groq API Error {e}. Re-initializing client to clear dead sockets. Retrying ({attempt+1}/{max_retries})...")
+            # Always recreate the client on error to flush dead httpx sockets (Fixes WinError 10035)
+            from groq import Groq
             if '429' in error_str or 'rate limit' in error_str or '500' in error_str or '503' in error_str:
                 if key_list and len(key_list) > 1:
-                    # Pick a different key
                     available_keys = [k for k in key_list if k != client.api_key]
                     if available_keys:
                         new_key = random.choice(available_keys)
-                        from groq import Groq
                         client = Groq(api_key=new_key)
-                        print(f"Groq API Error {e}. Swapped to new key. Retrying ({attempt+1}/{max_retries})...")
-                        time.sleep(1)
+                        time.sleep(2)
                         continue
-            if attempt == max_retries - 1:
-                raise e
-            time.sleep(1)
+            
+            # If not a rate limit, just recreate with the same key to flush connection pool
+            client = Groq(api_key=client.api_key)
+            time.sleep(2)
 
 
 def verify_questions(skill_name: str, questions: list) -> list:

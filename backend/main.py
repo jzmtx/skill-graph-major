@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 
 # We will import our routers here
 from routes import auth, colleges, skills, assessment, project, admin, roadmaps, resources, company, jobs, tpo, alumni, upload
+import database
 
 load_dotenv()
 
@@ -19,9 +20,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.on_event("startup")
+async def startup_event():
+    """Refresh the Supabase client on startup to clear any stale JWT sessions."""
+    database.refresh_supabase()
+    print("✅ Supabase client refreshed on startup")
+
 @app.get("/")
 def health_check():
     return {"status": "ok", "message": "SkillGraph API is running"}
+
 
 app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
 app.include_router(colleges.router, prefix="/api/colleges", tags=["Colleges"])

@@ -72,7 +72,7 @@ export default function RoadmapsPage() {
       const studentId = localStorage.getItem("student_id");
       
       // 1. Try to fetch from cache/DB
-      const data = await roadmapsApi.getRoadmap(role, ecosystem);
+      const data = await roadmapsApi.getRoadmap(role, ecosystem, studentId);
       if (data && data.roadmap) {
         setRoadmap(data.roadmap);
         setAnalytics(data.roadmap.analytics_json);

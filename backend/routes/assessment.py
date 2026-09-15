@@ -450,6 +450,13 @@ def complete_assessment(req: CompleteAssessmentRequest):
                     "verification_level": 1,
                     "skill_score": new_score
                 }).eq("id", skill_res.data[0]['id']).execute()
+            else:
+                supabase.table("student_skills").insert({
+                    "student_id": req.student_id,
+                    "skill_name": req.skill_name,
+                    "verification_level": 1,
+                    "skill_score": int(req.score_percentage)
+                }).execute()
                 
                 # Roadmap Integration: Mark node as assessed
                 if req.node_id and req.roadmap_id and req.student_id:

@@ -10,9 +10,9 @@ export const roadmapsApi = {
     return res.data;
   },
 
-  getRoadmap: async (role_name: string, ecosystem: string) => {
+  getRoadmap: async (role_name: string, ecosystem: string, student_id?: string | null) => {
     try {
-      const res = await api.get('/', { params: { role_name, ecosystem } });
+      const res = await api.get('/', { params: { role_name, ecosystem, student_id } });
       return res.data;
     } catch (err: any) {
       if (err.response?.status === 404) {

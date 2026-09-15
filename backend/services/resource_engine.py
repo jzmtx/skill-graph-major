@@ -251,8 +251,18 @@ def generate_resource_pack(skill_id: str, role_name: str = "Software Engineering
         "version": "1.0"
     }
     
+    db_payload = {
+        "skill_name": skill_name,
+        "official_docs_url": final_data.get("official_docs_url"),
+        "best_video_url": final_data.get("best_video_url"),
+        "best_video_title": final_data.get("best_video_title"),
+        "practice_project": final_data.get("practice_project"),
+        "sub_topics": final_data.get("sub_topics", []),
+        "confidence_score": 0.95
+    }
+    
     try:
-        supabase.table("skill_resources").insert(payload).execute()
+        supabase.table("skill_resources").insert(db_payload).execute()
     except Exception as e:
         print(f"Warning: Could not cache {skill_name} in Supabase: {e}")
         
