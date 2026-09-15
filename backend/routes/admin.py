@@ -28,6 +28,8 @@ async def get_all_users():
             "alumni": alumni.data
         }
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/questions")
@@ -352,6 +354,46 @@ async def get_pending_verifications():
             "tpo_officials": tpo_officials.data,
             "alumni": alumni.data
         }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/colleges/pending")
+async def get_pending_colleges():
+    try:
+        res = supabase.table("colleges").select("*").eq("is_verified", False).execute()
+        return res.data
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.patch("/colleges/approve/{college_id}")
+async def approve_college(college_id: str):
+    try:
+        res = supabase.table("colleges").update({"is_verified": True}).eq("id", college_id).execute()
+        if not res.data:
+            raise HTTPException(status_code=404, detail="College not found")
+        return {"success": True, "college": res.data[0]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class AddCollegeRequest(BaseModel):
+    name: str
+    state: str
+    district: str = None
+
+@router.post("/colleges/add")
+async def add_college(req: AddCollegeRequest):
+    try:
+        res = supabase.table("colleges").insert({
+            "name": req.name,
+            "state": req.state,
+            "district": req.district,
+            "is_verified": True
+        }).execute()
+        return {"success": True, "college": res.data[0]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

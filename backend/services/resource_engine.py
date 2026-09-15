@@ -102,17 +102,39 @@ def search_docs(skill_name: str, slug: str) -> list:
         return []
 
 def generate_resource_pack(skill_id: str, role_name: str = "Software Engineering"):
+    import uuid
+    is_uuid = False
+    try:
+        uuid.UUID(skill_id)
+        is_uuid = True
+    except ValueError:
+        pass
+
     # Get skill metadata FIRST so we always know the display name
-    skill_res = supabase.table("canonical_skills").select("*").eq("id", skill_id).execute()
+    if is_uuid:
+        skill_res = supabase.table("canonical_skills").select("*").eq("id", skill_id).execute()
+    else:
+        # Also clean up URL encoding that might have leaked through (e.g. %20)
+        from urllib.parse import unquote
+        clean_skill = unquote(skill_id)
+        skill_res = supabase.table("canonical_skills").select("*").ilike("title", clean_skill).execute()
+
     if not skill_res.data:
-        print(f"Skill ID {skill_id} not found in canonical_skills")
-        return None
-        
-    skill_name = skill_res.data[0]["title"]
-    skill_slug = skill_res.data[0].get("slug", "")
+        print(f"Skill {skill_id} not found in canonical_skills. Using raw name.")
+        skill_name = unquote(skill_id) if not is_uuid else skill_id
+        skill_slug = skill_name.lower().replace(" ", "-")
+        canonical_id = None
+    else:
+        skill_name = skill_res.data[0]["title"]
+        skill_slug = skill_res.data[0].get("slug", "")
+        canonical_id = skill_res.data[0]["id"]
     
-    # Check cache via Canonical ID
-    existing = supabase.table("skill_resources").select("*").eq("skill_id", skill_id).execute()
+    # Check cache via Canonical ID or Name
+    if canonical_id:
+        existing = supabase.table("skill_resources").select("*").eq("skill_id", canonical_id).execute()
+    else:
+        existing = supabase.table("skill_resources").select("*").eq("skill_name", skill_name).execute()
+        
     if existing.data:
         payload = existing.data[0]
         payload["skill_name"] = skill_name
@@ -229,8 +251,18 @@ def generate_resource_pack(skill_id: str, role_name: str = "Software Engineering
         "version": "1.0"
     }
     
+    db_payload = {
+        "skill_name": skill_name,
+        "official_docs_url": final_data.get("official_docs_url"),
+        "best_video_url": final_data.get("best_video_url"),
+        "best_video_title": final_data.get("best_video_title"),
+        "practice_project": final_data.get("practice_project"),
+        "sub_topics": final_data.get("sub_topics", []),
+        "confidence_score": 0.95
+    }
+    
     try:
-        supabase.table("skill_resources").insert(payload).execute()
+        supabase.table("skill_resources").insert(db_payload).execute()
     except Exception as e:
         print(f"Warning: Could not cache {skill_name} in Supabase: {e}")
         

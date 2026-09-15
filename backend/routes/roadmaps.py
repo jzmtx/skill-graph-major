@@ -123,7 +123,7 @@ async def get_my_roadmaps(student_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/")
-async def get_roadmap(role_name: str, ecosystem: str):
+async def get_roadmap(role_name: str, ecosystem: str, student_id: Optional[str] = None):
     try:
         # Case insensitive match for both role and ecosystem
         res = supabase.table("career_paths") \
@@ -147,6 +147,15 @@ async def get_roadmap(role_name: str, ecosystem: str):
             # It's too old, we need to generate a new one
             raise HTTPException(status_code=404, detail="Roadmap expired. Needs generation.")
             
+        if student_id:
+            try:
+                supabase.table("user_saved_roadmaps").upsert({
+                    "student_id": student_id,
+                    "roadmap_id": roadmap["id"]
+                }).execute()
+            except Exception as e:
+                print(f"Failed to link existing roadmap to student: {e}")
+                
         return {"roadmap": roadmap}
     except HTTPException:
         raise

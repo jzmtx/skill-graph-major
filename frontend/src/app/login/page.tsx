@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { loginStudent, devLoginStudent } from '@/lib/api';
-import { loginRecruiter } from '@/lib/companyApi';
+import { loginCompany } from '@/lib/companyApi';
 import { loginTPO } from '@/lib/tpoApi';
 import { loginAlumni } from '@/lib/alumniApi';
 import Link from 'next/link';
@@ -48,10 +48,10 @@ export default function LoginPage() {
         window.location.href = '/dashboard';
 
       } else if (role === 'company') {
-        const response = await loginRecruiter({ email, password });
-        if (response.recruiter) {
-          localStorage.setItem('recruiter_id', response.recruiter.id);
-          localStorage.setItem('recruiter_auth_id', response.recruiter.auth_id);
+        const response = await loginCompany({ email, password });
+        if (response.company) {
+          localStorage.setItem('company_id', response.company.id);
+          localStorage.setItem('company_auth_id', response.auth_id);
         }
         window.location.href = '/company/dashboard';
 

@@ -72,9 +72,13 @@ class PipelineOrchestrator:
             
             # Store in payload for Admin Panel transparency
             if job_text.strip():
+                loc = job.get("location", "")
+                comp = str(job.get("company", "Unknown"))
+                display_company = f"{comp} | {loc}" if loc else comp
+                
                 raw_jobs_payload.append({
                     "role_name": role_name,
-                    "company_name": job.get("company", "Unknown"),
+                    "company_name": display_company[:250],
                     "job_title": title[:250],
                     "description": desc[:5000], # Cap length to avoid db bloat
                     "url": job.get("url", ""),

@@ -13,7 +13,7 @@ class AdzunaClient:
     Client for fetching bulk job descriptions from Adzuna's free API tier.
     """
     
-    def __init__(self, country: str = "us"):
+    def __init__(self, country: str = "in"):
         self.country = country
         
     @track_api_usage(provider="Adzuna", endpoint="/jobs")
@@ -56,6 +56,7 @@ class AdzunaClient:
                         formatted_jobs.append({
                             "title": j.get("title", ""),
                             "company": j.get("company", {}).get("display_name", ""),
+                            "location": j.get("location", {}).get("display_name", ""),
                             "description": j.get("description", ""),
                             "url": j.get("redirect_url", "")
                         })

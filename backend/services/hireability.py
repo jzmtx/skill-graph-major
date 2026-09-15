@@ -61,8 +61,10 @@ def calculate_hireability_index(skills: list[dict]) -> dict:
                 "synergy_multiplier": 1.0,
                 "project_bonus": 0,
                 "velocity_bonus": 0,
-                "consistency_multiplier": 1.0
-            }
+                "consistency_multiplier": 1.0,
+                "raw_total": 0
+            },
+            "points_history": []
         }
 
     total_base_depth = 0
@@ -71,6 +73,7 @@ def calculate_hireability_index(skills: list[dict]) -> dict:
     velocity_bonus = 0
     
     unique_categories = set()
+    points_history = []  # Audit trail
     
     # 1. Base Depth & Decay & Velocity & Projects
     for s in skills:
@@ -95,13 +98,48 @@ def calculate_hireability_index(skills: list[dict]) -> dict:
         decayed_skill_pts = base_skill_pts * decay_weight
         total_decayed_depth += decayed_skill_pts
         
+        # Build audit entry for this skill
+        level_label = "L1 Assessment" if level == 1 else "L2 Project Verified"
+        events = [
+            {
+                "type": "skill_assessed",
+                "icon": "🎯",
+                "label": f"{name} — {level_label}",
+                "detail": f"Score: {score} × {weight}x weight = {round(base_skill_pts)} base pts",
+                "pts": round(decayed_skill_pts),
+                "color": "indigo",
+                "date": updated_at
+            }
+        ]
+
         # Velocity Bonus (If updated in last 30 days)
         if days_old <= 30:
+            v_bonus = round(score * 0.15)
             velocity_bonus += (score * 0.15)
+            events.append({
+                "type": "velocity_bonus",
+                "icon": "⚡",
+                "label": f"{name} — 30-Day Velocity Bonus",
+                "detail": f"Verified within 30 days: +{v_bonus} pts",
+                "pts": v_bonus,
+                "color": "orange",
+                "date": updated_at
+            })
             
         # Project Bonus (L2 skills)
         if level >= 2:
             project_bonus += 50
+            events.append({
+                "type": "project_bonus",
+                "icon": "🏆",
+                "label": f"{name} — Project Submission Bonus",
+                "detail": "Level 2 project verified: +50 pts",
+                "pts": 50,
+                "color": "emerald",
+                "date": updated_at
+            })
+            
+        points_history.extend(events)
             
         # Track Categories for Synergy
         name_lower = name.lower()
@@ -110,20 +148,29 @@ def calculate_hireability_index(skills: list[dict]) -> dict:
                 unique_categories.add(cat)
                 
     # 2. Synergy Multiplier
-    # Depending on how many different complimentary stack areas they touch
-    # 1 area = 1.0, 2 areas = 1.15, 3+ areas = 1.30
     cat_count = len(unique_categories)
     if cat_count >= 3:
         synergy_multiplier = 1.30
+        synergy_desc = f"Skills span {cat_count} tech domains: ×1.30 multiplier"
     elif cat_count == 2:
         synergy_multiplier = 1.15
+        synergy_desc = f"Skills span {cat_count} tech domains: ×1.15 multiplier"
     else:
         synergy_multiplier = 1.0
+        synergy_desc = "Expand to 2+ tech domains to unlock synergy bonuses"
+        
+    if cat_count >= 2:
+        points_history.append({
+            "type": "synergy_bonus",
+            "icon": "🔗",
+            "label": f"Stack Synergy Bonus — {', '.join(list(unique_categories)[:3])}",
+            "detail": synergy_desc,
+            "pts": f"×{synergy_multiplier}",
+            "color": "blue",
+            "date": None
+        })
         
     # 3. Consistency Multiplier
-    # For V1, we estimate consistency based on the spread of updated_at dates.
-    # If a user has skills verified across > 14 days, they get a small bonus.
-    # If all skills were done in 1 day, no consistency bonus.
     consistency_multiplier = 1.0
     if len(skills) > 1:
         dates = [_calculate_days_since(s.get("updated_at", datetime.now(timezone.utc).isoformat())) for s in skills if s.get("verification_level", 0) > 0]
@@ -131,26 +178,44 @@ def calculate_hireability_index(skills: list[dict]) -> dict:
             spread = max(dates) - min(dates)
             if spread > 30:
                 consistency_multiplier = 1.20
+                points_history.append({
+                    "type": "consistency_bonus",
+                    "icon": "📅",
+                    "label": "Long-term Consistency Bonus",
+                    "detail": f"Learning spread over {spread}+ days: ×1.20 multiplier applied",
+                    "pts": "×1.20",
+                    "color": "purple",
+                    "date": None
+                })
             elif spread > 7:
                 consistency_multiplier = 1.10
+                points_history.append({
+                    "type": "consistency_bonus",
+                    "icon": "📅",
+                    "label": "Weekly Consistency Bonus",
+                    "detail": f"Learning spread over {spread} days: ×1.10 multiplier applied",
+                    "pts": "×1.10",
+                    "color": "purple",
+                    "date": None
+                })
     
     # Calculate Final Raw Score
-    # raw_score = (Decayed Depth * Synergy * Consistency) + Project Bonus + Velocity Bonus
     raw_score = (total_decayed_depth * synergy_multiplier * consistency_multiplier) + project_bonus + velocity_bonus
     
     # Normalize to 300 - 850 range using an Asymptotic Curve
-    # Instead of a hard cap, the score approaches 850 but never mathematically reaches it.
-    # This prevents anyone from achieving a "perfect" score, making the highest tiers exponentially harder.
     INDEX_MIN = 300
     INDEX_MAX = 850
-    SCALING_FACTOR = 1000.0 # Adjust this to make it harder or easier to climb
+    SCALING_FACTOR = 1000.0
     
-    # Formula: 300 + 550 * (1 - e^(-raw_score / 1000))
     asymptotic_multiplier = 1.0 - math.exp(-raw_score / SCALING_FACTOR)
     hireability_index = INDEX_MIN + (INDEX_MAX - INDEX_MIN) * asymptotic_multiplier
-    
-    # We round down so 849.99 becomes 849, preserving the impossibility of 850
     hireability_index = min(INDEX_MAX - 1, int(hireability_index))
+    
+    # Sort history: skill entries by date desc (newest first), multipliers at end
+    dated = [e for e in points_history if e.get("date")]
+    multipliers = [e for e in points_history if not e.get("date")]
+    dated.sort(key=lambda x: x["date"], reverse=True)
+    points_history = dated + multipliers
     
     return {
         "score": int(hireability_index),
@@ -162,5 +227,7 @@ def calculate_hireability_index(skills: list[dict]) -> dict:
             "project_bonus": project_bonus,
             "velocity_bonus": round(velocity_bonus, 2),
             "raw_total": round(raw_score, 2)
-        }
+        },
+        "points_history": points_history
     }
+

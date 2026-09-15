@@ -50,8 +50,19 @@ def get_adaptive_question(req: GetQuestionRequest):
         query = supabase.table("questions").select("*").eq("skill_name", req.skill_name).eq("difficulty_level", req.difficulty_level)
         res = query.execute()
         
-        # Filter out questions they've already seen
-        available_questions = [q for q in res.data if q['id'] not in all_excludes]
+        # Filter out questions they've already seen (by ID or exact text)
+        unique_available = {}
+        for q in res.data:
+            if q['id'] in all_excludes:
+                continue
+            txt = q.get('question_base_text', '').strip()
+            if txt in seen_texts:
+                continue
+            # Deduplicate locally by text
+            if txt.lower() not in unique_available:
+                unique_available[txt.lower()] = q
+                
+        available_questions = list(unique_available.values())
 
         # 2. If no questions exist, generate a batch via Gemini/Groq
         if not available_questions:
@@ -114,14 +125,38 @@ def get_adaptive_question(req: GetQuestionRequest):
         if not available_questions:
             # ONLY fallback to questions matching the REQUIRED difficulty
             fallback = supabase.table("questions").select("*").eq("skill_name", req.skill_name).eq("difficulty_level", req.difficulty_level).execute()
-            avail_fallback = [q for q in fallback.data if q['id'] not in all_excludes]
+            
+            unique_fallback = {}
+            for q in fallback.data:
+                if q['id'] in all_excludes: continue
+                txt = q.get('question_base_text', '').strip()
+                if txt in seen_texts: continue
+                if txt.lower() not in unique_fallback:
+                    unique_fallback[txt.lower()] = q
+                    
+            avail_fallback = list(unique_fallback.values())
             if avail_fallback:
                 available_questions = avail_fallback
             else:
                 # If truly out of unique questions for this difficulty, clear the GLOBAL seen history dynamically to allow retakes,
                 # BUT STRICTLY ENFORCE the current session's exclude_question_ids to prevent repetition in the same test.
                 session_excludes = set(req.exclude_question_ids)
-                session_safe_fallback = [q for q in fallback.data if q['id'] not in session_excludes]
+                
+                # We need to know what texts were seen THIS session to prevent showing the exact same text again
+                session_seen_texts = set()
+                session_texts_res = supabase.table("questions").select("question_base_text").in_("id", list(session_excludes)).execute()
+                if hasattr(session_texts_res, 'data'):
+                    session_seen_texts = set(sq['question_base_text'].strip() for sq in session_texts_res.data if sq.get('question_base_text'))
+                
+                unique_session_fallback = {}
+                for q in fallback.data:
+                    if q['id'] in session_excludes: continue
+                    txt = q.get('question_base_text', '').strip()
+                    if txt in session_seen_texts: continue
+                    if txt.lower() not in unique_session_fallback:
+                        unique_session_fallback[txt.lower()] = q
+                        
+                session_safe_fallback = list(unique_session_fallback.values())
                 if session_safe_fallback:
                     available_questions = session_safe_fallback
                 else:
@@ -415,6 +450,13 @@ def complete_assessment(req: CompleteAssessmentRequest):
                     "verification_level": 1,
                     "skill_score": new_score
                 }).eq("id", skill_res.data[0]['id']).execute()
+            else:
+                supabase.table("student_skills").insert({
+                    "student_id": req.student_id,
+                    "skill_name": req.skill_name,
+                    "verification_level": 1,
+                    "skill_score": int(req.score_percentage)
+                }).execute()
                 
                 # Roadmap Integration: Mark node as assessed
                 if req.node_id and req.roadmap_id and req.student_id:

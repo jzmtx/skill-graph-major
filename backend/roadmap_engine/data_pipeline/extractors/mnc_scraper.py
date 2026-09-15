@@ -29,8 +29,8 @@ class MNCScraper:
                     site_name=["indeed", "linkedin", "glassdoor"],
                     search_term=search_term,
                     results_wanted=self.results_per_company,
-                    country_linkedin="worldwide",
-                    country_indeed="USA",
+                    country_linkedin="india",
+                    country_indeed="india",
                 )
                 
                 if jobs_df is not None and not jobs_df.empty:
@@ -44,6 +44,7 @@ class MNCScraper:
                             all_formatted_jobs.append({
                                 "title": j.get("title", ""),
                                 "company": j.get("company", ""),
+                                "location": j.get("location", ""),
                                 "description": j.get("description", ""),
                                 "url": j.get("job_url", "")
                             })

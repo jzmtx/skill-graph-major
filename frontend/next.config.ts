@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   transpilePackages: ['lucide-react'],
-  allowedDevOrigins: ['192.168.20.1', 'localhost', '127.0.0.1'],
+  allowedDevOrigins: ['192.168.20.1', '192.168.1.8', 'localhost', '127.0.0.1'],
 };
 
 export default nextConfig;
