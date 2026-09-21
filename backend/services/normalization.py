@@ -1,3 +1,4 @@
+from groq_models import GROQ_PRIMARY, GROQ_FAST
 import json
 from database import supabase
 from groq import Groq
@@ -50,7 +51,7 @@ def normalize_skills_batch(raw_skills: list) -> dict:
             groq_client = Groq(api_key=random.choice(key_list))
             completion = groq_client.chat.completions.create(
                 messages=[{"role": "user", "content": prompt}],
-                model="llama-3.1-8b-instant",
+                model=GROQ_FAST,
                 temperature=0.1
             )
             content = completion.choices[0].message.content.strip()
@@ -149,7 +150,7 @@ def infer_and_save_dependencies(new_skills: list):
         groq_client = Groq(api_key=random.choice(key_list))
         completion = groq_client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
-            model="llama-3.1-8b-instant",
+            model=GROQ_FAST,
             temperature=0.1,
             response_format={"type": "json_object"}
         )

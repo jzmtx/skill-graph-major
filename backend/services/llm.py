@@ -1,3 +1,4 @@
+from groq_models import GROQ_PRIMARY, GROQ_FAST
 import os
 from groq import Groq
 from dotenv import load_dotenv, dotenv_values
@@ -11,6 +12,56 @@ env_vars = dotenv_values(".env")
 keys_str = env_vars.get("GROQ_API_KEYS", env_vars.get("GROQ_API_KEY", ""))
 key_list = [k.strip() for k in keys_str.split(",") if k.strip()]
 client = Groq(api_key=random.choice(key_list) if key_list else None)
+
+is_programmable_cache = {}
+
+def is_skill_programmable(skill_name: str) -> bool:
+    if skill_name in is_programmable_cache:
+        return is_programmable_cache[skill_name]
+    
+    prompt = f"Does the technical skill '{skill_name}' involve writing syntax code (like Python, Java, SQL, React)? Answer exactly 'YES' or 'NO'."
+    try:
+        res = call_groq_with_retries(
+            model=GROQ_FAST,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1
+        )
+        ans = res.choices[0].message.content.strip().upper()
+        result = 'YES' in ans
+        is_programmable_cache[skill_name] = result
+        return result
+    except Exception as e:
+        print("Error checking if skill is programmable:", e)
+        return True # Default to True to preserve original behavior if error
+
+def call_groq_with_retries(**kwargs):
+    global client
+    import time
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            return client.chat.completions.create(**kwargs)
+        except Exception as e:
+            error_str = str(e).lower()
+            if attempt == max_retries - 1:
+                raise e
+                
+            print(f"Groq API Error {e}. Re-initializing client to clear dead sockets. Retrying ({attempt+1}/{max_retries})...")
+            # Always recreate the client on error to flush dead httpx sockets (Fixes WinError 10035)
+            from groq import Groq
+            if '429' in error_str or 'rate limit' in error_str or '500' in error_str or '503' in error_str:
+                if key_list and len(key_list) > 1:
+                    available_keys = [k for k in key_list if k != client.api_key]
+                    if available_keys:
+                        new_key = random.choice(available_keys)
+                        client = Groq(api_key=new_key)
+                        time.sleep(2)
+                        continue
+            
+            # If not a rate limit, just recreate with the same key to flush connection pool
+            client = Groq(api_key=client.api_key)
+            time.sleep(2)
+
 
 def verify_questions(skill_name: str, questions: list) -> list:
     """
@@ -35,8 +86,8 @@ def verify_questions(skill_name: str, questions: list) -> list:
     Return ONLY the valid JSON array without markdown formatting.
     """
     try:
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+        response = call_groq_with_retries(
+            model=GROQ_PRIMARY,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.2,
             response_format={"type": "json_object"}
@@ -54,13 +105,17 @@ def verify_questions(skill_name: str, questions: list) -> list:
     return questions
 
 
-def generate_questions(skill_name: str, count: int = 5, seen_topics: list = None, target_difficulty: int = 1) -> list:
+def generate_questions(skill_name: str, count: int = 5, seen_topics: list = None, target_difficulty: int = 1, target_topics: list = None) -> list:
     """
     Generates technical MCQs for a specific skill and difficulty level using Groq (llama3).
     """
     seen_context = ""
-    if seen_topics:
+    if seen_topics and not target_topics:
         seen_context = f"\nCRITICAL: Do NOT generate questions about these topics as the user has already seen them recently: {', '.join(seen_topics)}.\nGenerate highly unique and diverse questions covering other areas of {skill_name}."
+        
+    topic_context = ""
+    if target_topics:
+        topic_context = f"\nCRITICAL TOPIC ENFORCEMENT: You MUST generate questions exclusively focused on the following specific sub-topics of {skill_name}: {', '.join(target_topics)}.\nDo NOT generate generic {skill_name} questions."
         
     diff_desc = {
         1: "Level 1 (Beginner): Fundamentals, basic syntax, and simple concepts.",
@@ -89,6 +144,7 @@ def generate_questions(skill_name: str, count: int = 5, seen_topics: list = None
     Do NOT generate a mix of difficulties. ALL {count} questions must be exactly difficulty level {target_difficulty}.
     {advanced_enforcement}
     {seen_context}
+    {topic_context}
     
     Output strictly as a JSON array of objects with the following keys:
     - "question_base_text": The complete question string.
@@ -113,8 +169,8 @@ def generate_questions(skill_name: str, count: int = 5, seen_topics: list = None
     """
     
     try:
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+        response = call_groq_with_retries(
+            model=GROQ_PRIMARY,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
             response_format={"type": "json_object"}
@@ -149,8 +205,8 @@ def generate_questions(skill_name: str, count: int = 5, seen_topics: list = None
         
     # Fallback non-json mode if above fails
     try:
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+        response = call_groq_with_retries(
+            model=GROQ_PRIMARY,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7
         )
@@ -188,8 +244,8 @@ def analyze_performance(skill_name: str, history: list) -> str:
     """
     
     try:
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+        response = call_groq_with_retries(
+            model=GROQ_PRIMARY,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7
         )
@@ -255,8 +311,8 @@ def analyze_github_repo(github_url: str, skill_name: str, project_abstract: str)
     """
     
     try:
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+        response = call_groq_with_retries(
+            model=GROQ_PRIMARY,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.2,
             response_format={"type": "json_object"}
@@ -277,12 +333,15 @@ def generate_coding_questions(skill_name: str, difficulty_type: str = "basic") -
     """
     prompt = f"""
     You are an expert technical interviewer.
-    Generate ONE programming problem to test a candidate's practical coding ability in '{skill_name}'.
+    Generate ONE advanced problem to test a candidate's practical ability in '{skill_name}'.
     The difficulty should be '{difficulty_type}'.
+    
+    CRITICAL: If '{skill_name}' is a programming language or framework (like Python, React, SQL), generate a practical CODING problem.
+    However, if '{skill_name}' is a purely theoretical/conceptual skill (like Agile, SDLC, REST API Design, System Architecture), generate an ADVANCED CONCEPTUAL/SYSTEM DESIGN problem where they must write out an architectural response instead of code.
     
     Output strictly as a JSON object with:
     - "question_base_text": The problem statement, requirements, and examples (use markdown if needed).
-    - "starter_code": A template or function signature for the candidate to start with (e.g., "def fibonacci(n):\n    # Your code here").
+    - "starter_code": A template or function signature for the candidate to start with (e.g., "def fibonacci(n):\n    # Your code here"). If conceptual, provide a text template like "# Outline your architecture here...".
     - "correct_answer": A reference solution or key aspects you look for (not shown to candidate).
     - "difficulty": 4 if basic, 5 if conceptual.
     - "topic": The specific concept being tested.
@@ -291,8 +350,8 @@ def generate_coding_questions(skill_name: str, difficulty_type: str = "basic") -
     """
     
     try:
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+        response = call_groq_with_retries(
+            model=GROQ_PRIMARY,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
             response_format={"type": "json_object"}
@@ -301,8 +360,8 @@ def generate_coding_questions(skill_name: str, difficulty_type: str = "basic") -
     except Exception as e:
         print("JSON mode failed, retrying without JSON mode:", e)
         try:
-            response = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
+            response = call_groq_with_retries(
+                model=GROQ_PRIMARY,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.7
             )
@@ -387,8 +446,8 @@ def simulate_code_execution(skill_name: str, code: str) -> str:
     If the code does not print or output anything, output nothing.
     """
     try:
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+        response = call_groq_with_retries(
+            model=GROQ_PRIMARY,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0
         )
@@ -443,8 +502,8 @@ def evaluate_code_submission(skill_name: str, question_text: str, student_code: 
             Output ONLY the raw code. Do not include markdown code blocks or explanations.
             """
             
-            test_res = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
+            test_res = call_groq_with_retries(
+                model=GROQ_PRIMARY,
                 messages=[{"role": "user", "content": test_gen_prompt}],
                 temperature=0.0
             )
@@ -516,8 +575,8 @@ def evaluate_code_submission(skill_name: str, question_text: str, student_code: 
     """
     
     try:
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+        response = call_groq_with_retries(
+            model=GROQ_PRIMARY,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0,
             response_format={"type": "json_object"}
@@ -541,8 +600,8 @@ def generate_project_idea(skill_name: str) -> str:
     Do NOT use any markdown formatting, just plain text.
     """
     try:
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+        response = call_groq_with_retries(
+            model=GROQ_PRIMARY,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7
         )
@@ -634,8 +693,8 @@ def analyze_github_repo(github_url: str, skill_name: str, project_abstract: str)
     """
     
     try:
-        res = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+        res = call_groq_with_retries(
+            model=GROQ_PRIMARY,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
             response_format={"type": "json_object"}
@@ -648,3 +707,29 @@ def analyze_github_repo(github_url: str, skill_name: str, project_abstract: str)
     except Exception as e:
         print("LLM Error in analyze_github_repo:", e)
         return {"passed_checks": False, "feedback": "Failed to analyze repository with AI."}
+
+def generate_explanation_fast(skill_name: str, question_text: str, options: list, correct_answer: str) -> str:
+    """
+    Ultra-fast background agent to generate a 1-sentence explanation of why an answer is correct.
+    """
+    prompt = f"""
+    You are an expert technical tutor for '{skill_name}'.
+    
+    Question: {question_text}
+    Options: {', '.join(options)}
+    Correct Answer: {correct_answer}
+    
+    Write EXACTLY ONE concise, friendly sentence explaining WHY the correct answer is correct. 
+    Do not use introductory phrases like 'The correct answer is correct because'. 
+    Just give the explanation directly.
+    """
+    try:
+        res = call_groq_with_retries(
+            model=GROQ_FAST,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3
+        )
+        return res.choices[0].message.content.strip()
+    except Exception as e:
+        print("LLM Error in generate_explanation_fast:", e)
+        return "This is the correct standard approach for this technology."

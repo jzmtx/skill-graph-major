@@ -1,5 +1,0 @@
-JobSpy failed: No module named 'jobspy'
-Traceback (most recent call last):
-  File "D:\skillgraph\backend\services\roadmap_service.py", line 57, in search_jobspy
-    from jobspy import scrape_jobs
-ModuleNotFoundError: No module named 'jobspy'

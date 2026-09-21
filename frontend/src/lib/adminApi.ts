@@ -55,12 +55,27 @@ export const adminApi = {
     return res.data;
   },
 
+  getPipelineErrors: async () => {
+    const res = await api.get('/pipeline_errors');
+    return res.data;
+  },
+
+  runPipeline: async (roleName: string) => {
+    const res = await api.post('/run_pipeline', { role_name: roleName });
+    return res.data;
+  },
+
   clearScraperDiagnostics: async () => {
     const res = await api.delete('/scraper_diagnostics');
     return res.data;
   },
 
-getPendingVerifications: async () => {
+  getGraphData: async () => {
+    const res = await api.get('/graph-data');
+    return res.data;
+  },
+  
+  getPendingVerifications: async () => {
     const res = await api.get('/pending_verifications');
     return res.data;
   },
@@ -79,11 +94,13 @@ getPendingVerifications: async () => {
     const res = await api.patch(`/verify/alumni/${id}`);
     return res.data;
   },
+
   fetchExternalJobs: async (role: string, location: string, results_wanted: number) => {
     const res = await api.post('/fetch_external_jobs', { role, location, results_wanted });
     return res.data;
   },
-    getPendingColleges: async () => {
+
+  getPendingColleges: async () => {
     const res = await api.get('/colleges/pending');
     return res.data;
   },

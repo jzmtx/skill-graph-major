@@ -21,11 +21,33 @@ def build_ecosystem_map(career_name: str, ecosystem_root_name: str):
     """
     Marries the dynamic graph topology with actual industry stats.
     """
-    # 2. Get the root skill (e.g., "Python")
-    root_skill = resolve_skill_by_name(ecosystem_root_name)
-    if not root_skill and ecosystem_root_name.lower() != "general":
-        print(f"Ecosystem {ecosystem_root_name} not natively in graph. Using semantic inference from general pool.")
-        root_skill = None
+    # 1. Map ecosystem selection names to database skill names
+    target_roots = []
+    career_lower = career_name.lower()
+    
+    if ecosystem_root_name == "Java/Spring":
+        target_roots = ["Java", "Spring Boot"]
+    elif ecosystem_root_name == "Python/Django":
+        target_roots = ["Python", "Django"]
+    elif ecosystem_root_name == ".NET/C#":
+        target_roots = ["C#", ".NET Core", "ASP.NET"]
+    elif ecosystem_root_name == "Javascript/MERN":
+        target_roots = ["React", "Node.js", "Express", "MongoDB"]
+    elif ecosystem_root_name.lower() == "general" or not ecosystem_root_name:
+        if "full stack" in career_lower or "fullstack" in career_lower:
+            target_roots = ["React", "Node.js", "Express", "MongoDB"]
+        else:
+            target_roots = []
+    else:
+        target_roots = [ecosystem_root_name]
+        
+    # Resolve all target roots from the DB
+    resolved_roots = []
+    for rname in target_roots:
+        resolved = resolve_skill_by_name(rname)
+        if resolved:
+            resolved_roots.append(resolved)
+            
     # 3. Fetch the industry statistics for this career
     stats_res = supabase.table("industry_statistics") \
         .select("skill_id, composite_recommendation_score, jobspy_demand_percentage") \
@@ -51,30 +73,40 @@ def build_ecosystem_map(career_name: str, ecosystem_root_name: str):
     # 4. Find the technologies
     enriched_tech = []
     
-    if root_skill:
-        children = get_related_skills(root_skill["id"])
-        
-        # Always include the root
-        root_stat = stats_map.get(root_skill["id"], {})
-        enriched_tech.append({
-            "id": root_skill["id"],
-            "name": root_skill["normalized_name"],
-            "category": root_skill["category"] or "Language",
-            "demand_score": root_stat.get("composite_recommendation_score", root_stat.get("jobspy_demand_percentage", 0)),
-            "is_root": True
-        })
-        
-        for child in children:
-            stat = stats_map.get(child["id"], {})
-            score = stat.get("composite_recommendation_score", stat.get("jobspy_demand_percentage", 0))
+    if resolved_roots:
+        seen_ids = set()
+        for root_skill in resolved_roots:
+            if root_skill["id"] in seen_ids:
+                continue
+            seen_ids.add(root_skill["id"])
             
+            # Always include the root
+            root_stat = stats_map.get(root_skill["id"], {})
             enriched_tech.append({
-                "id": child["id"],
-                "name": child["normalized_name"],
-                "category": child["category"] or "Tool",
-                "demand_score": score,
-                "is_root": False
+                "id": root_skill["id"],
+                "name": root_skill["normalized_name"],
+                "category": root_skill["category"] or "Language",
+                "demand_score": root_stat.get("composite_recommendation_score", root_stat.get("jobspy_demand_percentage", 0)) or 80.0, # Give default high score if root
+                "is_root": True
             })
+            
+            # Get related skills (children)
+            children = get_related_skills(root_skill["id"])
+            for child in children:
+                if child["id"] in seen_ids:
+                    continue
+                seen_ids.add(child["id"])
+                
+                stat = stats_map.get(child["id"], {})
+                score = stat.get("composite_recommendation_score", stat.get("jobspy_demand_percentage", 0))
+                
+                enriched_tech.append({
+                    "id": child["id"],
+                    "name": child["normalized_name"],
+                    "category": child["category"] or "Tool",
+                    "demand_score": score or 50.0, # Give positive score if child of specified ecosystem
+                    "is_root": False
+                })
     else:
         # General Ecosystem: Fetch all skills that have statistics for this career
         skill_ids = list(stats_map.keys())

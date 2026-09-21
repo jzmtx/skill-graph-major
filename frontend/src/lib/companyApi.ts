@@ -1,85 +1,54 @@
 import { api } from './api';
 
-// --- Company Registration ---
-export const registerCompany = async (data: {
-  name: string;
-  website?: string;
-  industry?: string;
-   proof_document_url?: string;
-}) => {
+// --- Company Registration & Login ---
+export const registerCompany = async (data: any) => {
   const response = await api.post('/api/company/register', data);
   return response.data;
 };
 
-export const searchCompanies = async (query: string) => {
-  const response = await api.get(`/api/company/search?q=${query}`);
-  return response.data.results;
-};
-
-export const searchExternalJobs = async (recruiter_id: string, title: string, location?: string) => {
-  const params = new URLSearchParams({ recruiter_id, title });
-  if (location) params.append('location', location);
-  const response = await api.get(`/api/company/jobs/search-external?${params.toString()}`);
-  return response.data.results;
-};
-
-// --- Recruiter Registration & Login ---
-export const registerRecruiter = async (data: {
-  company_id: string;
-  name: string;
-  email: string;
-  password: string;
-  role_title?: string;
-}) => {
-  const response = await api.post('/api/company/recruiter/register', data);
+export const loginCompany = async (data: any) => {
+  const response = await api.post('/api/company/login', data);
   return response.data;
 };
 
-export const loginRecruiter = async (data: { email: string; password: string }) => {
-  const response = await api.post('/api/company/recruiter/login', data);
+export const getCompanyDashboard = async (auth_id: string) => {
+  const response = await api.get(`/api/company/dashboard/${auth_id}`);
   return response.data;
 };
 
-export const getRecruiterProfile = async (auth_id: string) => {
-  const response = await api.get(`/api/company/recruiter/me/${auth_id}`);
+// --- Company ATS (Job Management) ---
+export const postJob = async (auth_id: string, data: any) => {
+  const response = await api.post(`/api/company/jobs/${auth_id}`, data);
   return response.data;
 };
 
-// --- Job Posting ---
-export const createJob = async (data: {
-  recruiter_id: string;
-  title: string;
-  description?: string;
-  required_skills: string[];
-  location?: string;
-  ctc?: string;
-  deadline?: string;
-  external_url?: string;
-}) => {
-  const response = await api.post('/api/company/jobs', data);
-  return response.data;
-};
-
-export const getMyJobs = async (recruiter_id: string) => {
-  const response = await api.get(`/api/company/jobs/mine/${recruiter_id}`);
+export const getCompanyJobs = async (auth_id: string) => {
+  const response = await api.get(`/api/company/jobs/${auth_id}`);
   return response.data.jobs;
 };
 
-export const deactivateJob = async (job_id: string) => {
-  const response = await api.patch(`/api/company/jobs/${job_id}/deactivate`);
+export const getJobApplicants = async (auth_id: string, job_id: string) => {
+  const response = await api.get(`/api/company/jobs/${auth_id}/${job_id}/applicants`);
+  return response.data.applicants;
+};
+
+export const updateApplicationStatus = async (auth_id: string, app_id: string, status: string) => {
+  const response = await api.put(`/api/company/applications/${auth_id}/${app_id}/status?status=${status}`);
   return response.data;
 };
 
-// --- Applicants ---
-export const getApplicants = async (job_id: string) => {
-  const response = await api.get(`/api/company/jobs/${job_id}/applicants`);
-  return response.data.applicants;
+// --- Student Job Board ---
+export const getAllJobs = async () => {
+  const response = await api.get('/api/company/student/jobs/all');
+  return response.data.jobs;
 };
-export const getRecentApplicants = async (recruiter_id: string) => {
-  const response = await api.get(`/api/company/applicants/recent/${recruiter_id}`);
-  return response.data.applicants;
+
+export const getEligibleJobs = async (student_id: string) => {
+  const response = await api.get(`/api/company/student/jobs/eligible/${student_id}`);
+  return response.data.jobs;
 };
-export const updateApplicationStatus = async (application_id: string, status: string) => {
-  const response = await api.patch(`/api/company/applications/${application_id}/status`, { status });
+
+export const applyToJob = async (job_id: string, payload: any) => {
+  const response = await api.post(`/api/company/student/jobs/${job_id}/apply`, payload);
   return response.data;
 };

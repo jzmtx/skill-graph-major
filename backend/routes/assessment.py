@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from database import supabase
-from services.llm import generate_questions, analyze_performance, generate_coding_questions, evaluate_code_submission, generate_project_idea
+from services.llm import generate_questions, analyze_performance, generate_coding_questions, evaluate_code_submission, generate_project_idea, generate_explanation_fast, is_skill_programmable
 import random
 import json
 
@@ -12,6 +12,8 @@ class GetQuestionRequest(BaseModel):
     difficulty_level: int
     student_id: str = None
     exclude_question_ids: list[str] = []
+    topics: list[str] = []
+    node_id: str = None
 
 class SubmitAnswerRequest(BaseModel):
     student_id: str
@@ -21,7 +23,7 @@ class SubmitAnswerRequest(BaseModel):
     current_difficulty: int
 
 @router.post("/get-question")
-async def get_adaptive_question(req: GetQuestionRequest):
+def get_adaptive_question(req: GetQuestionRequest):
     try:
         # Get globally seen questions for this student
         global_seen_ids = []
@@ -32,23 +34,35 @@ async def get_adaptive_question(req: GetQuestionRequest):
         all_excludes = list(set(req.exclude_question_ids + global_seen_ids))
         
         seen_texts = set()
-        seen_topics = []
+        seen_topics = req.topics if req.topics else []
         if all_excludes:
             # Note: Supabase limits in_ filter to 100-200 items in URL length usually, but it's safe for now
             # Alternatively, we just rely on DB unique constraints if we add one, but let's filter in memory
             seen_texts_res = supabase.table("questions").select("question_base_text, options_json").in_("id", all_excludes).execute()
             if hasattr(seen_texts_res, 'data'):
                 seen_texts = set(sq['question_base_text'].strip() for sq in seen_texts_res.data if sq.get('question_base_text'))
-                seen_topics = [sq.get('options_json', {}).get('topic') for sq in seen_texts_res.data if sq.get('options_json') and sq.get('options_json').get('topic')]
-                # Keep only unique recent topics
-                seen_topics = list(set([t for t in seen_topics if t]))[:5]
+                if not seen_topics:
+                    seen_topics_db = [sq.get('options_json', {}).get('topic') for sq in seen_texts_res.data if sq.get('options_json') and sq.get('options_json').get('topic')]
+                    # Keep only unique recent topics
+                    seen_topics = list(set([t for t in seen_topics_db if t]))[:5]
         
         # 1. Try to fetch an existing question from Cache (DB)
         query = supabase.table("questions").select("*").eq("skill_name", req.skill_name).eq("difficulty_level", req.difficulty_level)
         res = query.execute()
         
-        # Filter out questions they've already seen
-        available_questions = [q for q in res.data if q['id'] not in all_excludes]
+        # Filter out questions they've already seen (by ID or exact text)
+        unique_available = {}
+        for q in res.data:
+            if q['id'] in all_excludes:
+                continue
+            txt = q.get('question_base_text', '').strip()
+            if txt in seen_texts:
+                continue
+            # Deduplicate locally by text
+            if txt.lower() not in unique_available:
+                unique_available[txt.lower()] = q
+                
+        available_questions = list(unique_available.values())
 
         # 2. If no questions exist, generate a batch via Gemini/Groq
         if not available_questions:
@@ -56,7 +70,7 @@ async def get_adaptive_question(req: GetQuestionRequest):
             
             # Retry loop up to 3 times to get valid unique questions
             for attempt in range(3):
-                new_qs = generate_questions(req.skill_name, count=5, seen_topics=seen_topics, target_difficulty=req.difficulty_level)
+                new_qs = generate_questions(req.skill_name, count=5, seen_topics=seen_topics, target_difficulty=req.difficulty_level, target_topics=req.topics)
                 insert_data = []
                 for q in new_qs:
                     diff = max(1, min(5, int(q.get("difficulty", req.difficulty_level))))
@@ -111,15 +125,42 @@ async def get_adaptive_question(req: GetQuestionRequest):
         if not available_questions:
             # ONLY fallback to questions matching the REQUIRED difficulty
             fallback = supabase.table("questions").select("*").eq("skill_name", req.skill_name).eq("difficulty_level", req.difficulty_level).execute()
-            avail_fallback = [q for q in fallback.data if q['id'] not in all_excludes]
+            
+            unique_fallback = {}
+            for q in fallback.data:
+                if q['id'] in all_excludes: continue
+                txt = q.get('question_base_text', '').strip()
+                if txt in seen_texts: continue
+                if txt.lower() not in unique_fallback:
+                    unique_fallback[txt.lower()] = q
+                    
+            avail_fallback = list(unique_fallback.values())
             if avail_fallback:
                 available_questions = avail_fallback
             else:
-                # If truly out of unique questions for this difficulty, clear the seen history dynamically to allow retakes
-                if all_excludes and fallback.data:
-                    available_questions = fallback.data
+                # If truly out of unique questions for this difficulty, clear the GLOBAL seen history dynamically to allow retakes,
+                # BUT STRICTLY ENFORCE the current session's exclude_question_ids to prevent repetition in the same test.
+                session_excludes = set(req.exclude_question_ids)
+                
+                # We need to know what texts were seen THIS session to prevent showing the exact same text again
+                session_seen_texts = set()
+                session_texts_res = supabase.table("questions").select("question_base_text").in_("id", list(session_excludes)).execute()
+                if hasattr(session_texts_res, 'data'):
+                    session_seen_texts = set(sq['question_base_text'].strip() for sq in session_texts_res.data if sq.get('question_base_text'))
+                
+                unique_session_fallback = {}
+                for q in fallback.data:
+                    if q['id'] in session_excludes: continue
+                    txt = q.get('question_base_text', '').strip()
+                    if txt in session_seen_texts: continue
+                    if txt.lower() not in unique_session_fallback:
+                        unique_session_fallback[txt.lower()] = q
+                        
+                session_safe_fallback = list(unique_session_fallback.values())
+                if session_safe_fallback:
+                    available_questions = session_safe_fallback
                 else:
-                    raise HTTPException(status_code=500, detail="Failed to fetch or generate questions")
+                    raise HTTPException(status_code=500, detail="Failed to fetch or generate unique questions for this session. Please try again.")
 
         # 4. Pick a random question
         chosen_q = random.choice(available_questions)
@@ -134,6 +175,17 @@ async def get_adaptive_question(req: GetQuestionRequest):
             topic = "General"
             
         random.shuffle(options)
+
+        # 6. Anti-Cheat: Mark as seen IMMEDIATELY upon fetch
+        if req.student_id:
+            try:
+                supabase.table("student_seen_questions").insert({
+                    "student_id": req.student_id,
+                    "skill_name": req.skill_name,
+                    "question_id": chosen_q['id']
+                }).execute()
+            except Exception as se:
+                print("Already seen or error recording:", se)
 
         return {
             "question_id": chosen_q['id'],
@@ -198,21 +250,12 @@ def pregenerate_questions_task(skill_name: str, difficulty_level: int):
         print(f"[Background] Pre-generation failed: {e}")
 
 @router.post("/submit-answer")
-async def submit_answer(req: SubmitAnswerRequest, background_tasks: BackgroundTasks):
+def submit_answer(req: SubmitAnswerRequest, background_tasks: BackgroundTasks):
     try:
-        # Mark question as seen globally
-        if req.student_id:
-            try:
-                supabase.table("student_seen_questions").insert({
-                    "student_id": req.student_id,
-                    "skill_name": req.skill_name,
-                    "question_id": req.question_id
-                }).execute()
-            except Exception as se:
-                print("Already seen or error recording:", se)
+        # Note: question is now marked as seen globally in get-question to prevent proctoring cheats
 
         # 1. Fetch correct answer from DB
-        q_res = supabase.table("questions").select("correct_answer").eq("id", req.question_id).execute()
+        q_res = supabase.table("questions").select("correct_answer, question_base_text").eq("id", req.question_id).execute()
         if not q_res.data:
             raise HTTPException(status_code=404, detail="Question not found")
             
@@ -230,11 +273,20 @@ async def submit_answer(req: SubmitAnswerRequest, background_tasks: BackgroundTa
             
         # Spawn background task to pre-generate for next_difficulty
         background_tasks.add_task(pregenerate_questions_task, req.skill_name, next_difficulty)
+        
+        # Fast Explanation Generation using Groq
+        explanation = generate_explanation_fast(
+            skill_name=req.skill_name,
+            question_text=q_res.data[0].get('question_base_text', ''),
+            options=[],  # We can omit options to save tokens if we just want a generic explanation of the answer
+            correct_answer=correct_ans
+        )
             
         return {
             "is_correct": is_correct,
             "correct_answer": correct_ans,
-            "next_difficulty": next_difficulty
+            "next_difficulty": next_difficulty,
+            "explanation": explanation
         }
         
     except Exception as e:
@@ -246,8 +298,11 @@ class GetCodingQuestionRequest(BaseModel):
     student_id: str = None
 
 @router.post("/get-coding-question")
-async def get_coding_question(req: GetCodingQuestionRequest):
+def get_coding_question(req: GetCodingQuestionRequest):
     try:
+        if not is_skill_programmable(req.skill_name):
+            return {"is_programmable": False}
+
         difficulty_level = 4 if req.difficulty_type == "basic" else 5
         selected_q = None
         
@@ -319,7 +374,7 @@ class EvaluateCodeRequest(BaseModel):
     student_code: str
 
 @router.post("/evaluate-code")
-async def evaluate_code(req: EvaluateCodeRequest):
+def evaluate_code(req: EvaluateCodeRequest):
     try:
         eval_data = evaluate_code_submission(req.skill_name, req.question_text, req.student_code)
         return eval_data
@@ -336,6 +391,8 @@ class CompleteAssessmentRequest(BaseModel):
     skill_name: str
     score_percentage: float
     history: list[dict]
+    node_id: str = None
+    roadmap_id: str = None
 
 class SimulateCodeRequest(BaseModel):
     skill_name: str
@@ -347,7 +404,7 @@ class ReportQuestionRequest(BaseModel):
     reason: str
 
 @router.post("/report-question")
-async def report_question(req: ReportQuestionRequest):
+def report_question(req: ReportQuestionRequest):
     try:
         import json
         import os
@@ -379,7 +436,7 @@ async def report_question(req: ReportQuestionRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/complete")
-async def complete_assessment(req: CompleteAssessmentRequest):
+def complete_assessment(req: CompleteAssessmentRequest):
     try:
         analytics = analyze_performance(req.skill_name, req.history)
         
@@ -393,6 +450,28 @@ async def complete_assessment(req: CompleteAssessmentRequest):
                     "verification_level": 1,
                     "skill_score": new_score
                 }).eq("id", skill_res.data[0]['id']).execute()
+            else:
+                supabase.table("student_skills").insert({
+                    "student_id": req.student_id,
+                    "skill_name": req.skill_name,
+                    "verification_level": 1,
+                    "skill_score": int(req.score_percentage)
+                }).execute()
+                
+                # Roadmap Integration: Mark node as assessed
+                if req.node_id and req.roadmap_id and req.student_id:
+                    try:
+                        supabase.table("student_roadmap_nodes").update({
+                            "status": "assessed",
+                            "assessment_score": int(req.score_percentage)
+                        }).eq("roadmap_id", req.roadmap_id).eq("student_id", req.student_id).eq("node_id", req.node_id).execute()
+                        
+                        # In a full implementation, we would also:
+                        # 1. Fetch roadmap_json
+                        # 2. Check edges to find dependent nodes
+                        # 3. Update their status to 'unlocked' in student_roadmap_nodes
+                    except Exception as roadmap_e:
+                        print("Roadmap node update failed (table might not exist yet):", roadmap_e)
                 
                 return {
                     "message": "Assessment passed! Skill upgraded to Level 1.",
@@ -410,7 +489,7 @@ async def complete_assessment(req: CompleteAssessmentRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/simulate-code")
-async def simulate_code(req: SimulateCodeRequest):
+def simulate_code(req: SimulateCodeRequest):
     try:
         from services.llm import simulate_code_execution
         output = simulate_code_execution(req.skill_name, req.code)
@@ -422,10 +501,25 @@ class ProjectIdeaRequest(BaseModel):
     skill_name: str
 
 @router.post("/project-idea")
-async def get_project_idea(req: ProjectIdeaRequest):
+def get_project_idea(req: ProjectIdeaRequest):
     try:
         idea = generate_project_idea(req.skill_name)
         return {"idea": idea}
     except Exception as e:
         print("Project idea error:", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+class ExplainRequest(BaseModel):
+    skill_name: str
+    question_text: str
+    options: list[str]
+    correct_answer: str
+
+@router.post("/explain")
+def explain_question(req: ExplainRequest):
+    try:
+        explanation = generate_explanation_fast(req.skill_name, req.question_text, req.options, req.correct_answer)
+        return {"explanation": explanation}
+    except Exception as e:
+        print("Explain error:", e)
         raise HTTPException(status_code=500, detail=str(e))

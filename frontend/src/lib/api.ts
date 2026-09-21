@@ -60,6 +60,11 @@ export const getAdaptiveQuestion = async (data: Record<string, unknown>) => {
   return response.data;
 };
 
+export const getExplanation = async (data: { skill_name: string, question_text: string, options: string[], correct_answer: string }) => {
+  const response = await api.post('/api/assessment/explain', data);
+  return response.data;
+};
+
 export const submitAnswer = async (data: Record<string, unknown>) => {
   const response = await api.post('/api/assessment/submit-answer', data);
   return response.data;
@@ -120,7 +125,7 @@ export const getProjectIdea = async (data: { skill_name: string }) => {
 };
 
 // --- Resources & Workspace APIs ---
-export const getWorkspaceResources = async (skill_name: string) => {
-  const response = await api.get(`/api/resources/workspace/${encodeURIComponent(skill_name)}`);
+export const getWorkspaceResources = async (skill_id: string, role_name: string = "Software Engineering") => {
+  const response = await api.get(`/api/resources/skills/${encodeURIComponent(skill_id)}/workspace?role_name=${encodeURIComponent(role_name)}`);
   return response.data;
 };

@@ -5,6 +5,16 @@ import { motion, useMotionValue, useTransform, animate, useSpring } from "framer
 import { getHireabilityScore } from "@/lib/api";
 import { ShieldCheck, TrendingUp, Layers, Code, Zap, Flame, CalendarClock } from "lucide-react";
 
+interface PointEvent {
+  type: string;
+  icon: string;
+  label: string;
+  detail: string;
+  pts: number | string;
+  color: string;
+  date?: string | null;
+}
+
 interface HireabilityData {
   score: number;
   breakdown: {
@@ -16,11 +26,13 @@ interface HireabilityData {
     velocity_bonus: number;
     raw_total: number;
   };
+  points_history: PointEvent[];
 }
 
-export default function HireabilityScore() {
+export default function HireabilityScore({ studentIdProp }: { studentIdProp?: string }) {
   const [data, setData] = useState<HireabilityData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showHistory, setShowHistory] = useState(false);
 
   // 3D Tilt Effect State (Fluid Springs)
   const cardRef = useRef<HTMLDivElement>(null);
@@ -43,7 +55,7 @@ export default function HireabilityScore() {
   useEffect(() => {
     const fetchScore = async () => {
       try {
-        const studentId = localStorage.getItem("student_id");
+        const studentId = studentIdProp || localStorage.getItem("student_id");
         if (studentId) {
           const res = await getHireabilityScore(studentId);
           setData(res);
@@ -57,7 +69,7 @@ export default function HireabilityScore() {
       }
     };
     fetchScore();
-  }, []);
+  }, [studentIdProp, count]);
 
   const handleMouseMove = (event: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
     const rect = cardRef.current?.getBoundingClientRect();
@@ -246,6 +258,83 @@ export default function HireabilityScore() {
             )}
           </div>
         </div>
+
+        {/* Points History — Collapsible */}
+        {data.points_history && data.points_history.length > 0 && (
+          <div className="px-8 md:px-12 pb-8 relative z-10">
+            <div className="border-t border-slate-800 pt-5">
+              {/* Toggle Button */}
+              <button
+                onClick={() => setShowHistory(v => !v)}
+                className="w-full flex items-center justify-between text-sm font-semibold text-slate-400 hover:text-slate-200 transition-colors group"
+              >
+                <span className="flex items-center gap-2 uppercase tracking-widest text-xs">
+                  <CalendarClock className="w-4 h-4" />
+                  Points History — How this score was earned
+                  <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-500 text-[10px] font-bold">
+                    {data.points_history.length} events
+                  </span>
+                </span>
+                <span className={`transition-transform duration-300 ${showHistory ? 'rotate-180' : 'rotate-0'}`}>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </span>
+              </button>
+
+              {/* Collapsible Content */}
+              <motion.div
+                initial={false}
+                animate={{ height: showHistory ? 'auto' : 0, opacity: showHistory ? 1 : 0 }}
+                transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+                className="overflow-hidden"
+              >
+                <div className="relative pt-5">
+                  <div className="absolute left-5 top-5 bottom-0 w-px bg-slate-800" />
+                  <div className="space-y-4">
+                    {data.points_history.map((event, i) => {
+                      const colorMap: Record<string, { bg: string; ring: string; text: string }> = {
+                        indigo: { bg: 'bg-indigo-500/10', ring: 'ring-indigo-500/30', text: 'text-indigo-400' },
+                        orange: { bg: 'bg-orange-500/10', ring: 'ring-orange-500/30', text: 'text-orange-400' },
+                        emerald: { bg: 'bg-emerald-500/10', ring: 'ring-emerald-500/30', text: 'text-emerald-400' },
+                        blue: { bg: 'bg-blue-500/10', ring: 'ring-blue-500/30', text: 'text-blue-400' },
+                        purple: { bg: 'bg-purple-500/10', ring: 'ring-purple-500/30', text: 'text-purple-400' },
+                      };
+                      const colors = colorMap[event.color] || colorMap.indigo;
+                      const dateStr = event.date
+                        ? new Date(event.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+                        : 'Applied to total';
+
+                      return (
+                        <motion.div
+                          key={i}
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: showHistory ? 1 : 0, x: showHistory ? 0 : -10 }}
+                          transition={{ delay: showHistory ? i * 0.04 : 0, duration: 0.25 }}
+                          className="relative pl-14 flex items-start gap-4"
+                        >
+                          <div className={`absolute left-0 w-10 h-10 rounded-full ${colors.bg} ring-1 ${colors.ring} flex items-center justify-center text-lg`}>
+                            {event.icon}
+                          </div>
+                          <div className="flex-1 bg-slate-900/40 rounded-xl border border-slate-800 p-3 flex items-center justify-between gap-4">
+                            <div>
+                              <p className="text-sm font-semibold text-slate-200">{event.label}</p>
+                              <p className="text-xs text-slate-500 mt-0.5">{event.detail}</p>
+                              <p className="text-[11px] text-slate-600 mt-1">{dateStr}</p>
+                            </div>
+                            <div className={`text-right shrink-0 font-black text-lg ${colors.text}`}>
+                              {typeof event.pts === 'number' ? `+${event.pts}` : event.pts}
+                            </div>
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          </div>
+        )}
       </motion.div>
     </div>
   );

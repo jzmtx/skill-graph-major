@@ -1,23 +1,36 @@
+from groq_models import GROQ_PRIMARY, GROQ_FAST
 import os
 import requests
 import json
 from groq import Groq
 from dotenv import dotenv_values
 from database import supabase
+import random
+import time
+from concurrent.futures import ThreadPoolExecutor
+
+OFFICIAL_DOCS_MAP = {
+    "react": "react.dev",
+    "python": "docs.python.org",
+    "django": "docs.djangoproject.com",
+    "docker": "docs.docker.com",
+    "postgresql": "postgresql.org/docs",
+    "aws": "docs.aws.amazon.com",
+    "git": "git-scm.com/doc",
+    "nodejs": "nodejs.org/docs",
+    "vue": "vuejs.org/guide",
+    "typescript": "typescriptlang.org/docs"
+}
 
 def search_youtube(query: str) -> list:
     env = dotenv_values(".env")
     api_key = env.get("YOUTUBE_API_KEY")
-    if not api_key: 
-        print("Missing YOUTUBE_API_KEY")
-        return []
+    if not api_key: return []
     
-    url = f"https://www.googleapis.com/youtube/v3/search?part=snippet&q={query}&type=video&maxResults=3&order=relevance&key={api_key}"
+    url = f"https://www.googleapis.com/youtube/v3/search?part=snippet&q={query}&type=video&maxResults=5&order=relevance&key={api_key}"
     try:
         res = requests.get(url).json()
-        if "error" in res:
-            print("YouTube API error:", res["error"]["message"])
-            return []
+        if "error" in res: return []
             
         items = res.get("items", [])
         videos = []
@@ -27,12 +40,16 @@ def search_youtube(query: str) -> list:
             channel = item["snippet"]["channelTitle"]
             published = item["snippet"]["publishedAt"]
             
-            # Get video statistics
+            # Get video statistics for scoring
             stat_url = f"https://www.googleapis.com/youtube/v3/videos?part=statistics&id={vid_id}&key={api_key}"
             stat_res = requests.get(stat_url).json()
             stats = stat_res.get("items", [{}])[0].get("statistics", {})
-            views = stats.get("viewCount", "0")
-            likes = stats.get("likeCount", "0")
+            views = int(stats.get("viewCount", "0"))
+            
+            # Deterministic Score: Base view points + Recency boost
+            score = (views / 50000)
+            if "2025" in published or "2026" in published: score += 10
+            elif "2024" in published: score += 5
             
             videos.append({
                 "title": title,
@@ -40,55 +57,105 @@ def search_youtube(query: str) -> list:
                 "channel": channel,
                 "published_at": published,
                 "views": views,
-                "likes": likes
+                "score": score
             })
-        return videos
+            
+        # Sort by deterministic score and return top 3
+        videos.sort(key=lambda x: x["score"], reverse=True)
+        return videos[:3]
     except Exception as e:
         print("YouTube API error:", e)
         return []
 
-def search_docs(skill_name: str) -> list:
+def search_github(query: str) -> list:
+    url = f"https://api.github.com/search/repositories?q={query}+tutorial+OR+example&sort=stars&order=desc&per_page=3"
+    env = dotenv_values(".env")
+    headers = {"Accept": "application/vnd.github.v3+json"}
+    if "GITHUB_TOKEN" in env:
+        headers["Authorization"] = f"token {env['GITHUB_TOKEN']}"
+        
+    try:
+        res = requests.get(url, headers=headers).json()
+        repos = res.get("items", [])
+        return [{"name": r["full_name"], "url": r["html_url"], "stars": r["stargazers_count"], "description": r.get("description", "")} for r in repos]
+    except Exception as e:
+        print("GitHub API error:", e)
+        return []
+
+def search_docs(skill_name: str, slug: str) -> list:
+    if slug in OFFICIAL_DOCS_MAP:
+        return [{"title": f"{skill_name} Official Docs", "url": f"https://{OFFICIAL_DOCS_MAP[slug]}"}]
+        
     env = dotenv_values(".env")
     api_key = env.get("SERPER_API_KEY")
     if not api_key: return []
     
     url = "https://google.serper.dev/search"
-    payload = json.dumps({"q": f"{skill_name} official documentation OR official github"})
+    payload = json.dumps({"q": f"{skill_name} official documentation"})
     headers = {'X-API-KEY': api_key, 'Content-Type': 'application/json'}
     try:
         res = requests.post(url, headers=headers, data=payload).json()
-        results = res.get("organic", [])[:2]
+        results = res.get("organic", [])[:1]
         return [{"title": r.get("title"), "url": r.get("link")} for r in results]
     except Exception as e:
         print("Serper API error:", e)
         return []
 
-def generate_resource_pack(skill_name: str, role_name: str = "Software Engineering"):
-    # Check cache
-    existing = supabase.table("skill_resources").select("*").eq("skill_name", skill_name).execute()
-    if existing.data:
-        return existing.data[0]
+def generate_resource_pack(skill_id: str, role_name: str = "Software Engineering"):
+    import uuid
+    is_uuid = False
+    try:
+        uuid.UUID(skill_id)
+        is_uuid = True
+    except ValueError:
+        pass
+
+    # Get skill metadata FIRST so we always know the display name
+    if is_uuid:
+        skill_res = supabase.table("canonical_skills").select("*").eq("id", skill_id).execute()
+    else:
+        # Also clean up URL encoding that might have leaked through (e.g. %20)
+        from urllib.parse import unquote
+        clean_skill = unquote(skill_id)
+        skill_res = supabase.table("canonical_skills").select("*").ilike("title", clean_skill).execute()
+
+    if not skill_res.data:
+        print(f"Skill {skill_id} not found in canonical_skills. Using raw name.")
+        skill_name = unquote(skill_id) if not is_uuid else skill_id
+        skill_slug = skill_name.lower().replace(" ", "-")
+        canonical_id = None
+    else:
+        skill_name = skill_res.data[0]["title"]
+        skill_slug = skill_res.data[0].get("slug", "")
+        canonical_id = skill_res.data[0]["id"]
+    
+    # Check cache via Canonical ID or Name
+    if canonical_id:
+        existing = supabase.table("skill_resources").select("*").eq("skill_id", canonical_id).execute()
+    else:
+        existing = supabase.table("skill_resources").select("*").eq("skill_name", skill_name).execute()
         
-    print(f"Building Concept Tree for {skill_name}...")
+    if existing.data:
+        payload = existing.data[0]
+        payload["skill_name"] = skill_name
+        return payload
+        
+    print(f"V2 Pipeline: Generating resources for {skill_name} ({skill_id})...")
     
     env = dotenv_values(".env")
     keys_str = env.get("GROQ_API_KEYS", env.get("GROQ_API_KEY", ""))
     key_list = [k.strip() for k in keys_str.split(",") if k.strip()]
     
-    import random
-    import time
-    from concurrent.futures import ThreadPoolExecutor
-
     # Step 1: Generate the concepts
-    topics_prompt = f"""You are an expert curriculum designer for a {role_name}. Break down the technology/skill '{skill_name}' into exactly 4 critical micro-concepts to learn it completely from beginner to advanced in the context of {role_name}. 
-    Return ONLY a JSON array of strings. Example: ["Syntax & Variables", "Object Oriented Programming", "File I/O", "Asynchronous Python"]"""
+    topics_prompt = f"""You are an expert curriculum designer. Break down the technology '{skill_name}' into exactly 4 critical micro-concepts to learn it. 
+    Return ONLY a JSON array of strings. Example: ["Hooks", "Context API", "State Management", "Routing"]"""
     
     concepts = []
     try:
         groq_client = Groq(api_key=random.choice(key_list))
         res = groq_client.chat.completions.create(
             messages=[{"role": "user", "content": topics_prompt}],
-            model="llama-3.1-8b-instant",
+            model=GROQ_FAST,
             temperature=0.2
         )
         content = res.choices[0].message.content.strip()
@@ -97,10 +164,9 @@ def generate_resource_pack(skill_name: str, role_name: str = "Software Engineeri
         concepts = json.loads(content.strip())
     except Exception as e:
         print(f"Failed to generate concepts for {skill_name}: {e}")
-        # fallback
         concepts = [f"Introduction to {skill_name}", f"Advanced {skill_name}"]
 
-    # Step 2: Fetch raw search results for the main skill AND the concepts
+    # Step 2: Fetch raw search results for Candidate Pool
     queries = [{"type": "main", "query": skill_name}]
     for c in concepts:
         queries.append({"type": "sub", "query": f"{skill_name} {c}"})
@@ -109,26 +175,26 @@ def generate_resource_pack(skill_name: str, role_name: str = "Software Engineeri
     
     def fetch_for_query(q):
         v = search_youtube(f"{q['query']} tutorial")
-        d = search_docs(q['query'])
-        search_results[q['query']] = {"videos": v, "docs": d}
+        d = search_docs(q['query'], skill_slug) if q['type'] == 'main' else search_youtube(q['query'])
+        g = search_github(q['query']) if q['type'] == 'main' else []
+        search_results[q['query']] = {"video_candidates": v, "docs_candidates": d, "github_candidates": g}
         
     with ThreadPoolExecutor(max_workers=5) as executor:
         executor.map(fetch_for_query, queries)
         
-    # Step 3: Curate the final pack
+    # Step 3: LLM curates from Top Candidates
     curation_prompt = f"""
-    You are an expert Senior {role_name} curating the absolute best learning resources for the technology/skill: '{skill_name}'.
+    You are an expert Senior Developer curating the best learning resources for '{skill_name}'.
     
-    We have broken it down into the main skill and {len(concepts)} micro-concepts: {', '.join(concepts)}.
-    Here are the top Search Results (Docs and YouTube) for each:
+    We have {len(concepts)} micro-concepts: {', '.join(concepts)}.
+    Here are the Top Scored Candidate Resources from YouTube, GitHub, and Official sources:
     
     {json.dumps(search_results, indent=2)}
     
     Your task:
-    1. For the MAIN skill '{skill_name}': Select the absolute best official docs URL and best video tutorial URL from its search results. Generate a 1-sentence "Mini Project".
-    2. Additionally, provide the URL to a highly-rated Open Source repository on GitHub (e.g. an "Awesome" list, or a high-quality example project) for {skill_name}.
-    3. Additionally, provide the URL to a popular Practice Platform (like LeetCode, Frontend Mentor, Exercism, etc.) that is highly relevant for practicing {skill_name}.
-    4. For EACH of the {len(concepts)} micro-concepts: Select the absolute best docs URL and best video URL from its respective search results. Generate a 1-sentence "Mini Project" for that micro-concept.
+    1. For the MAIN skill '{skill_name}': Select the absolute best official docs URL and best video URL from the candidate pool. Generate a 1-sentence "Mini Practice Project".
+    2. Additionally, select the best GitHub repository from the candidate pool (if any) or suggest a relevant Practice Platform (like LeetCode/Frontend Mentor).
+    3. For EACH micro-concept: Select the best video URL from its candidates. Generate a 1-sentence "Mini Project" for it.
     
     Return EXACTLY in this JSON format:
     {{
@@ -141,7 +207,6 @@ def generate_resource_pack(skill_name: str, role_name: str = "Software Engineeri
         "sub_topics": [
             {{
                 "name": "Micro-Concept Name",
-                "official_docs_url": "...",
                 "best_video_url": "...",
                 "practice_project": "..."
             }}
@@ -155,7 +220,7 @@ def generate_resource_pack(skill_name: str, role_name: str = "Software Engineeri
         try:
             completion = groq_client.chat.completions.create(
                 messages=[{"role": "user", "content": curation_prompt}],
-                model="llama-3.3-70b-versatile",
+                model=GROQ_PRIMARY,
                 temperature=0.2,
                 response_format={"type": "json_object"}
             )
@@ -168,11 +233,11 @@ def generate_resource_pack(skill_name: str, role_name: str = "Software Engineeri
                 return None
             time.sleep(2)
             
-    if not final_data:
-        return None
+    if not final_data: return None
         
-    # Save to DB
+    # Step 4: Save to DB via Canonical Skill ID
     payload = {
+        "skill_id": skill_id,
         "skill_name": skill_name,
         "official_docs_url": final_data.get("official_docs_url"),
         "best_video_url": final_data.get("best_video_url"),
@@ -181,12 +246,24 @@ def generate_resource_pack(skill_name: str, role_name: str = "Software Engineeri
         "open_source_repo_url": final_data.get("open_source_repo_url"),
         "practice_platform_url": final_data.get("practice_platform_url"),
         "sub_topics": final_data.get("sub_topics", []),
+        "confidence_score": 0.95,
+        "status": "APPROVED",
+        "version": "1.0"
+    }
+    
+    db_payload = {
+        "skill_name": skill_name,
+        "official_docs_url": final_data.get("official_docs_url"),
+        "best_video_url": final_data.get("best_video_url"),
+        "best_video_title": final_data.get("best_video_title"),
+        "practice_project": final_data.get("practice_project"),
+        "sub_topics": final_data.get("sub_topics", []),
         "confidence_score": 0.95
     }
     
     try:
-        supabase.table("skill_resources").insert(payload).execute()
+        supabase.table("skill_resources").insert(db_payload).execute()
     except Exception as e:
-        print(f"Warning: Could not cache {skill_name} in Supabase (probably schema cache PGRST204). Returning payload anyway.")
+        print(f"Warning: Could not cache {skill_name} in Supabase: {e}")
         
     return payload

@@ -1,3 +1,4 @@
+from groq_models import GROQ_PRIMARY, GROQ_FAST
 import os
 import json
 import requests
@@ -53,7 +54,7 @@ def classify_and_extract_relationships(tech_name: str, pypi_data: dict, npm_data
     """Use Llama-3-8B to fuse API data and extract conceptual relationships."""
     
     # We use a fast, cheap model for classification tasks
-    model_name = "llama-3.1-8b-instant"
+    model_name = GROQ_FAST
     
     prompt = f"""
     You are a Knowledge Graph extraction agent.

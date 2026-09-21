@@ -10,9 +10,9 @@ export const roadmapsApi = {
     return res.data;
   },
 
-  getRoadmap: async (role_name: string, ecosystem: string) => {
+  getRoadmap: async (role_name: string, ecosystem: string, student_id?: string | null) => {
     try {
-      const res = await api.get('/', { params: { role_name, ecosystem } });
+      const res = await api.get('/', { params: { role_name, ecosystem, student_id } });
       return res.data;
     } catch (err: any) {
       if (err.response?.status === 404) {
@@ -69,6 +69,16 @@ export const roadmapsApi = {
     try {
       const res = await api.get('/raw-jds/admin');
       return res.data.raw_jds;
+    } catch (err) {
+      throw err;
+    }
+  },
+
+  getMarketStatsAdmin: async (role?: string) => {
+    try {
+      const url = role ? `/market-stats/admin?role=${encodeURIComponent(role)}` : '/market-stats/admin';
+      const res = await api.get(url);
+      return res.data;
     } catch (err) {
       throw err;
     }

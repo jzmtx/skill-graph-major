@@ -1,72 +1,44 @@
-"use client";
+"use client"; // force reload
 
 import React, { useEffect, useState } from 'react';
-import { getRecruiterProfile, getMyJobs, createJob, deactivateJob, searchExternalJobs } from '@/lib/companyApi';
+import { getCompanyDashboard, getCompanyJobs, postJob } from '@/lib/companyApi';
 import { useRouter } from 'next/navigation';
-import { Briefcase, Plus, X, Users, MapPin, Building2, Search, Loader2 } from 'lucide-react';
-
-interface Job {
-  id: string;
-  title: string;
-  description?: string;
-  required_skills: string[];
-  location?: string;
-  ctc?: string;
-  deadline?: string;
-  is_active: boolean;
-  created_at: string;
-}
-
-interface ExternalJobResult {
-  title: string;
-  employer_name: string;
-  description?: string;
-  location?: string;
-  salary_display?: string;
-  apply_link?: string;
-  source?: string;
-  skills: string[];
-}
+import { Briefcase, Plus, X, Users, MapPin, Building2, CheckCircle2, TrendingUp } from 'lucide-react';
+import Link from 'next/link';
 
 export default function CompanyDashboardPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [recruiter, setRecruiter] = useState<{ id: string; name: string } | null>(null);
-  const [company, setCompany] = useState<{ name: string; is_verified: boolean } | null>(null);
-  const [jobs, setJobs] = useState<Job[]>([]);
+  
+  const [dashboard, setDashboard] = useState<any>(null);
+  const [jobs, setJobs] = useState<any[]>([]);
 
   const [showForm, setShowForm] = useState(false);
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError] = useState('');
+  
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [skillsInput, setSkillsInput] = useState('');
-  const [location, setLocation] = useState('');
-  const [ctc, setCtc] = useState('');
-  const [deadline, setDeadline] = useState('');
-  const [externalUrl, setExternalUrl] = useState('');
-
-  // --- Fetch Real Jobs ---
-  const [showSearch, setShowSearch] = useState(false);
-  const [searchLoading, setSearchLoading] = useState(false);
-  const [searchError, setSearchError] = useState('');
-  const [searchResults, setSearchResults] = useState<ExternalJobResult[]>([]);
-  const [searchAttempted, setSearchAttempted] = useState(false);
 
   useEffect(() => {
     const load = async () => {
-      const authId = localStorage.getItem('recruiter_auth_id');
-      if (!authId) {
+      // In a real app we'd get this from a proper auth provider or login context
+      // Assuming company registered and stored auth_id. 
+      // For testing, we fallback to a known ID if you register one, or force login
+      const authId = localStorage.getItem('company_auth_id');
+      if (!authId || authId === 'undefined') {
+        localStorage.removeItem('company_auth_id');
+        localStorage.removeItem('company_id');
         router.push('/login');
         return;
       }
       try {
-        const profile = await getRecruiterProfile(authId);
-        setRecruiter(profile.recruiter);
-        setCompany(profile.company);
+        const dashData = await getCompanyDashboard(authId);
+        setDashboard(dashData);
 
-        const jobList = await getMyJobs(profile.recruiter.id);
+        const jobList = await getCompanyJobs(authId);
         setJobs(jobList);
       } catch {
         setError('Failed to load dashboard. Please try logging in again.');
@@ -79,75 +51,37 @@ export default function CompanyDashboardPage() {
 
   const handleCreateJob = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!recruiter) return;
+    const authId = localStorage.getItem('company_auth_id');
+    if (!authId) return;
+    
     setFormLoading(true);
     setFormError('');
 
     try {
-      const skillsArray = skillsInput.split(',').map(s => s.trim()).filter(Boolean);
-      await createJob({
-        recruiter_id: recruiter.id,
+      const skillsArray = skillsInput.split(',').map(s => {
+        return { skill_name: s.trim(), level: 1 }; // Default level 1 for simplicity
+      }).filter(s => s.skill_name.length > 0);
+
+      await postJob(authId, {
         title,
-        description: description || undefined,
-        required_skills: skillsArray,
-        location: location || undefined,
-        ctc: ctc || undefined,
-        deadline: deadline || undefined,
-        external_url: externalUrl || undefined,
+        description: description,
+        required_skills: skillsArray
       });
 
-      const jobList = await getMyJobs(recruiter.id);
+      const jobList = await getCompanyJobs(authId);
       setJobs(jobList);
+      
+      const dashData = await getCompanyDashboard(authId);
+      setDashboard(dashData);
+      
       setShowForm(false);
-      setTitle(''); setDescription(''); setSkillsInput(''); setLocation(''); setCtc(''); setDeadline(''); setExternalUrl('');
-      setSearchResults([]); setSearchAttempted(false); setShowSearch(false);
-    } catch (err: unknown) {
-      const error = err as { response?: { data?: { detail?: string } } };
-      setFormError(error.response?.data?.detail || 'Failed to post job');
+      setTitle(''); setDescription(''); setSkillsInput('');
+    } catch (err: any) {
+      setFormError(err.response?.data?.detail || 'Failed to post job');
     } finally {
       setFormLoading(false);
     }
   };
-
-  const handleDeactivate = async (jobId: string) => {
-    try {
-      await deactivateJob(jobId);
-      setJobs(jobs.map(j => j.id === jobId ? { ...j, is_active: false } : j));
-    } catch {
-      // silently ignore for now
-    }
-  };
-
-  const handleFetchRealJobs = async () => {
-    if (!recruiter || !title.trim()) {
-      setSearchError('Enter a Job Title above first, then fetch real listings.');
-      return;
-    }
-    setSearchLoading(true);
-    setSearchError('');
-    setSearchAttempted(true);
-    try {
-      const results = await searchExternalJobs(recruiter.id, title.trim(), location.trim() || undefined);
-      setSearchResults(results);
-      setShowSearch(true);
-    } catch (err: unknown) {
-      const error = err as { response?: { data?: { detail?: string } } };
-      setSearchError(error.response?.data?.detail || 'Could not fetch real listings right now.');
-      setSearchResults([]);
-      setShowSearch(true);
-    } finally {
-      setSearchLoading(false);
-    }
-  };
-const handleUseResult = (job: ExternalJobResult) => {
-  setTitle(job.title || title);
-  if (job.description) setDescription(job.description);
-  if (job.skills?.length) setSkillsInput(job.skills.join(', '));
-  if (job.location) setLocation(job.location);
-  if (job.salary_display) setCtc(job.salary_display);
-  if (job.apply_link) setExternalUrl(job.apply_link);
-  setShowSearch(false);
-};
 
   if (loading) {
     return <div className="min-h-screen bg-slate-50 flex items-center justify-center text-slate-500">Loading dashboard...</div>;
@@ -157,231 +91,157 @@ const handleUseResult = (job: ExternalJobResult) => {
     return <div className="min-h-screen bg-slate-50 flex items-center justify-center text-red-600">{error}</div>;
   }
 
+  const { company, active_jobs, total_applications, shortlisted, hired } = dashboard;
+
   return (
     <div className="min-h-screen bg-slate-50 p-6 md:p-10">
-      <div className="max-w-5xl mx-auto">
+      <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <Building2 className="w-8 h-8 text-indigo-700" />
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 bg-white shadow-sm border border-slate-200 rounded-xl flex items-center justify-center">
+              <Building2 className="w-8 h-8 text-indigo-600" />
+            </div>
             <div>
-              <h1 className="text-2xl font-bold text-slate-800">{company?.name}</h1>
-              <p className="text-sm text-slate-500">Welcome back, {recruiter?.name}</p>
+              <h1 className="text-3xl font-bold text-slate-800">{company?.name}</h1>
+              <p className="text-sm text-slate-500">{company?.industry || 'Technology'} • {company?.website || 'Website not provided'}</p>
             </div>
           </div>
-          {company && !company.is_verified && (
-            <span className="px-3 py-1.5 bg-amber-50 text-amber-700 text-xs font-medium rounded-full border border-amber-200">
-              Pending Verification
-            </span>
-          )}
         </div>
 
-        {company && !company.is_verified && (
-          <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm p-4 rounded-lg mb-6">
-            Your company is awaiting admin approval. You can prepare job postings, but they won&apos;t go live until verification completes.
+        {/* Top Analytics Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-medium text-slate-500">Active Jobs</p>
+              <Briefcase className="w-4 h-4 text-indigo-500" />
+            </div>
+            <p className="text-2xl font-bold text-slate-800">{active_jobs}</p>
           </div>
-        )}
+          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-medium text-slate-500">Total Applicants</p>
+              <Users className="w-4 h-4 text-blue-500" />
+            </div>
+            <p className="text-2xl font-bold text-slate-800">{total_applications}</p>
+          </div>
+          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-medium text-slate-500">Shortlisted</p>
+              <TrendingUp className="w-4 h-4 text-amber-500" />
+            </div>
+            <p className="text-2xl font-bold text-slate-800">{shortlisted}</p>
+          </div>
+          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-medium text-slate-500">Hired</p>
+              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+            </div>
+            <p className="text-2xl font-bold text-slate-800">{hired}</p>
+          </div>
+        </div>
 
         {/* Post Job Button */}
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
-            <Briefcase className="w-5 h-5" /> Your Job Postings
-          </h2>
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-xl font-bold text-slate-800">Job Postings</h2>
           <button
             onClick={() => setShowForm(!showForm)}
-            className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700"
+            className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
           >
             {showForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-            {showForm ? 'Cancel' : 'Post New Job'}
+            {showForm ? 'Cancel' : 'Post New Vacancy'}
           </button>
         </div>
 
         {/* New Job Form */}
         {showForm && (
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+          <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-8 mb-8 animate-in slide-in-from-top-4 duration-300">
+            <h3 className="text-lg font-semibold text-slate-800 mb-6">Create Job Posting</h3>
             {formError && (
               <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm mb-4">{formError}</div>
             )}
-            <form onSubmit={handleCreateJob} className="space-y-4">
+            <form onSubmit={handleCreateJob} className="space-y-5">
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-sm font-medium text-slate-700">Job Title</label>
-                  <button
-                    type="button"
-                    onClick={handleFetchRealJobs}
-                    disabled={searchLoading || !title.trim()}
-                    className="flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-800 disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    {searchLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
-                    {searchLoading ? 'Searching...' : 'Fetch Real Jobs'}
-                  </button>
-                </div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Job Title</label>
                 <input
                   type="text" required
-                  placeholder="e.g. QA Engineer"
-                  className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                  className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition-shadow"
                   value={title} onChange={e => setTitle(e.target.value)}
+                  placeholder="e.g. Senior Frontend Developer"
                 />
-                <p className="text-xs text-slate-400 mt-1">Type a title, then click &quot;Fetch Real Jobs&quot; to pull real listings from {company?.name || 'your company'} off LinkedIn, Glassdoor and other job boards.</p>
               </div>
-
-              {searchError && (
-                <div className="bg-amber-50 text-amber-700 p-3 rounded-lg text-sm">{searchError}</div>
-              )}
-
-              {showSearch && (
-                <div className="border border-indigo-100 bg-indigo-50/50 rounded-lg p-3 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-medium text-indigo-800">
-                      {searchResults.length > 0
-                        ? `${searchResults.length} real listing${searchResults.length > 1 ? 's' : ''} found for ${company?.name}`
-                        : `No real listings found for ${company?.name} right now`}
-                    </p>
-                    <button type="button" onClick={() => setShowSearch(false)} className="text-xs text-slate-400 hover:text-slate-600">
-                      Dismiss
-                    </button>
-                  </div>
-                  {searchResults.map((r, i) => (
-                    <div key={i} className="bg-white rounded-lg border border-slate-200 p-3 flex items-start justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-800 truncate">{r.title}</p>
-                        <p className="text-xs text-slate-400">
-                          {r.employer_name}{r.location ? ` · ${r.location}` : ''}{r.source ? ` · via ${r.source}` : ''}
-                        </p>
-                        {r.skills?.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1.5">
-                            {r.skills.slice(0, 5).map((sk, j) => (
-                              <span key={j} className="px-1.5 py-0.5 bg-slate-50 text-slate-500 text-[11px] rounded border border-slate-200">{sk}</span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleUseResult(r)}
-                        className="shrink-0 px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700"
-                      >
-                        Use This
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Job Description</label>
                 <textarea
-                  rows={3}
-                  className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                  required rows={4}
+                  className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition-shadow"
                   value={description} onChange={e => setDescription(e.target.value)}
+                  placeholder="Describe the role, responsibilities, and perks..."
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Required Skills (comma-separated)</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Required Skills (Comma-separated)</label>
                 <input
-                  type="text"
-                  placeholder="e.g. React, Node.js, PostgreSQL"
-                  className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                  type="text" required
+                  placeholder="e.g. React, Node.js, TypeScript"
+                  className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition-shadow"
                   value={skillsInput} onChange={e => setSkillsInput(e.target.value)}
                 />
+                <p className="text-xs text-slate-500 mt-1">Our intelligent matching engine will use these to evaluate students.</p>
               </div>
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Location</label>
-                  <input
-                    type="text"
-                    className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                    value={location} onChange={e => setLocation(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">CTC</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 8-12 LPA"
-                    className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                    value={ctc} onChange={e => setCtc(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Deadline</label>
-                  <input
-                    type="date"
-                    className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                    value={deadline} onChange={e => setDeadline(e.target.value)}
-                  />
-                </div>
+              <div className="flex justify-end pt-2">
+                <button
+                  type="submit"
+                  disabled={formLoading}
+                  className="px-8 py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors shadow-sm"
+                >
+                  {formLoading ? 'Publishing...' : 'Publish Job'}
+                </button>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">External Job Link (optional)</label>
-                <input
-                  type="text"
-                  placeholder="e.g. your LinkedIn job posting or careers page URL"
-                  className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                  value={externalUrl} onChange={e => setExternalUrl(e.target.value)}
-                />
-                <p className="text-xs text-slate-400 mt-1">If provided, students will be sent to this link instead of applying through SkillGraph.</p>
-              </div>
-              <button
-                type="submit"
-                disabled={formLoading}
-                className="px-6 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50"
-              >
-                {formLoading ? 'Posting...' : 'Post Job'}
-              </button>
             </form>
           </div>
         )}
 
         {/* Job List */}
         {jobs.length === 0 ? (
-          <div className="bg-white rounded-xl border border-slate-200 p-10 text-center text-slate-400">
-            No jobs posted yet. Click &quot;Post New Job&quot; to get started.
+          <div className="bg-white rounded-xl border border-slate-200 p-16 text-center shadow-sm">
+            <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-400">
+              <Briefcase className="w-8 h-8" />
+            </div>
+            <h3 className="text-lg font-semibold text-slate-700 mb-2">No active jobs</h3>
+            <p className="text-slate-500">Post a new vacancy to start attracting top student talent.</p>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {jobs.map(job => (
-              <div key={job.id} className="bg-white rounded-xl border border-slate-200 p-5">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-semibold text-slate-800">{job.title}</h3>
-                      {!job.is_active && (
-                        <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-xs rounded-full">Closed</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-4 mt-1 text-sm text-slate-500">
-                      {job.location && (
-                        <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" /> {job.location}</span>
-                      )}
-                      {job.ctc && <span>{job.ctc}</span>}
-                    </div>
-                    {job.required_skills?.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 mt-2">
-                        {job.required_skills.map((skill, i) => (
-                          <span key={i} className="px-2 py-0.5 bg-indigo-50 text-indigo-700 text-xs rounded-full">
-                            {skill}
-                          </span>
-                        ))}
-                      </div>
-                    )}
+              <div key={job.id} className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-4">
+                  <span className={`px-2.5 py-1 text-xs font-semibold rounded-full ${job.status === 'open' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>
+                    {job.status.toUpperCase()}
+                  </span>
+                </div>
+                <h3 className="text-xl font-bold text-slate-800 mb-1 pr-20">{job.title}</h3>
+                <p className="text-sm text-slate-500 mb-4 line-clamp-2">{job.description}</p>
+                
+                <div className="flex flex-wrap gap-2 mb-6">
+                  {job.required_skills?.map((skill: any, i: number) => (
+                    <span key={i} className="px-2.5 py-1 bg-indigo-50 text-indigo-700 border border-indigo-100 text-xs font-medium rounded-md">
+                      {skill.skill_name}
+                    </span>
+                  ))}
+                </div>
+                
+                <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+                  <div className="flex items-center gap-2 text-sm text-slate-600 font-medium">
+                    <Users className="w-4 h-4 text-slate-400" />
+                    <span>{job.job_applications?.[0]?.count || 0} Applicants</span>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      onClick={() => router.push(`/company/jobs/${job.id}/applicants`)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-700 text-xs font-medium rounded-lg hover:bg-slate-200"
-                    >
-                      <Users className="w-3.5 h-3.5" /> Applicants
-                    </button>
-                    {job.is_active && (
-                      <button
-                        onClick={() => handleDeactivate(job.id)}
-                        className="px-3 py-1.5 bg-red-50 text-red-600 text-xs font-medium rounded-lg hover:bg-red-100"
-                      >
-                        Close
-                      </button>
-                    )}
-                  </div>
+                  <Link 
+                    href={`/company/jobs/${job.id}/applicants`}
+                    className="text-sm font-semibold text-indigo-600 hover:text-indigo-800"
+                  >
+                    View Pipeline &rarr;
+                  </Link>
                 </div>
               </div>
             ))}
