@@ -55,8 +55,8 @@ const nodeTypes = {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function KnowledgeGraphPage() {
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<any>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<any>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [stats, setStats] = useState({ techs: 0, nodes: 0, edges: 0, occupations: 0 });

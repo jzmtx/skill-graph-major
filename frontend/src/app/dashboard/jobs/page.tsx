@@ -2,12 +2,14 @@
 
 import React, { useEffect, useState } from 'react';
 import { getAllJobs, getEligibleJobs, applyToJob } from '@/lib/companyApi';
-import { Briefcase, Building2, CheckCircle2, Zap, X } from 'lucide-react';
+import { getOpportunitiesForStudent, expressInterest } from '@/lib/alumniApi';
+import { Briefcase, Building2, CheckCircle2, Zap, X, GraduationCap, Users, ExternalLink, Sparkles } from 'lucide-react';
 
 export default function StudentJobsPage() {
-  const [activeTab, setActiveTab] = useState<'all' | 'eligible'>('eligible');
+  const [activeTab, setActiveTab] = useState<'all' | 'eligible' | 'alumni'>('eligible');
   const [allJobs, setAllJobs] = useState<any[]>([]);
   const [eligibleJobs, setEligibleJobs] = useState<any[]>([]);
+  const [alumniOpportunities, setAlumniOpportunities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
   const [applyingJob, setApplyingJob] = useState<any | null>(null);
@@ -16,18 +18,28 @@ export default function StudentJobsPage() {
   const [submitError, setSubmitError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [appliedJobs, setAppliedJobs] = useState<Set<string>>(new Set());
+  const [appliedOpps, setAppliedOpps] = useState<Set<string>>(new Set());
+  const [oppApplyingId, setOppApplyingId] = useState<string | null>(null);
 
   useEffect(() => {
     const load = async () => {
       const studentId = localStorage.getItem('student_id');
       if (!studentId) return;
       try {
-        const [all, eligible] = await Promise.all([
+        const [all, eligible, opps] = await Promise.all([
           getAllJobs(),
-          getEligibleJobs(studentId)
+          getEligibleJobs(studentId),
+          getOpportunitiesForStudent(studentId).catch(() => [])
         ]);
         setAllJobs(all || []);
         setEligibleJobs(eligible || []);
+        setAlumniOpportunities(opps || []);
+
+        const interestedSet = new Set<string>();
+        (opps || []).forEach((o: any) => {
+          if (o.already_interested) interestedSet.add(o.id);
+        });
+        setAppliedOpps(interestedSet);
       } catch (e) {
         console.error(e);
       } finally {
@@ -120,6 +132,100 @@ export default function StudentJobsPage() {
     );
   };
 
+  const handleApplyOpportunity = async (opp: any) => {
+    const studentId = localStorage.getItem('student_id');
+    if (!studentId) return;
+
+    setOppApplyingId(opp.id);
+    try {
+      await expressInterest(opp.id, studentId);
+      setAppliedOpps(prev => new Set(prev).add(opp.id));
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Failed to express interest / apply.');
+    } finally {
+      setOppApplyingId(null);
+    }
+  };
+
+  const renderOpportunityCard = (opp: any) => {
+    const isApplied = appliedOpps.has(opp.id) || opp.already_interested;
+    const isSubmittingThis = oppApplyingId === opp.id;
+
+    const typeBadges: Record<string, { label: string; color: string }> = {
+      referral: { label: "Alumni Referral", color: "bg-purple-50 text-purple-700 border-purple-200" },
+      internship: { label: "Internship", color: "bg-blue-50 text-blue-700 border-blue-200" },
+      mentorship: { label: "Mentorship", color: "bg-teal-50 text-teal-700 border-teal-200" },
+      job: { label: "Direct Job", color: "bg-indigo-50 text-indigo-700 border-indigo-200" },
+      opensource: { label: "Open Source", color: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+    };
+
+    const typeInfo = typeBadges[opp.type] || { label: opp.type, color: "bg-slate-50 text-slate-700 border-slate-200" };
+
+    return (
+      <div key={opp.id} className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm hover:shadow-md transition-all relative overflow-hidden">
+        {opp.from_my_college && (
+          <div className="absolute top-0 right-0 px-4 py-1.5 bg-amber-50 text-amber-800 border-b border-l border-amber-200 font-bold text-xs rounded-bl-xl flex items-center gap-1.5">
+            <GraduationCap className="w-3.5 h-3.5" /> From Your College Alumni
+          </div>
+        )}
+
+        <div className="flex justify-between items-start mb-4">
+          <div className="pr-20">
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className={`px-2.5 py-0.5 rounded-full border text-xs font-bold uppercase tracking-wider ${typeInfo.color}`}>
+                {typeInfo.label}
+              </span>
+            </div>
+            <h3 className="text-xl font-bold text-slate-800">{opp.title}</h3>
+            {opp.posted_by && (
+              <div className="flex flex-wrap items-center gap-2 text-slate-600 mt-2 text-sm font-medium">
+                <span className="flex items-center gap-1 text-slate-700 font-semibold">
+                  <Users className="w-4 h-4 text-indigo-600" /> {opp.posted_by.name}
+                </span>
+                {opp.posted_by.current_company && (
+                  <span>• {opp.posted_by.current_company}</span>
+                )}
+                {opp.posted_by.current_job_role && (
+                  <span className="text-slate-500">({opp.posted_by.current_job_role})</span>
+                )}
+                {opp.posted_by.linkedin_url && (
+                  <a 
+                    href={opp.posted_by.linkedin_url.startsWith('http') ? opp.posted_by.linkedin_url : `https://${opp.posted_by.linkedin_url}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center text-xs text-blue-600 hover:underline gap-0.5 ml-1"
+                  >
+                    LinkedIn <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="mt-1 shrink-0">
+            {isApplied ? (
+              <span className="flex items-center gap-1.5 px-4 py-2 bg-green-50 text-green-700 text-sm font-bold rounded-lg border border-green-200">
+                <CheckCircle2 className="w-4 h-4" /> Applied
+              </span>
+            ) : (
+              <button
+                onClick={() => handleApplyOpportunity(opp)}
+                disabled={isSubmittingThis}
+                className="flex items-center gap-2 px-5 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors shadow-sm"
+              >
+                <Briefcase className="w-4 h-4" /> {isSubmittingThis ? 'Applying...' : 'Apply / Express Interest'}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {opp.description && (
+          <p className="text-sm text-slate-600 mt-2 whitespace-pre-wrap leading-relaxed">{opp.description}</p>
+        )}
+      </div>
+    );
+  };
+
   if (loading) return <div className="p-8 text-center text-slate-500 min-h-screen">Loading Opportunities...</div>;
 
   const currentJobs = activeTab === 'eligible' ? eligibleJobs : allJobs;
@@ -127,14 +233,14 @@ export default function StudentJobsPage() {
   return (
     <div className="p-6 md:p-10 max-w-5xl mx-auto min-h-screen">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-slate-800 mb-2">Job Board</h1>
-        <p className="text-slate-500">Discover roles curated for your skill profile.</p>
+        <h1 className="text-3xl font-bold text-slate-800 mb-2">Opportunities & Job Board</h1>
+        <p className="text-slate-500">Discover company roles and alumni opportunities curated for you.</p>
       </div>
 
-      <div className="flex gap-4 mb-8">
+      <div className="flex flex-wrap gap-3 mb-8">
         <button
           onClick={() => setActiveTab('eligible')}
-          className={`px-6 py-2.5 rounded-full text-sm font-bold transition-colors ${
+          className={`px-5 py-2.5 rounded-full text-sm font-bold transition-colors ${
             activeTab === 'eligible' 
               ? 'bg-indigo-600 text-white shadow-md' 
               : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
@@ -142,22 +248,53 @@ export default function StudentJobsPage() {
         >
           <div className="flex items-center gap-2">
             <Zap className={`w-4 h-4 ${activeTab === 'eligible' ? 'fill-indigo-400 text-indigo-400' : ''}`} />
-            Eligible For Me
+            Eligible Company Jobs ({eligibleJobs.length})
           </div>
         </button>
+
         <button
           onClick={() => setActiveTab('all')}
-          className={`px-6 py-2.5 rounded-full text-sm font-bold transition-colors ${
+          className={`px-5 py-2.5 rounded-full text-sm font-bold transition-colors ${
             activeTab === 'all' 
               ? 'bg-indigo-600 text-white shadow-md' 
               : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
           }`}
         >
-          Browse All Jobs
+          Browse All Company Jobs ({allJobs.length})
+        </button>
+
+        <button
+          onClick={() => setActiveTab('alumni')}
+          className={`px-5 py-2.5 rounded-full text-sm font-bold transition-colors ${
+            activeTab === 'alumni' 
+              ? 'bg-indigo-600 text-white shadow-md' 
+              : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <GraduationCap className="w-4 h-4" />
+            Alumni Opportunities & Referrals ({alumniOpportunities.length})
+          </div>
         </button>
       </div>
 
-      {currentJobs.length === 0 ? (
+      {activeTab === 'alumni' ? (
+        alumniOpportunities.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-slate-200 p-16 text-center shadow-sm">
+            <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-400">
+              <GraduationCap className="w-8 h-8" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-700 mb-2">No alumni opportunities right now</h3>
+            <p className="text-slate-500 text-sm">
+              Alumni haven't posted any open referrals or opportunities yet. Check back soon!
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {alumniOpportunities.map(opp => renderOpportunityCard(opp))}
+          </div>
+        )
+      ) : currentJobs.length === 0 ? (
         <div className="bg-white rounded-2xl border border-slate-200 p-16 text-center shadow-sm">
           <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-400">
             <Briefcase className="w-8 h-8" />

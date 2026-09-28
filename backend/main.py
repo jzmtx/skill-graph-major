@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
 from dotenv import load_dotenv
+import asyncio
 
 # We will import our routers here
 from routes import auth, colleges, skills, assessment, project, admin, roadmaps, resources, company, jobs, tpo, alumni, upload
@@ -19,12 +20,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+async def periodic_refresh():
+    """Refreshes the Supabase client every few minutes to prevent stale connections."""
+    while True:
+        await asyncio.sleep(240)  # 4 minutes
+        database.refresh_supabase()
+        print("🔄 Supabase client refreshed (periodic)")
 
 @app.on_event("startup")
 async def startup_event():
     """Refresh the Supabase client on startup to clear any stale JWT sessions."""
     database.refresh_supabase()
     print("✅ Supabase client refreshed on startup")
+    asyncio.create_task(periodic_refresh())
 
 @app.get("/")
 def health_check():

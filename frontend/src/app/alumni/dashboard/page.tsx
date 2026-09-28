@@ -10,7 +10,8 @@ import {
   getCollegeStudents,
 } from '@/lib/alumniApi';
 import { useRouter } from 'next/navigation';
-import { Users, Plus, X, UserCheck, Briefcase, GraduationCap, ChevronDown, ChevronUp } from 'lucide-react';
+import { Users, Plus, X, UserCheck, Briefcase, GraduationCap, ChevronDown, ChevronUp, Eye, Sparkles } from 'lucide-react';
+import StudentProfileModal, { StudentProfileData } from '@/components/dashboard/StudentProfileModal';
 
 interface Opportunity {
   id: string;
@@ -23,8 +24,30 @@ interface Opportunity {
 }
 
 interface StudentWithSkills {
-  student: { id: string; name: string; email: string; branch?: string; year?: number; github_url?: string };
-  skills: { skill_name: string; verification_level: number }[];
+  student: { 
+    id: string; 
+    name: string; 
+    email: string; 
+    branch?: string; 
+    year?: number; 
+    phone?: string;
+    usn?: string;
+    github_url?: string; 
+    linkedin_url?: string;
+    college_id?: string;
+  };
+  college_name?: string;
+  skills: { 
+    skill_name: string; 
+    verification_level: number;
+    skill_score?: number;
+    source?: string;
+  }[];
+  hireability?: {
+    score: number;
+    breakdown?: any;
+  };
+  expressed_at?: string;
 }
 
 export default function AlumniDashboardPage() {
@@ -34,6 +57,7 @@ export default function AlumniDashboardPage() {
   const [alumni, setAlumni] = useState<{ id: string; name: string; is_verified: boolean } | null>(null);
   const [college, setCollege] = useState<{ name: string } | null>(null);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  const [selectedStudentProfile, setSelectedStudentProfile] = useState<StudentProfileData | null>(null);
 
   const [showForm, setShowForm] = useState(false);
   const [formLoading, setFormLoading] = useState(false);
@@ -287,17 +311,49 @@ export default function AlumniDashboardPage() {
                         ) : (
                           <div className="space-y-2">
                             {interestedStudents.map((s, i) => (
-                              <div key={i} className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2">
-                                <div>
-                                  <p className="text-sm font-medium text-slate-800">{s.student.name}</p>
-                                  <p className="text-xs text-slate-400">{s.student.email} {s.student.branch ? `· ${s.student.branch}` : ''}</p>
+                              <div key={i} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 border border-slate-200/80 rounded-xl p-3.5 hover:bg-slate-100/70 transition-colors">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <p className="text-sm font-bold text-slate-800">{s.student.name}</p>
+                                    {s.hireability && (
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-100 text-indigo-800 text-[11px] font-extrabold rounded-md">
+                                        <Sparkles className="w-3 h-3 text-indigo-600" /> Score: {s.hireability.score}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-xs text-slate-500 mt-0.5">
+                                    {s.student.email} {s.student.branch ? `· ${s.student.branch}` : ''} {s.student.year ? `· Year ${s.student.year}` : ''}
+                                  </p>
                                 </div>
-                                <div className="flex flex-wrap gap-1 justify-end max-w-xs">
-                                  {s.skills.slice(0, 4).map((sk, j) => (
-                                    <span key={j} className="px-1.5 py-0.5 bg-white text-slate-500 text-xs rounded border border-slate-200">
-                                      {sk.skill_name}
-                                    </span>
-                                  ))}
+
+                                <div className="flex items-center gap-3 self-end sm:self-auto">
+                                  <div className="flex flex-wrap gap-1 justify-end max-w-xs">
+                                    {s.skills.slice(0, 3).map((sk, j) => (
+                                      <span key={j} className="px-2 py-0.5 bg-white text-slate-600 text-xs rounded border border-slate-200">
+                                        {sk.skill_name}{sk.verification_level >= 1 ? ' ✓' : ''}
+                                      </span>
+                                    ))}
+                                    {s.skills.length > 3 && (
+                                      <span className="text-[11px] text-slate-400 self-center">+{s.skills.length - 3}</span>
+                                    )}
+                                  </div>
+
+                                  <button
+                                    onClick={() => setSelectedStudentProfile({
+                                      student: s.student,
+                                      college_name: s.college_name || college?.name,
+                                      skills: s.skills,
+                                      hireability: s.hireability,
+                                      extraDetails: {
+                                        expressed_at: s.expressed_at,
+                                        opportunity_title: opp.title,
+                                        opportunity_type: opp.type
+                                      }
+                                    })}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg transition-colors shadow-xs"
+                                  >
+                                    <Eye className="w-3.5 h-3.5" /> View Profile
+                                  </button>
                                 </div>
                               </div>
                             ))}
@@ -333,25 +389,47 @@ export default function AlumniDashboardPage() {
                 ) : (
                   <div className="space-y-2">
                     {collegeStudents.map((s, i) => (
-                      <div key={i} className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2">
-                        <div>
-                          <p className="text-sm font-medium text-slate-800">{s.student.name}</p>
-                          <p className="text-xs text-slate-400">
+                      <div key={i} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 border border-slate-200/80 rounded-xl p-3.5 hover:bg-slate-100/70 transition-colors">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-bold text-slate-800">{s.student.name}</p>
+                            {s.hireability && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-100 text-indigo-800 text-[11px] font-extrabold rounded-md">
+                                <Sparkles className="w-3 h-3 text-indigo-600" /> Score: {s.hireability.score}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-500 mt-0.5">
                             {s.student.email}
                             {s.student.branch ? ` · ${s.student.branch}` : ''}
                             {s.student.year ? ` · Year ${s.student.year}` : ''}
                           </p>
                         </div>
-                        <div className="flex flex-wrap gap-1 justify-end max-w-xs">
-                          {s.skills.length === 0 ? (
-                            <span className="text-xs text-slate-300">No skills yet</span>
-                          ) : (
-                            s.skills.slice(0, 5).map((sk, j) => (
-                              <span key={j} className="px-1.5 py-0.5 bg-white text-slate-500 text-xs rounded border border-slate-200">
-                                {sk.skill_name}{sk.verification_level >= 1 ? ' ✓' : ''}
-                              </span>
-                            ))
-                          )}
+
+                        <div className="flex items-center gap-3 self-end sm:self-auto">
+                          <div className="flex flex-wrap gap-1 justify-end max-w-xs">
+                            {s.skills.length === 0 ? (
+                              <span className="text-xs text-slate-400">No skills yet</span>
+                            ) : (
+                              s.skills.slice(0, 3).map((sk, j) => (
+                                <span key={j} className="px-2 py-0.5 bg-white text-slate-600 text-xs rounded border border-slate-200">
+                                  {sk.skill_name}{sk.verification_level >= 1 ? ' ✓' : ''}
+                                </span>
+                              ))
+                            )}
+                          </div>
+
+                          <button
+                            onClick={() => setSelectedStudentProfile({
+                              student: s.student,
+                              college_name: college?.name,
+                              skills: s.skills,
+                              hireability: s.hireability
+                            })}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg transition-colors shadow-xs"
+                          >
+                            <Eye className="w-3.5 h-3.5" /> View Profile
+                          </button>
                         </div>
                       </div>
                     ))}
@@ -362,6 +440,12 @@ export default function AlumniDashboardPage() {
           </>
         )}
       </div>
+
+      {/* Student Profile Modal */}
+      <StudentProfileModal
+        data={selectedStudentProfile}
+        onClose={() => setSelectedStudentProfile(null)}
+      />
     </div>
   );
 }

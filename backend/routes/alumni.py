@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List
 from database import supabase
+from services.hireability import calculate_hireability_index
 
 router = APIRouter()
 
@@ -172,18 +173,18 @@ async def get_college_students(alumni_id: str):
 
     try:
         students = supabase.table("students").select(
-            "id, name, email, branch, year, github_url"
+            "id, name, email, branch, year, phone, usn, github_url, linkedin_url, college_id"
         ).eq("college_id", college_id).execute()
 
         enriched = []
         for s in students.data:
-            skills = supabase.table("student_skills").select(
-                "skill_name, verification_level"
-            ).eq("student_id", s["id"]).execute()
+            skills = supabase.table("student_skills").select("*").eq("student_id", s["id"]).execute()
+            hireability = calculate_hireability_index(skills.data or [])
 
             enriched.append({
                 "student": s,
-                "skills": skills.data
+                "skills": skills.data or [],
+                "hireability": hireability
             })
 
         return {"students": enriched}
@@ -265,29 +266,31 @@ async def browse_opportunities():
 
 @router.get("/opportunities/for-student/{student_id}")
 async def get_opportunities_for_student(student_id: str):
-    """Student-facing board of alumni-posted Job and Open Source opportunities,
-    restricted to alumni from the SAME college as the student.
-
-    Takes the student's primary students.id directly (matches how this app
-    already stores it in localStorage and uses it elsewhere, e.g. applyToJob).
+    """Student-facing board of all active alumni-posted opportunities
+    (referrals, internships, mentorships, jobs, and open source).
+    Prioritizes opportunities from the student's own college alumni,
+    while also including verified opportunities across the platform.
     """
     try:
         student = supabase.table("students").select("id, college_id").eq("id", student_id).execute()
         if not student.data:
             raise HTTPException(status_code=404, detail="Student profile not found")
 
-        college_id = student.data[0]["college_id"]
+        student_college_id = student.data[0].get("college_id")
 
-        college_alumni = supabase.table("alumni").select("id, name, current_company, current_job_role, linkedin_url").eq("college_id", college_id).execute()
-        alumni_ids = [a["id"] for a in college_alumni.data]
-        alumni_by_id = {a["id"]: a for a in college_alumni.data}
-
-        if not alumni_ids:
+        # Fetch all verified alumni
+        verified_alumni = supabase.table("alumni").select(
+            "id, name, current_company, current_job_role, linkedin_url, college_id"
+        ).eq("is_verified", True).execute()
+        
+        if not verified_alumni.data:
             return {"opportunities": []}
+
+        alumni_by_id = {a["id"]: a for a in verified_alumni.data}
+        alumni_ids = list(alumni_by_id.keys())
 
         opps = supabase.table("opportunities").select("*") \
             .in_("alumni_id", alumni_ids) \
-            .in_("type", ["job", "opensource"]) \
             .eq("is_active", True) \
             .order("created_at", desc=True) \
             .execute()
@@ -297,11 +300,17 @@ async def get_opportunities_for_student(student_id: str):
 
         enriched = []
         for opp in opps.data:
+            alumnus = alumni_by_id.get(opp["alumni_id"])
+            from_my_college = bool(student_college_id and alumnus and alumnus.get("college_id") == student_college_id)
             enriched.append({
                 **opp,
-                "posted_by": alumni_by_id.get(opp["alumni_id"]),
+                "posted_by": alumnus,
+                "from_my_college": from_my_college,
                 "already_interested": opp["id"] in interested_opp_ids
             })
+
+        # Sort so same-college opportunities appear at top
+        enriched.sort(key=lambda x: (not x["from_my_college"], x.get("created_at", "")))
 
         return {"opportunities": enriched}
     except HTTPException:
@@ -360,7 +369,7 @@ async def express_interest(payload: ExpressInterest):
 
         existing = supabase.table("opportunity_interest").select("id").eq("opportunity_id", payload.opportunity_id).eq("student_id", payload.student_id).execute()
         if existing.data:
-            raise HTTPException(status_code=400, detail="You have already expressed interest in this opportunity")
+            raise HTTPException(status_code=400, detail="You have already applied or expressed interest in this opportunity")
 
         result = supabase.table("opportunity_interest").insert({
             "opportunity_id": payload.opportunity_id,
@@ -376,21 +385,35 @@ async def express_interest(payload: ExpressInterest):
 
 @router.get("/opportunities/{opportunity_id}/interested-students")
 async def get_interested_students(opportunity_id: str):
-    """Alumni-facing: lists students who expressed interest, with their skill profile."""
+    """Alumni-facing: lists students who expressed interest, with their full profile,
+    hireability score, and verified skills breakdown."""
     try:
-        interest = supabase.table("opportunity_interest").select("*").eq("opportunity_id", opportunity_id).execute()
+        interest = supabase.table("opportunity_interest").select("*").eq("opportunity_id", opportunity_id).order("expressed_at", desc=True).execute()
 
         enriched = []
         for record in interest.data:
-            student = supabase.table("students").select("id, name, email, branch, year, github_url").eq("id", record["student_id"]).execute()
+            student = supabase.table("students").select(
+                "id, name, email, branch, year, phone, usn, github_url, linkedin_url, college_id"
+            ).eq("id", record["student_id"]).execute()
             if not student.data:
                 continue
-            skills = supabase.table("student_skills").select("skill_name, verification_level").eq("student_id", record["student_id"]).execute()
+            student_info = student.data[0]
+
+            college_name = None
+            if student_info.get("college_id"):
+                coll = supabase.table("colleges").select("name").eq("id", student_info["college_id"]).execute()
+                if coll.data:
+                    college_name = coll.data[0]["name"]
+
+            skills = supabase.table("student_skills").select("*").eq("student_id", record["student_id"]).execute()
+            hireability = calculate_hireability_index(skills.data or [])
 
             enriched.append({
-                "student": student.data[0],
-                "skills": skills.data,
-                "expressed_at": record["expressed_at"]
+                "student": student_info,
+                "skills": skills.data or [],
+                "hireability": hireability,
+                "college_name": college_name,
+                "expressed_at": record.get("expressed_at")
             })
 
         return {"interested_students": enriched}

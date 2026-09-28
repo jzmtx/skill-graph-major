@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List, Dict
 from database import supabase
+from services.hireability import calculate_hireability_index
 
 router = APIRouter()
 
@@ -170,9 +171,37 @@ async def get_job_applicants(auth_id: str, job_id: str):
         if not job.data:
             raise HTTPException(status_code=404, detail="Job not found")
 
-        # Fetch applications with student details
-        apps = supabase.table("job_applications").select("*, students(id, name, email, branch)").eq("job_id", job_id).order("match_score", desc=True).execute()
-        return {"applicants": apps.data}
+        # Fetch applications for this job
+        apps = supabase.table("job_applications").select("*").eq("job_id", job_id).order("match_score", desc=True).execute()
+
+        enriched = []
+        for app in apps.data:
+            student_req = supabase.table("students").select(
+                "id, name, email, phone, branch, year, usn, github_url, linkedin_url, college_id"
+            ).eq("id", app["student_id"]).execute()
+            student_data = student_req.data[0] if student_req.data else None
+
+            skills_req = supabase.table("student_skills").select("*").eq("student_id", app["student_id"]).execute()
+            student_skills = skills_req.data or []
+
+            hireability = calculate_hireability_index(student_skills)
+
+            college_name = None
+            if student_data and student_data.get("college_id"):
+                coll = supabase.table("colleges").select("name").eq("id", student_data["college_id"]).execute()
+                if coll.data:
+                    college_name = coll.data[0]["name"]
+
+            enriched.append({
+                **app,
+                "student": student_data,
+                "students": student_data,  # backward compatibility for existing UI references
+                "college_name": college_name,
+                "skills": student_skills,
+                "hireability": hireability
+            })
+
+        return {"applicants": enriched}
     except HTTPException:
         raise
     except Exception as e:
