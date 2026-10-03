@@ -10,8 +10,9 @@ import {
   getCollegeStudents,
 } from '@/lib/alumniApi';
 import { useRouter } from 'next/navigation';
-import { Users, Plus, X, UserCheck, Briefcase, GraduationCap, ChevronDown, ChevronUp, Eye, Sparkles } from 'lucide-react';
+import { Users, Plus, X, UserCheck, Briefcase, GraduationCap, ChevronDown, ChevronUp, Eye, Sparkles, GitBranch } from 'lucide-react';
 import StudentProfileModal, { StudentProfileData } from '@/components/dashboard/StudentProfileModal';
+import AlumniOpenSourceManager from '@/components/alumni/AlumniOpenSourceManager';
 
 interface Opportunity {
   id: string;
@@ -69,6 +70,7 @@ export default function AlumniDashboardPage() {
   const [expandedOppId, setExpandedOppId] = useState<string | null>(null);
   const [interestedStudents, setInterestedStudents] = useState<StudentWithSkills[]>([]);
   const [interestedLoading, setInterestedLoading] = useState(false);
+  const [dashboardTab, setDashboardTab] = useState<'opportunities' | 'opensource' | 'students'>('opportunities');
 
   // --- College Students section ---
   const [showCollegeStudents, setShowCollegeStudents] = useState(false);
@@ -203,19 +205,66 @@ export default function AlumniDashboardPage() {
           </div>
         ) : (
           <>
-            {/* Post Opportunity Button */}
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
-                <Briefcase className="w-5 h-5" /> Your Opportunities
-              </h2>
+            {/* Tab Navigation */}
+            <div className="flex gap-2 border-b border-slate-200 mb-6 pb-0 overflow-x-auto">
               <button
-                onClick={() => setShowForm(!showForm)}
-                className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700"
+                onClick={() => setDashboardTab('opensource')}
+                className={`px-4 py-2.5 font-bold text-xs rounded-t-xl transition-all flex items-center gap-2 border-b-2 ${
+                  dashboardTab === 'opensource'
+                    ? 'border-indigo-600 text-indigo-700 bg-white shadow-xs'
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
               >
-                {showForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-                {showForm ? 'Cancel' : 'Post Opportunity'}
+                <GitBranch className="w-4 h-4" />
+                Open Source Projects
+              </button>
+              <button
+                onClick={() => setDashboardTab('opportunities')}
+                className={`px-4 py-2.5 font-bold text-xs rounded-t-xl transition-all flex items-center gap-2 border-b-2 ${
+                  dashboardTab === 'opportunities'
+                    ? 'border-indigo-600 text-indigo-700 bg-white shadow-xs'
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <Briefcase className="w-4 h-4" />
+                Referrals & Mentorship ({opportunities.length})
+              </button>
+              <button
+                onClick={() => {
+                  setDashboardTab('students');
+                  if (!collegeStudentsLoaded && alumni) toggleCollegeStudents();
+                }}
+                className={`px-4 py-2.5 font-bold text-xs rounded-t-xl transition-all flex items-center gap-2 border-b-2 ${
+                  dashboardTab === 'students'
+                    ? 'border-indigo-600 text-indigo-700 bg-white shadow-xs'
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <GraduationCap className="w-4 h-4" />
+                College Students
               </button>
             </div>
+
+            {/* TAB: OPEN SOURCE PROJECTS */}
+            {dashboardTab === 'opensource' && alumni && (
+              <AlumniOpenSourceManager alumniId={alumni.id} collegeName={college?.name} />
+            )}
+
+            {/* TAB: GENERAL OPPORTUNITIES */}
+            {dashboardTab === 'opportunities' && (
+              <>
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                    <Briefcase className="w-5 h-5" /> Your Opportunities
+                  </h2>
+                  <button
+                    onClick={() => setShowForm(!showForm)}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700"
+                  >
+                    {showForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                    {showForm ? 'Cancel' : 'Post Opportunity'}
+                  </button>
+                </div>
 
             {/* New Opportunity Form */}
             {showForm && (
@@ -365,23 +414,23 @@ export default function AlumniDashboardPage() {
                 ))}
               </div>
             )}
+          </>
+        )}
 
-            {/* College Students Section */}
+        {/* TAB: COLLEGE STUDENTS */}
+        {dashboardTab === 'students' && (
+          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
                 <GraduationCap className="w-5 h-5" /> Students at {college?.name}
               </h2>
               <button
                 onClick={toggleCollegeStudents}
-                className="flex items-center gap-1.5 px-4 py-2 bg-slate-100 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-200"
+                className="flex items-center gap-1.5 px-4 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-200"
               >
-                {showCollegeStudents ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                {showCollegeStudents ? 'Hide' : 'View Students'}
+                {collegeStudentsLoading ? 'Refreshing...' : 'Refresh List'}
               </button>
             </div>
-
-            {showCollegeStudents && (
-              <div className="bg-white rounded-xl border border-slate-200 p-5">
                 {collegeStudentsLoading ? (
                   <p className="text-sm text-slate-400">Loading students...</p>
                 ) : collegeStudents.length === 0 ? (

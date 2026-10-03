@@ -105,7 +105,14 @@ async def login_company(payload: CompanyLogin):
         # Fetch recruiter profile
         recruiter = supabase.table("recruiters").select("*").eq("auth_id", user.id).execute()
         if not recruiter.data:
-            raise HTTPException(status_code=403, detail="User is not registered as a Recruiter")
+            fallback = supabase.table("recruiters").select("*").eq("email", payload.email).execute()
+            if fallback.data:
+                rec_official = fallback.data[0]
+                supabase.table("recruiters").update({"auth_id": user.id}).eq("id", rec_official["id"]).execute()
+                rec_official["auth_id"] = user.id
+                recruiter.data = [rec_official]
+            else:
+                raise HTTPException(status_code=403, detail="User is not registered as a Recruiter")
             
         # Fetch company profile
         profile = supabase.table("companies").select("*").eq("id", recruiter.data[0]["company_id"]).execute()
@@ -117,6 +124,8 @@ async def login_company(payload: CompanyLogin):
             "company": profile.data[0],
             "auth_id": user.id
         }
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback
         traceback.print_exc()

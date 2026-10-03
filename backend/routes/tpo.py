@@ -88,7 +88,14 @@ async def login_tpo(payload: TPOLogin):
 
         tpo_response = supabase.table("tpo_officials").select("*").eq("auth_id", user_id).execute()
         if not tpo_response.data:
-            raise HTTPException(status_code=404, detail="TPO profile not found")
+            fallback = supabase.table("tpo_officials").select("*").eq("email", payload.email).execute()
+            if fallback.data:
+                tpo_official = fallback.data[0]
+                supabase.table("tpo_officials").update({"auth_id": user_id}).eq("id", tpo_official["id"]).execute()
+                tpo_official["auth_id"] = user_id
+                tpo_response.data = [tpo_official]
+            else:
+                raise HTTPException(status_code=404, detail="TPO profile not found")
 
         tpo_data = tpo_response.data[0]
         college = supabase.table("colleges").select("*").eq("id", tpo_data["college_id"]).execute()

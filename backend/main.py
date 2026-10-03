@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 import asyncio
 
 # We will import our routers here
-from routes import auth, colleges, skills, assessment, project, admin, roadmaps, resources, company, jobs, tpo, alumni, upload
+from routes import auth, colleges, skills, assessment, project, admin, roadmaps, resources, company, jobs, tpo, alumni, upload, opensource
 import database
 
 load_dotenv()
@@ -52,5 +52,6 @@ app.include_router(company.router, prefix="/api/company", tags=["Company"])
 app.include_router(jobs.router, prefix="/api/jobs", tags=["Jobs"])
 app.include_router(tpo.router, prefix="/api/tpo", tags=["TPO"])
 app.include_router(alumni.router, prefix="/api/alumni", tags=["Alumni"])
+app.include_router(opensource.router, prefix="/api/opensource", tags=["Open Source"])
 
 app.include_router(upload.router, prefix="/api/upload", tags=["Upload"])

@@ -72,8 +72,12 @@ export default function LoginPage() {
         window.location.href = '/alumni/dashboard';
       }
     } catch (err: unknown) {
-      const error = err as { response?: { data?: { detail?: string } } };
-      setError(error.response?.data?.detail || "Invalid login credentials");
+      const error = err as { response?: { data?: { detail?: string } }; message?: string };
+      if (!error.response) {
+        setError("Unable to connect to the server. Please ensure the backend is running on port 8000.");
+      } else {
+        setError(error.response?.data?.detail || "Invalid login credentials");
+      }
     } finally {
       setLoading(false);
     }

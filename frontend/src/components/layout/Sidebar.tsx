@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Compass, Map, Trophy, Briefcase, UserCircle, LogOut } from 'lucide-react';
+import { Home, Compass, Map, Trophy, Briefcase, UserCircle, LogOut, GitBranch } from 'lucide-react';
 
 const navItems = [
   { name: 'Dashboard', href: '/dashboard', icon: Home },
@@ -10,6 +10,7 @@ const navItems = [
   { name: 'My Roadmaps', href: '/dashboard/roadmap', icon: Map },
   { name: 'Verification', href: '/dashboard/verify', icon: Trophy },
   { name: 'Jobs', href: '/dashboard/jobs', icon: Briefcase },
+  { name: 'Open Source', href: '/dashboard/opensource', icon: GitBranch },
 ];
 
 export default function Sidebar() {
@@ -57,8 +58,8 @@ export default function Sidebar() {
       </aside>
 
       {/* Mobile Bottom Navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-50 flex justify-around p-3 pb-safe shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
-        {navItems.slice(0, 5).map((item) => {
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-50 flex justify-around p-2 pb-safe shadow-[0_-4px_20px_rgba(0,0,0,0.05)] overflow-x-auto">
+        {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = pathname === item.href;
           return (

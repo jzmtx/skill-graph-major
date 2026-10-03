@@ -74,17 +74,32 @@ async def login_student(req: StudentLoginRequest):
 
         user_id = auth_response.user.id
 
-        # 2. Fetch student profile from public.students
+        # 2. Fetch student profile from public.students by auth_id
         student_response = supabase.table("students").select("*").eq("auth_id", user_id).execute()
         
+        # Self-healing: if auth_id wasn't linked yet, find student by email and link auth_id
         if not student_response.data:
-            raise HTTPException(status_code=404, detail="Student profile not found")
+            fallback = supabase.table("students").select("*").eq("email", req.email).execute()
+            if fallback.data:
+                student = fallback.data[0]
+                supabase.table("students").update({"auth_id": user_id}).eq("id", student["id"]).execute()
+                student["auth_id"] = user_id
+                return {"message": "Login successful", "user": student}
+            raise HTTPException(status_code=404, detail="Student profile not found. Please contact support or register again.")
 
         return {"message": "Login successful", "user": student_response.data[0]}
 
+    except HTTPException:
+        raise
     except Exception as e:
         print("LOGIN ERROR:", repr(e))
-        raise HTTPException(status_code=401, detail="Invalid email or password. Or you might need to confirm your email.")
+        err_str = str(e).lower()
+        if "invalid login credentials" in err_str or "invalid_grant" in err_str:
+            raise HTTPException(status_code=401, detail="Invalid email or password.")
+        elif "email not confirmed" in err_str:
+            raise HTTPException(status_code=401, detail="Please confirm your email address before logging in.")
+        else:
+            raise HTTPException(status_code=401, detail="Invalid email or password.")
 @router.post("/dev-login")
 async def dev_login():
     try:
