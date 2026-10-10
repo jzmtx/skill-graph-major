@@ -3,10 +3,14 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from database import supabase
 from services.hireability import calculate_hireability_index
+from cachetools import TTLCache
 import uuid
 from datetime import datetime
 
 router = APIRouter()
+
+# Global cache for open source projects
+os_projects_cache = TTLCache(maxsize=100, ttl=300)
 
 # In-memory fallback stores in case database migration hasn't been run yet in Supabase
 _MEM_PROJECTS: List[Dict[str, Any]] = []
@@ -14,6 +18,7 @@ _MEM_APPLICATIONS: List[Dict[str, Any]] = []
 _MEM_GROUPS: List[Dict[str, Any]] = []
 _MEM_GROUP_MEMBERS: List[Dict[str, Any]] = []
 _MEM_PERFORMANCE_LOGS: List[Dict[str, Any]] = []
+_MEM_PROJECT_MESSAGES: List[Dict[str, Any]] = []
 
 # ============================================================
 # Pydantic Schemas
@@ -42,6 +47,9 @@ class ApplicationCreate(BaseModel):
     student_id: str
     pitch: Optional[str] = None
 
+class ApplicationStatusUpdate(BaseModel):
+    status: str
+
 class GroupCreate(BaseModel):
     project_id: str
     name: str
@@ -59,6 +67,12 @@ class PerformanceLogCreate(BaseModel):
     score: float      # 0 to 100
     week_label: Optional[str] = "Week 1"
     feedback: Optional[str] = None
+
+class MessageCreate(BaseModel):
+    sender_type: str
+    sender_id: str
+    sender_name: Optional[str] = "User"
+    message: str
 
 # ============================================================
 # Helpers
@@ -88,6 +102,10 @@ async def list_projects(alumni_id: Optional[str] = None):
     projects = []
     use_mem = False
 
+    cache_key = f"os_projects_{alumni_id}"
+    if cache_key in os_projects_cache:
+        return {"projects": os_projects_cache[cache_key]}
+
     try:
         query = supabase.table("open_source_projects").select("*").order("created_at", desc=True)
         if alumni_id:
@@ -103,44 +121,56 @@ async def list_projects(alumni_id: Optional[str] = None):
     if use_mem:
         projects = [p for p in _MEM_PROJECTS if (not alumni_id or p.get("alumni_id") == alumni_id)]
 
-    # Enrich projects with alumni details and applicant counts
-    enriched = []
-    for p in projects:
-        alumnus = None
-        applicant_count = 0
-        group_count = 0
+    if not projects:
+        return {"projects": []}
 
-        # fetch alumni
+    project_ids = [p["id"] for p in projects]
+    alumni_ids = list(set([p["alumni_id"] for p in projects if p.get("alumni_id")]))
+
+    # Batch fetch alumni
+    alumni_map = {}
+    if alumni_ids:
         try:
-            a_res = supabase.table("alumni").select("id, name, current_company, current_job_role, college_id").eq("id", p.get("alumni_id")).execute()
+            a_res = supabase.table("alumni").select("id, name, current_company, current_job_role, college_id").in_("id", alumni_ids).execute()
             if a_res.data:
-                alumnus = a_res.data[0]
+                alumni_map = {a["id"]: a for a in a_res.data}
         except Exception:
             pass
 
-        # count applicants
-        try:
-            app_res = supabase.table("open_source_applications").select("id").eq("project_id", p.get("id")).execute()
-            if app_res.data:
-                applicant_count = len(app_res.data)
-        except Exception:
-            applicant_count = len([a for a in _MEM_APPLICATIONS if a.get("project_id") == p.get("id")])
+    # Batch fetch applications
+    app_counts = {}
+    try:
+        app_res = supabase.table("open_source_applications").select("id, project_id").in_("project_id", project_ids).execute()
+        if app_res.data:
+            for app in app_res.data:
+                app_counts[app["project_id"]] = app_counts.get(app["project_id"], 0) + 1
+    except Exception:
+        for app in _MEM_APPLICATIONS:
+            if app.get("project_id") in project_ids:
+                app_counts[app["project_id"]] = app_counts.get(app["project_id"], 0) + 1
 
-        # count groups
-        try:
-            g_res = supabase.table("open_source_groups").select("id").eq("project_id", p.get("id")).execute()
-            if g_res.data:
-                group_count = len(g_res.data)
-        except Exception:
-            group_count = len([g for g in _MEM_GROUPS if g.get("project_id") == p.get("id")])
+    # Batch fetch groups
+    group_counts = {}
+    try:
+        g_res = supabase.table("open_source_groups").select("id, project_id").in_("project_id", project_ids).execute()
+        if g_res.data:
+            for g in g_res.data:
+                group_counts[g["project_id"]] = group_counts.get(g["project_id"], 0) + 1
+    except Exception:
+        for g in _MEM_GROUPS:
+            if g.get("project_id") in project_ids:
+                group_counts[g["project_id"]] = group_counts.get(g["project_id"], 0) + 1
 
+    enriched = []
+    for p in projects:
         enriched.append({
             **p,
-            "posted_by": alumnus,
-            "applicant_count": applicant_count,
-            "group_count": group_count
+            "posted_by": alumni_map.get(p.get("alumni_id")),
+            "applicant_count": app_counts.get(p["id"], 0),
+            "group_count": group_counts.get(p["id"], 0)
         })
 
+    os_projects_cache[cache_key] = enriched
     return {"projects": enriched}
 
 
@@ -212,13 +242,16 @@ async def create_project(payload: ProjectCreate):
     try:
         res = supabase.table("open_source_projects").insert(record).execute()
         if res.data:
+            os_projects_cache.clear()
             return {"project": res.data[0]}
     except Exception as e:
         # Fallback to memory
         _MEM_PROJECTS.insert(0, record)
+        os_projects_cache.clear()
         return {"project": record, "note": "stored in server cache"}
 
     _MEM_PROJECTS.insert(0, record)
+    os_projects_cache.clear()
     return {"project": record}
 
 
@@ -232,6 +265,7 @@ async def update_project(project_id: str, payload: ProjectUpdate):
     try:
         res = supabase.table("open_source_projects").update(updates).eq("id", project_id).execute()
         if res.data:
+            os_projects_cache.clear()
             return {"project": res.data[0]}
     except Exception:
         pass
@@ -240,6 +274,7 @@ async def update_project(project_id: str, payload: ProjectUpdate):
     for p in _MEM_PROJECTS:
         if p.get("id") == project_id:
             p.update(updates)
+            os_projects_cache.clear()
             return {"project": p}
 
     raise HTTPException(status_code=404, detail="Project not found")
@@ -295,6 +330,35 @@ async def apply_to_project(payload: ApplicationCreate):
     return {"application": record}
 
 
+@router.patch("/applications/{application_id}/status")
+async def update_application_status(application_id: str, payload: ApplicationStatusUpdate):
+    """Updates the status of a student's open source application (e.g. to 'referred' or 'hired')."""
+    try:
+        res = supabase.table("open_source_applications").update({"status": payload.status}).eq("id", application_id).execute()
+        
+        # Ensure memory is updated just in case DB doesn't have it or student queries memory next
+        for a in _MEM_APPLICATIONS:
+            if a.get("id") == application_id:
+                a["status"] = payload.status
+
+        # if no exception was raised by supabase, the update was successful
+        if res.data:
+            return {"application": res.data[0]}
+        else:
+            return {"application": {"id": application_id, "status": payload.status}}
+    except Exception as e:
+        print("EXCEPTION IN UPDATE APPLICATION STATUS:", e)
+        pass
+
+    # fallback memory
+    for a in _MEM_APPLICATIONS:
+        if a.get("id") == application_id:
+            a["status"] = payload.status
+            return {"application": a}
+            
+    raise HTTPException(status_code=404, detail="Application not found")
+
+
 @router.get("/projects/{project_id}/applicants")
 async def get_project_applicants(project_id: str):
     """Alumni view: Lists all students who applied for this project with profile, skills, and hireability."""
@@ -306,61 +370,80 @@ async def get_project_applicants(project_id: str):
     except Exception:
         raw_apps = [a for a in _MEM_APPLICATIONS if a.get("project_id") == project_id]
 
+    if not raw_apps:
+        return {"applicants": []}
+
+    student_ids = [app["student_id"] for app in raw_apps]
+
+    # Batch fetch students
+    students_map = {}
+    colleges_map = {}
+    try:
+        s_res = supabase.table("students").select("id, name, email, branch, year, phone, usn, github_url, linkedin_url, college_id").in_("id", student_ids).execute()
+        if s_res.data:
+            students_map = {s["id"]: s for s in s_res.data}
+            college_ids = list(set([s["college_id"] for s in s_res.data if s.get("college_id")]))
+            if college_ids:
+                c_res = supabase.table("colleges").select("id, name").in_("id", college_ids).execute()
+                if c_res.data:
+                    colleges_map = {c["id"]: c["name"] for c in c_res.data}
+    except Exception:
+        pass
+
+    # Batch fetch skills
+    skills_map = {}
+    try:
+        sk_res = supabase.table("student_skills").select("*").in_("student_id", student_ids).execute()
+        if sk_res.data:
+            for skill in sk_res.data:
+                sid = skill["student_id"]
+                if sid not in skills_map:
+                    skills_map[sid] = []
+                skills_map[sid].append(skill)
+    except Exception:
+        pass
+
+    # Batch fetch group memberships
+    groups_map = {}
+    try:
+        g_res = supabase.table("open_source_groups").select("id, name").eq("project_id", project_id).execute()
+        if g_res.data:
+            g_ids = [g["id"] for g in g_res.data]
+            if g_ids:
+                gm_res = supabase.table("open_source_group_members").select("group_id, student_id, role").in_("student_id", student_ids).in_("group_id", g_ids).execute()
+                if gm_res.data:
+                    for gm in gm_res.data:
+                        matched_g = next((g for g in g_res.data if g["id"] == gm["group_id"]), None)
+                        if matched_g:
+                            groups_map[gm["student_id"]] = {**matched_g, "role": gm.get("role", "contributor")}
+    except Exception:
+        mem_groups = [g for g in _MEM_GROUPS if g.get("project_id") == project_id]
+        for g in mem_groups:
+            for gm in _MEM_GROUP_MEMBERS:
+                if gm.get("group_id") == g.get("id") and gm.get("student_id") in student_ids:
+                    groups_map[gm.get("student_id")] = {**g, "role": gm.get("role", "contributor")}
+
     enriched = []
     for app in raw_apps:
-        student_info = None
-        skills_list = []
-        hireability = {"score": 300}
-        college_name = None
-
-        try:
-            s_res = supabase.table("students").select("id, name, email, branch, year, phone, usn, github_url, linkedin_url, college_id").eq("id", app.get("student_id")).execute()
-            if s_res.data:
-                student_info = s_res.data[0]
-                if student_info.get("college_id"):
-                    c_res = supabase.table("colleges").select("name").eq("id", student_info["college_id"]).execute()
-                    if c_res.data:
-                        college_name = c_res.data[0]["name"]
-        except Exception:
-            pass
+        sid = app.get("student_id")
+        student_info = students_map.get(sid)
 
         if not student_info:
             student_info = {
-                "id": app.get("student_id"),
+                "id": sid,
                 "name": "Student Contributor",
                 "email": "contributor@skillgraph.edu",
                 "branch": "Computer Science",
                 "year": 3
             }
+            
+        college_name = None
+        if student_info.get("college_id"):
+            college_name = colleges_map.get(student_info["college_id"])
 
-        try:
-            sk_res = supabase.table("student_skills").select("*").eq("student_id", app.get("student_id")).execute()
-            if sk_res.data:
-                skills_list = sk_res.data
-                hireability = calculate_hireability_index(skills_list)
-        except Exception:
-            pass
-
-        # check if student is in any group for this project
-        assigned_group = None
-        try:
-            g_res = supabase.table("open_source_groups").select("id, name").eq("project_id", project_id).execute()
-            if g_res.data:
-                g_ids = [g["id"] for g in g_res.data]
-                gm_res = supabase.table("open_source_group_members").select("group_id, role").eq("student_id", app.get("student_id")).in_("group_id", g_ids).execute()
-                if gm_res.data:
-                    gm = gm_res.data[0]
-                    matched_g = next((g for g in g_res.data if g["id"] == gm["group_id"]), None)
-                    if matched_g:
-                        assigned_group = {**matched_g, "role": gm.get("role", "contributor")}
-        except Exception:
-            # check memory
-            mem_groups = [g for g in _MEM_GROUPS if g.get("project_id") == project_id]
-            for g in mem_groups:
-                for gm in _MEM_GROUP_MEMBERS:
-                    if gm.get("group_id") == g.get("id") and gm.get("student_id") == app.get("student_id"):
-                        assigned_group = {**g, "role": gm.get("role", "contributor")}
-                        break
+        skills_list = skills_map.get(sid, [])
+        hireability = calculate_hireability_index(skills_list) if skills_list else {"score": 300}
+        assigned_group = groups_map.get(sid)
 
         enriched.append({
             "application_id": app.get("id"),
@@ -387,6 +470,13 @@ async def get_student_applications(student_id: str):
             apps = res.data
     except Exception:
         apps = [a for a in _MEM_APPLICATIONS if a.get("student_id") == student_id]
+
+    # Merge in-memory status overrides for applications
+    for app in apps:
+        app_id = app.get("id")
+        mem_match = next((a for a in _MEM_APPLICATIONS if a.get("id") == app_id), None)
+        if mem_match and mem_match.get("status"):
+            app["status"] = mem_match["status"]
 
     enriched = []
     for app in apps:
@@ -577,6 +667,83 @@ async def remove_student_from_group(group_id: str, student_id: str):
 
 
 # ============================================================
+# Messages & Communication Pipeline
+# ============================================================
+
+@router.get("/projects/{project_id}/messages")
+async def get_project_messages(project_id: str):
+    """Fetches all messages for a specific project team."""
+    try:
+        res = supabase.table("open_source_messages").select("*").eq("project_id", project_id).order("created_at", desc=False).execute()
+        if res.data is not None:
+            return {"messages": res.data}
+    except Exception:
+        pass
+        
+    messages = [m for m in _MEM_PROJECT_MESSAGES if m.get("project_id") == project_id]
+    return {"messages": messages}
+
+@router.post("/projects/{project_id}/messages")
+async def send_project_message(project_id: str, payload: MessageCreate):
+    """Sends a message to the project team chat."""
+    record = {
+        "id": str(uuid.uuid4()),
+        "project_id": project_id,
+        "sender_type": payload.sender_type,
+        "sender_id": payload.sender_id,
+        "sender_name": payload.sender_name,
+        "message": payload.message,
+        "created_at": datetime.utcnow().isoformat()
+    }
+    
+    try:
+        res = supabase.table("open_source_messages").insert(record).execute()
+        if res.data:
+            return {"message": res.data[0]}
+    except Exception:
+        pass
+        
+    _MEM_PROJECT_MESSAGES.append(record)
+    return {"message": record}
+
+@router.get("/applications/{application_id}/messages")
+async def get_application_messages(application_id: str):
+    """Fetches all 1-on-1 messages for a specific open source application."""
+    try:
+        res = supabase.table("open_source_application_messages").select("*").eq("application_id", application_id).order("created_at", desc=False).execute()
+        if res.data is not None:
+            return {"messages": res.data}
+    except Exception:
+        pass
+        
+    messages = [m for m in _MEM_PROJECT_MESSAGES if m.get("application_id") == application_id]
+    return {"messages": messages}
+
+@router.post("/applications/{application_id}/messages")
+async def send_application_message(application_id: str, payload: MessageCreate):
+    """Sends a 1-on-1 message in an open source application."""
+    record = {
+        "id": str(uuid.uuid4()),
+        "application_id": application_id,
+        "sender_type": payload.sender_type,
+        "sender_id": payload.sender_id,
+        "sender_name": payload.sender_name,
+        "message": payload.message,
+        "created_at": datetime.utcnow().isoformat()
+    }
+    
+    try:
+        res = supabase.table("open_source_application_messages").insert(record).execute()
+        if res.data:
+            return {"message": res.data[0]}
+    except Exception:
+        pass
+        
+    _MEM_PROJECT_MESSAGES.append(record)
+    return {"message": record}
+
+
+# ============================================================
 # Individual Student Performance Graph & Ratings
 # ============================================================
 
@@ -652,3 +819,24 @@ async def get_student_performance_graph(project_id: str, student_id: str):
         "weekly_progress": weekly_progress,
         "logs": logs
     }
+
+@router.delete('/messages/project/{message_id}')
+async def delete_os_project_message(message_id: str):
+    try:
+        supabase.table('open_source_messages').delete().eq('id', message_id).execute()
+        global _MEM_PROJECT_MESSAGES
+        _MEM_PROJECT_MESSAGES = [m for m in _MEM_PROJECT_MESSAGES if m.get('id') != message_id]
+        return {'success': True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete('/messages/application/{message_id}')
+async def delete_os_application_message(message_id: str):
+    try:
+        supabase.table('open_source_application_messages').delete().eq('id', message_id).execute()
+        global _MEM_PROJECT_MESSAGES
+        _MEM_PROJECT_MESSAGES = [m for m in _MEM_PROJECT_MESSAGES if m.get('id') != message_id]
+        return {'success': True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

@@ -362,7 +362,7 @@ async def get_pending_verifications():
 @router.get("/colleges/pending")
 async def get_pending_colleges():
     try:
-        res = supabase.table("colleges").select("*").eq("is_verified", False).execute()
+        res = supabase.table("colleges").select("*").eq("is_approved", False).execute()
         return res.data
     except Exception as e:
         import traceback
@@ -372,7 +372,7 @@ async def get_pending_colleges():
 @router.patch("/colleges/approve/{college_id}")
 async def approve_college(college_id: str):
     try:
-        res = supabase.table("colleges").update({"is_verified": True}).eq("id", college_id).execute()
+        res = supabase.table("colleges").update({"is_approved": True}).eq("id", college_id).execute()
         if not res.data:
             raise HTTPException(status_code=404, detail="College not found")
         return {"success": True, "college": res.data[0]}

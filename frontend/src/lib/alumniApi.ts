@@ -73,8 +73,27 @@ export const getInterestedStudents = async (opportunity_id: string) => {
   return response.data.interested_students;
 };
 
+export const updateInterestStatus = async (opportunity_id: string, student_id: string, status: string) => {
+  const response = await api.patch(`/api/alumni/opportunities/${opportunity_id}/interested-students/${student_id}/status`, { status });
+  return response.data;
+};
+
+export const getAlumniMessages = async (opportunity_id: string, student_id: string) => {
+  const response = await api.get(`/api/alumni/opportunities/${opportunity_id}/messages/${student_id}`);
+  return response.data.messages || [];
+};
+
+export const sendAlumniMessage = async (opportunity_id: string, student_id: string, payload: any) => {
+  const response = await api.post(`/api/alumni/opportunities/${opportunity_id}/messages/${student_id}`, payload);
+  return response.data.message;
+};
+
 // --- Student-facing: same-college Job/Open Source board ---
 export const getOpportunitiesForStudent = async (student_id: string) => {
   const response = await api.get(`/api/alumni/opportunities/for-student/${student_id}`);
   return response.data.opportunities;
+};
+export const deleteAlumniMessage = async (message_id: string) => {
+  const response = await api.delete(`/api/alumni/messages/${message_id}`);
+  return response.data;
 };

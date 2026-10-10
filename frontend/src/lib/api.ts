@@ -129,3 +129,13 @@ export const getWorkspaceResources = async (skill_id: string, role_name: string 
   const response = await api.get(`/api/resources/skills/${encodeURIComponent(skill_id)}/workspace?role_name=${encodeURIComponent(role_name)}`);
   return response.data;
 };
+
+export const getStudentInvitations = async (student_id: string) => {
+  const response = await api.get(`/api/auth/me/${student_id}/invitations`);
+  return response.data.invitations;
+};
+
+export const acceptStudentInvitation = async (student_id: string, link_id: string) => {
+  const response = await api.post(`/api/auth/me/${student_id}/invitations/${link_id}/accept`);
+  return response.data;
+};

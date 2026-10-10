@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Compass, Map, Trophy, Briefcase, UserCircle, LogOut, GitBranch } from 'lucide-react';
+import { Home, Compass, Map, Trophy, Briefcase, UserCircle, LogOut, GitBranch, Mail } from 'lucide-react';
 
 const navItems = [
   { name: 'Dashboard', href: '/dashboard', icon: Home },
@@ -10,6 +10,7 @@ const navItems = [
   { name: 'My Roadmaps', href: '/dashboard/roadmap', icon: Map },
   { name: 'Verification', href: '/dashboard/verify', icon: Trophy },
   { name: 'Jobs', href: '/dashboard/jobs', icon: Briefcase },
+  { name: 'Job Offers', href: '/dashboard/job-offers', icon: Mail },
   { name: 'Open Source', href: '/dashboard/opensource', icon: GitBranch },
 ];
 

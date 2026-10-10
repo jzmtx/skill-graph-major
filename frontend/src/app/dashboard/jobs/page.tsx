@@ -1,9 +1,11 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-import { getAllJobs, getEligibleJobs, applyToJob } from '@/lib/companyApi';
-import { getOpportunitiesForStudent, expressInterest } from '@/lib/alumniApi';
-import { Briefcase, Building2, CheckCircle2, Zap, X, GraduationCap, Users, ExternalLink, Sparkles } from 'lucide-react';
+import { getAllJobs, getEligibleJobs, applyToJob, getAppliedJobs } from '@/lib/companyApi';
+import { getOpportunitiesForStudent, expressInterest, getAlumniMessages, sendAlumniMessage, deleteAlumniMessage } from '@/lib/alumniApi';
+import { Briefcase, Building2, CheckCircle2, Zap, X, GraduationCap, Users, ExternalLink, Sparkles, MessageSquare, Send, Link as LinkIcon, Image as ImageIcon, Trash2 } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import { useRef } from 'react';
 
 export default function StudentJobsPage() {
   const [activeTab, setActiveTab] = useState<'all' | 'eligible' | 'alumni'>('eligible');
@@ -21,15 +23,25 @@ export default function StudentJobsPage() {
   const [appliedOpps, setAppliedOpps] = useState<Set<string>>(new Set());
   const [oppApplyingId, setOppApplyingId] = useState<string | null>(null);
 
+  // Chat State
+  const [chatOpp, setChatOpp] = useState<{opp_id: string, opp_title: string} | null>(null);
+  const [messages, setMessages] = useState<any[]>([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [loadingMsgs, setLoadingMsgs] = useState(false);
+  const [sendingMsg, setSendingMsg] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     const load = async () => {
       const studentId = localStorage.getItem('student_id');
       if (!studentId) return;
       try {
-        const [all, eligible, opps] = await Promise.all([
+        const [all, eligible, opps, applied] = await Promise.all([
           getAllJobs(),
           getEligibleJobs(studentId),
-          getOpportunitiesForStudent(studentId).catch(() => [])
+          getOpportunitiesForStudent(studentId).catch(() => []),
+          getAppliedJobs(studentId).catch(() => [])
         ]);
         setAllJobs(all || []);
         setEligibleJobs(eligible || []);
@@ -40,6 +52,12 @@ export default function StudentJobsPage() {
           if (o.already_interested) interestedSet.add(o.id);
         });
         setAppliedOpps(interestedSet);
+
+        const appliedSet = new Set<string>();
+        (applied || []).forEach((a: any) => {
+          appliedSet.add(a.job_id);
+        });
+        setAppliedJobs(appliedSet);
       } catch (e) {
         console.error(e);
       } finally {
@@ -147,6 +165,88 @@ export default function StudentJobsPage() {
     }
   };
 
+  const handleOpenChat = async (oppId: string, oppTitle: string) => {
+    const studentId = localStorage.getItem('student_id');
+    if (!studentId) return;
+    setChatOpp({ opp_id: oppId, opp_title: oppTitle });
+    setLoadingMsgs(true);
+    try {
+      const msgs = await getAlumniMessages(oppId, studentId);
+      setMessages(msgs || []);
+    } catch(e) {}
+    setLoadingMsgs(false);
+  };
+
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const studentId = localStorage.getItem('student_id');
+    const studentName = localStorage.getItem('student_name') || 'Student';
+    if (!studentId || !chatOpp || !newMessage.trim()) return;
+    
+    setSendingMsg(true);
+    try {
+      await sendAlumniMessage(chatOpp.opp_id, studentId, {
+        sender_type: 'student',
+        sender_id: studentId,
+        sender_name: studentName,
+        message: newMessage.trim()
+      });
+      setNewMessage('');
+      const msgs = await getAlumniMessages(chatOpp.opp_id, studentId);
+      setMessages(msgs || []);
+    } catch(e) {}
+    setSendingMsg(false);
+  };
+
+  const handleDeleteMessage = async (msgId: string) => {
+    try {
+      await deleteAlumniMessage(msgId);
+      if (chatOpp) {
+        const studentId = localStorage.getItem('student_id');
+        if (studentId) {
+          const msgs = await getAlumniMessages(chatOpp.opp_id, studentId);
+          setMessages(msgs || []);
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleInsertLink = () => {
+    const url = prompt("Enter the link URL (e.g. https://github.com/...)");
+    if (!url) return;
+    const text = prompt("Enter the text to display for the link", "Click here") || "Link";
+    setNewMessage(prev => prev + (prev.endsWith(' ') ? '' : ' ') + `[${text}](${url}) `);
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingImage(true);
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await fetch("http://localhost:8000/api/upload/file", {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) throw new Error("Upload failed");
+      const data = await res.json();
+      if (data.url) {
+        setNewMessage(prev => prev + (prev.endsWith(' ') ? '' : ' ') + `![Image](${data.url}) `);
+      }
+    } catch (error) {
+      console.error("Image upload failed:", error);
+      alert("Failed to upload image. Please try again.");
+    } finally {
+      setUploadingImage(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   const renderOpportunityCard = (opp: any) => {
     const isApplied = appliedOpps.has(opp.id) || opp.already_interested;
     const isSubmittingThis = oppApplyingId === opp.id;
@@ -204,9 +304,28 @@ export default function StudentJobsPage() {
 
           <div className="mt-1 shrink-0">
             {isApplied ? (
-              <span className="flex items-center gap-1.5 px-4 py-2 bg-green-50 text-green-700 text-sm font-bold rounded-lg border border-green-200">
-                <CheckCircle2 className="w-4 h-4" /> Applied
-              </span>
+              <div className="flex gap-2 items-center">
+                {opp.status === 'hired' ? (
+                  <span className="flex items-center gap-1.5 px-4 py-2 bg-emerald-50 text-emerald-700 text-sm font-bold rounded-lg border border-emerald-200 shadow-sm">
+                    <CheckCircle2 className="w-4 h-4" /> Hired
+                  </span>
+                ) : opp.status === 'rejected' ? (
+                  <span className="flex items-center gap-1.5 px-4 py-2 bg-rose-50 text-rose-700 text-sm font-bold rounded-lg border border-rose-200 shadow-sm">
+                    <X className="w-4 h-4" /> Rejected
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1.5 px-4 py-2 bg-slate-50 text-slate-700 text-sm font-bold rounded-lg border border-slate-200 shadow-sm">
+                    <CheckCircle2 className="w-4 h-4" /> Applied
+                  </span>
+                )}
+                <button
+                  onClick={() => handleOpenChat(opp.id, opp.title)}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 text-sm font-bold rounded-lg transition-colors border border-slate-200 shadow-sm"
+                  title="Message Alumni"
+                >
+                  <MessageSquare className="w-4 h-4" /> Chat
+                </button>
+              </div>
             ) : (
               <button
                 onClick={() => handleApplyOpportunity(opp)}
@@ -373,6 +492,104 @@ export default function StudentJobsPage() {
                   {isSubmitting ? 'Sending...' : 'Submit Application'}
                 </button>
               </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* CHAT MODAL */}
+      {chatOpp && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 md:p-8 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200 h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4 shrink-0">
+              <div>
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-bold uppercase tracking-wider mb-1">
+                  <MessageSquare className="w-3 h-3" />
+                  Alumni Chat
+                </div>
+                <h3 className="text-xl font-bold text-slate-900">
+                  {chatOpp.opp_title}
+                </h3>
+              </div>
+              <button
+                onClick={() => setChatOpp(null)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 rounded-2xl border border-slate-200 mb-4">
+              {loadingMsgs ? (
+                <div className="text-center py-12 text-slate-400 text-xs">Loading messages...</div>
+              ) : messages.length === 0 ? (
+                <div className="text-center py-12 text-slate-400 text-xs">
+                  No messages yet. Say hi!
+                </div>
+              ) : (
+                messages.map(msg => {
+                  const isMe = msg.sender_type === 'student';
+                  return (
+                    <div key={msg.id} className={`flex flex-col group ${isMe ? 'items-end' : 'items-start'}`}>
+                      <div className="flex items-center gap-2 mb-1 ml-1 mr-1">
+                        {isMe && (
+                          <button
+                            onClick={() => handleDeleteMessage(msg.id)}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity text-red-400 hover:text-red-600 p-1"
+                            title="Delete message"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        )}
+                        <span className="text-[10px] text-slate-500 font-bold">
+                          {msg.sender_name} ({msg.sender_type})
+                        </span>
+                      </div>
+                      <div className={`px-4 py-2.5 rounded-2xl text-xs max-w-[80%] ${isMe ? 'bg-indigo-600 text-white rounded-br-sm prose prose-invert max-w-none' : 'bg-white border border-slate-200 text-slate-800 rounded-bl-sm prose max-w-none'}`}>
+                        <ReactMarkdown>
+                          {msg.message}
+                        </ReactMarkdown>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="flex gap-2 mb-2">
+              <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleImageUpload} />
+              <button
+                type="button"
+                onClick={handleInsertLink}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-colors border border-slate-200"
+              >
+                <LinkIcon className="w-3.5 h-3.5" />
+                Insert Link
+              </button>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingImage}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-colors border border-slate-200 disabled:opacity-50"
+              >
+                <ImageIcon className="w-3.5 h-3.5" />
+                {uploadingImage ? 'Uploading...' : 'Post Image'}
+              </button>
+            </div>
+            <form onSubmit={handleSendMessage} className="shrink-0 flex gap-2">
+              <input
+                type="text"
+                placeholder="Type your message..."
+                value={newMessage}
+                onChange={e => setNewMessage(e.target.value)}
+                className="flex-1 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+              <button
+                type="submit"
+                disabled={sendingMsg || !newMessage.trim()}
+                className="px-5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center"
+              >
+                <Send className="w-4 h-4" />
+              </button>
             </form>
           </div>
         </div>

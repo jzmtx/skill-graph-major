@@ -3,8 +3,13 @@ from pydantic import BaseModel
 from typing import Optional, List
 from database import supabase
 from services.hireability import calculate_hireability_index
+from cachetools import TTLCache
 
 router = APIRouter()
+
+alumni_opps_cache = TTLCache(maxsize=100, ttl=300)
+
+_MEM_INTEREST_STATUS = {} # (opportunity_id, student_id) -> status
 
 # ============================================================
 # Pydantic Models
@@ -34,6 +39,15 @@ class OpportunityCreate(BaseModel):
 class ExpressInterest(BaseModel):
     opportunity_id: str
     student_id: str
+
+class AlumniMessageCreate(BaseModel):
+    sender_type: str
+    sender_id: str
+    sender_name: str
+    message: str
+
+class UpdateStatus(BaseModel):
+    status: str
 
 
 # ============================================================
@@ -233,6 +247,7 @@ async def create_opportunity(payload: OpportunityCreate):
             "is_active": True
         }).execute()
 
+        alumni_opps_cache.clear()
         return {"opportunity": result.data[0]}
     except HTTPException:
         raise
@@ -242,9 +257,12 @@ async def create_opportunity(payload: OpportunityCreate):
 
 @router.get("/opportunities/browse")
 async def browse_opportunities():
-    """Lists all active opportunities with alumni poster info, for the student-facing board.
-    UNCHANGED — kept exactly as before, no college filter, all types."""
+    """Lists all active opportunities with alumni poster info, for the student-facing board."""
     try:
+        cache_key = "browse_all_opps"
+        if cache_key in alumni_opps_cache:
+            return {"opportunities": alumni_opps_cache[cache_key]}
+
         opps = supabase.table("opportunities").select("*").eq("is_active", True).order("created_at", desc=True).execute()
 
         enriched = []
@@ -255,6 +273,7 @@ async def browse_opportunities():
                 "posted_by": alumnus.data[0] if alumnus.data else None
             })
 
+        alumni_opps_cache[cache_key] = enriched
         return {"opportunities": enriched}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -289,27 +308,44 @@ async def get_opportunities_for_student(student_id: str):
         alumni_by_id = {a["id"]: a for a in verified_alumni.data}
         alumni_ids = list(alumni_by_id.keys())
 
-        opps = supabase.table("opportunities").select("*") \
-            .in_("alumni_id", alumni_ids) \
-            .eq("is_active", True) \
-            .order("created_at", desc=True) \
-            .execute()
+        interest = supabase.table("opportunity_interest").select("*").eq("student_id", student_id).execute()
+        interested_opp_map = {row["opportunity_id"]: row.get("status", "pending") for row in interest.data}
+        
+        # Merge memory interest in case DB hasn't caught up
+        for (oid, sid), status in _MEM_INTEREST_STATUS.items():
+            if sid == student_id:
+                interested_opp_map[oid] = status
 
-        interest = supabase.table("opportunity_interest").select("opportunity_id").eq("student_id", student_id).execute()
-        interested_opp_ids = {row["opportunity_id"] for row in interest.data}
+        # Fetch active opportunities from verified alumni OR opportunities the student has applied to
+        opps = supabase.table("opportunities").select("*").in_("alumni_id", alumni_ids).order("created_at", desc=True).execute()
 
         enriched = []
         for opp in opps.data:
+            is_interested = opp["id"] in interested_opp_map
+            
+            # Filter: only show if it's active OR the student has already applied
+            if not is_interested and not opp.get("is_active"):
+                continue
+                
             alumnus = alumni_by_id.get(opp["alumni_id"])
             from_my_college = bool(student_college_id and alumnus and alumnus.get("college_id") == student_college_id)
-            enriched.append({
+            
+            opp_data = {
                 **opp,
                 "posted_by": alumnus,
                 "from_my_college": from_my_college,
-                "already_interested": opp["id"] in interested_opp_ids
-            })
+                "already_interested": is_interested
+            }
+            if is_interested:
+                # fall back to memory if DB status is None or missing
+                db_status = interested_opp_map.get(opp["id"])
+                mem_status = _MEM_INTEREST_STATUS.get((opp["id"], student_id))
+                opp_data["status"] = mem_status or db_status or "pending"
+                
+            enriched.append(opp_data)
 
         # Sort so same-college opportunities appear at top
+
         enriched.sort(key=lambda x: (not x["from_my_college"], x.get("created_at", "")))
 
         return {"opportunities": enriched}
@@ -390,32 +426,103 @@ async def get_interested_students(opportunity_id: str):
     try:
         interest = supabase.table("opportunity_interest").select("*").eq("opportunity_id", opportunity_id).order("expressed_at", desc=True).execute()
 
+        if not interest.data:
+            return {"interested_students": []}
+
+        student_ids = [r["student_id"] for r in interest.data]
+
+        students = supabase.table("students").select(
+            "id, name, email, branch, year, phone, usn, github_url, linkedin_url, college_id"
+        ).in_("id", student_ids).execute()
+        student_by_id = {s["id"]: s for s in students.data}
+
+        college_ids = list({s["college_id"] for s in students.data if s.get("college_id")})
+        colleges = supabase.table("colleges").select("id, name").in_("id", college_ids).execute() if college_ids else None
+        college_by_id = {c["id"]: c["name"] for c in colleges.data} if colleges and colleges.data else {}
+
+        skills = supabase.table("student_skills").select("*").in_("student_id", student_ids).execute()
+        skills_by_student = {}
+        for skill in (skills.data or []):
+            skills_by_student.setdefault(skill["student_id"], []).append(skill)
+
         enriched = []
         for record in interest.data:
-            student = supabase.table("students").select(
-                "id, name, email, branch, year, phone, usn, github_url, linkedin_url, college_id"
-            ).eq("id", record["student_id"]).execute()
-            if not student.data:
+            sid = record["student_id"]
+            if sid not in student_by_id:
                 continue
-            student_info = student.data[0]
-
-            college_name = None
-            if student_info.get("college_id"):
-                coll = supabase.table("colleges").select("name").eq("id", student_info["college_id"]).execute()
-                if coll.data:
-                    college_name = coll.data[0]["name"]
-
-            skills = supabase.table("student_skills").select("*").eq("student_id", record["student_id"]).execute()
-            hireability = calculate_hireability_index(skills.data or [])
+            
+            student_info = student_by_id[sid]
+            college_name = college_by_id.get(student_info.get("college_id"))
+            student_skills = skills_by_student.get(sid, [])
+            hireability = calculate_hireability_index(student_skills)
 
             enriched.append({
                 "student": student_info,
-                "skills": skills.data or [],
+                "skills": student_skills,
                 "hireability": hireability,
                 "college_name": college_name,
-                "expressed_at": record.get("expressed_at")
+                "expressed_at": record.get("expressed_at"),
+                "status": _MEM_INTEREST_STATUS.get((opportunity_id, sid)) or record.get("status") or "pending"
             })
 
         return {"interested_students": enriched}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.patch("/opportunities/{opportunity_id}/interested-students/{student_id}/status")
+async def update_interest_status(opportunity_id: str, student_id: str, payload: UpdateStatus):
+    """Update hiring pipeline status for an interested student."""
+    try:
+        new_status = payload.status
+        if not new_status:
+            raise HTTPException(status_code=400, detail="Missing status")
+            
+        try:
+            res = supabase.table("opportunity_interest").update({"status": new_status}).eq("opportunity_id", opportunity_id).eq("student_id", student_id).execute()
+        except Exception:
+            pass # fallback to memory if column doesn't exist or network error
+            
+        _MEM_INTEREST_STATUS[(opportunity_id, student_id)] = new_status
+        return {"success": True, "status": new_status}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================================
+# Messaging (Alumni <-> Student)
+# ============================================================
+
+@router.get("/opportunities/{opportunity_id}/messages/{student_id}")
+async def get_alumni_messages(opportunity_id: str, student_id: str):
+    """Fetch chat history between an alumni and a specific student for an opportunity."""
+    try:
+        res = supabase.table("alumni_messages").select("*").eq("opportunity_id", opportunity_id).eq("student_id", student_id).order("created_at", desc=True).execute()
+        return {"messages": res.data[::-1]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/opportunities/{opportunity_id}/messages/{student_id}")
+async def send_alumni_message(opportunity_id: str, student_id: str, payload: AlumniMessageCreate):
+    """Send a message (works for both alumni and student)."""
+    try:
+        record = {
+            "opportunity_id": opportunity_id,
+            "student_id": student_id,
+            "sender_type": payload.sender_type,
+            "sender_id": payload.sender_id,
+            "sender_name": payload.sender_name,
+            "message": payload.message
+        }
+        res = supabase.table("alumni_messages").insert(record).execute()
+        return {"message": res.data[0]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+@router.delete('/messages/{message_id}')
+async def delete_alumni_message(message_id: str):
+    try:
+        supabase.table('alumni_messages').delete().eq('id', message_id).execute()
+        return {'success': True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

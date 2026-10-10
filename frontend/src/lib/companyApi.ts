@@ -37,10 +37,45 @@ export const updateApplicationStatus = async (auth_id: string, app_id: string, s
   return response.data;
 };
 
+export const getApplicationMessages = async (app_id: string) => {
+  const response = await api.get(`/api/company/applications/${app_id}/messages`);
+  return response.data;
+};
+
+export const sendApplicationMessage = async (app_id: string, payload: any) => {
+  const response = await api.post(`/api/company/applications/${app_id}/messages`, payload);
+  return response.data;
+};
+
+export const getApplicationAssessment = async (app_id: string) => {
+  const response = await api.get(`/api/company/applications/${app_id}/assessment`);
+  return response.data;
+};
+
+export const assignApplicationAssessment = async (app_id: string, payload: any) => {
+  const response = await api.post(`/api/company/applications/${app_id}/assessment`, payload);
+  return response.data;
+};
+
+export const updateAssessmentStudentStatus = async (app_id: string, status: string) => {
+  const response = await api.put(`/api/company/applications/${app_id}/assessment/student`, { student_status: status });
+  return response.data;
+};
+
+export const updateAssessmentCompanyResult = async (app_id: string, result: string) => {
+  const response = await api.put(`/api/company/applications/${app_id}/assessment/result`, { company_result: result });
+  return response.data;
+};
+
 // --- Student Job Board ---
 export const getAllJobs = async () => {
   const response = await api.get('/api/company/student/jobs/all');
   return response.data.jobs;
+};
+
+export const getAppliedJobs = async (student_id: string) => {
+  const response = await api.get(`/api/company/student/jobs/applied/${student_id}`);
+  return response.data.applications;
 };
 
 export const getEligibleJobs = async (student_id: string) => {
@@ -50,5 +85,9 @@ export const getEligibleJobs = async (student_id: string) => {
 
 export const applyToJob = async (job_id: string, payload: any) => {
   const response = await api.post(`/api/company/student/jobs/${job_id}/apply`, payload);
+  return response.data;
+};
+export const deleteApplicationMessage = async (message_id: string) => {
+  const response = await api.delete(`/api/company/messages/${message_id}`);
   return response.data;
 };

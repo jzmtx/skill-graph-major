@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import ReactMarkdown from 'react-markdown';
 import {
   listOpenSourceProjects,
   createOpenSourceProject,
@@ -11,10 +12,18 @@ import {
   removeStudentFromGroup,
   logStudentPerformance,
   getStudentPerformanceGraph,
+  getProjectMessages,
+  sendProjectMessage,
+  updateApplicationStatus,
+  getOpenSourceApplicationMessages,
+  sendOpenSourceApplicationMessage,
+  deleteOpenSourceProjectMessage,
+  deleteOpenSourceApplicationMessage,
   OpenSourceProject,
   ProjectApplicant,
   OpenSourceGroup,
-  StudentPerformanceGraphData
+  StudentPerformanceGraphData,
+  ProjectMessage
 } from '@/lib/opensourceApi';
 import {
   GitBranch,
@@ -31,7 +40,13 @@ import {
   ChevronRight,
   UserPlus,
   Trash2,
-  AlertCircle
+  AlertCircle,
+  MessageSquare,
+  Send,
+  Link as LinkIcon,
+  Image as ImageIcon,
+  Check,
+  Star
 } from 'lucide-react';
 
 const GithubIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
@@ -44,9 +59,10 @@ import StudentProfileModal, { StudentProfileData } from '@/components/dashboard/
 interface Props {
   alumniId: string;
   collegeName?: string;
+  alumniName?: string;
 }
 
-export default function AlumniOpenSourceManager({ alumniId, collegeName }: Props) {
+export default function AlumniOpenSourceManager({ alumniId, collegeName, alumniName }: Props) {
   const [projects, setProjects] = useState<OpenSourceProject[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -63,7 +79,12 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName }: Props
 
   // Selected Project Management Modal (Applicants & Groups)
   const [selectedProject, setSelectedProject] = useState<OpenSourceProject | null>(null);
-  const [modalTab, setModalTab] = useState<'applicants' | 'groups' | 'performance'>('applicants');
+  const [modalTab, setModalTab] = useState<'applicants' | 'groups' | 'performance' | 'chat'>('applicants');
+
+  // Chat state
+  const [messages, setMessages] = useState<ProjectMessage[]>([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [sendingMsg, setSendingMsg] = useState(false);
 
   // Applicants & Groups data
   const [applicants, setApplicants] = useState<ProjectApplicant[]>([]);
@@ -94,12 +115,72 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName }: Props
   const [submittingRating, setSubmittingRating] = useState(false);
   const [ratingSuccess, setRatingSuccess] = useState('');
 
+  // 1-on-1 Application Chat state
+  const [chatApplication, setChatApplication] = useState<ProjectApplicant | null>(null);
+  const [appMessages, setAppMessages] = useState<ProjectMessage[]>([]);
+  const [appNewMessage, setAppNewMessage] = useState('');
+  const [loadingAppMsgs, setLoadingAppMsgs] = useState(false);
+  const [sendingAppMsg, setSendingAppMsg] = useState(false);
+
   // Profile modal
   const [selectedStudentProfile, setSelectedStudentProfile] = useState<StudentProfileData | null>(null);
+
+  // Chat Image Upload states
+  const [uploadingImageTeam, setUploadingImageTeam] = useState(false);
+  const fileInputRefTeam = useRef<HTMLInputElement>(null);
+  
+  const [uploadingImageApp, setUploadingImageApp] = useState(false);
+  const fileInputRefApp = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadProjects();
   }, [alumniId]);
+
+  useEffect(() => {
+    if (selectedProject && modalTab === 'chat') {
+      loadMessages(selectedProject.id);
+    }
+  }, [selectedProject, modalTab]);
+
+  const loadMessages = async (projectId: string) => {
+    try {
+      const msgs = await getProjectMessages(projectId);
+      setMessages(msgs);
+    } catch (err) {
+      console.error('Failed to load messages:', err);
+    }
+  };
+
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedProject || !newMessage.trim()) return;
+    setSendingMsg(true);
+    try {
+      await sendProjectMessage(selectedProject.id, {
+        sender_type: 'alumni',
+        sender_id: alumniId,
+        sender_name: 'Alumni Lead',
+        message: newMessage.trim()
+      });
+      setNewMessage('');
+      await loadMessages(selectedProject.id);
+    } catch (err) {
+      console.error('Failed to send message:', err);
+    } finally {
+      setSendingMsg(false);
+    }
+  };
+
+  const handleDeleteMessage = async (msgId: string) => {
+    try {
+      await deleteOpenSourceProjectMessage(msgId);
+      if (selectedProject) {
+        await loadMessages(selectedProject.id);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const loadProjects = async () => {
     setLoading(true);
@@ -113,7 +194,7 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName }: Props
     }
   };
 
-  const handleOpenProjectDetails = async (proj: OpenSourceProject, initialTab: 'applicants' | 'groups' | 'performance' = 'applicants') => {
+  const handleOpenProjectDetails = async (proj: OpenSourceProject, initialTab: 'applicants' | 'groups' | 'performance' | 'chat' = 'applicants') => {
     setSelectedProject(proj);
     setModalTab(initialTab);
     setDataLoading(true);
@@ -243,6 +324,74 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName }: Props
       setGroups(groupData);
     } catch (err) {
       console.error('Failed to remove student from group:', err);
+    }
+  };
+
+  const handleStatusChange = async (applicationId: string, studentName: string, newStatus: string) => {
+    if (!selectedProject) return;
+    try {
+      await updateApplicationStatus(applicationId, newStatus);
+      if (newStatus === 'referred') {
+        alert(`Referral request for ${studentName} initiated!`);
+      } else if (newStatus === 'shortlisted') {
+        alert(`${studentName} has been shortlisted.`);
+      } else if (newStatus === 'hired') {
+        alert(`${studentName} has been hired/referred.`);
+      } else if (newStatus === 'rejected') {
+        alert(`${studentName}'s application has been rejected.`);
+      }
+      const appData = await getProjectApplicants(selectedProject.id);
+      setApplicants(appData);
+    } catch (err) {
+      console.error('Failed to update status:', err);
+      alert('Failed to update status. Please try again.');
+    }
+  };
+
+  const openApplicationChat = async (app: ProjectApplicant) => {
+    setChatApplication(app);
+    setLoadingAppMsgs(true);
+    setAppMessages([]);
+    try {
+      const msgs = await getOpenSourceApplicationMessages(app.application_id);
+      setAppMessages(msgs);
+    } catch (err) {
+      console.error('Failed to load application messages:', err);
+    } finally {
+      setLoadingAppMsgs(false);
+    }
+  };
+
+  const handleSendAppMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatApplication || !appNewMessage.trim()) return;
+    
+    setSendingAppMsg(true);
+    try {
+      const msg = await sendOpenSourceApplicationMessage(chatApplication.application_id, {
+        sender_type: 'alumni',
+        sender_id: alumniId,
+        sender_name: alumniName || 'Alumni',
+        message: appNewMessage
+      });
+      setAppMessages([...appMessages, msg]);
+      setAppNewMessage('');
+    } catch (err) {
+      console.error('Failed to send application message:', err);
+    } finally {
+      setSendingAppMsg(false);
+    }
+  };
+
+  const handleDeleteAppMessage = async (msgId: string) => {
+    try {
+      await deleteOpenSourceApplicationMessage(msgId);
+      if (chatApplication) {
+        const msgs = await getOpenSourceApplicationMessages(chatApplication.application_id);
+        setAppMessages(msgs);
+      }
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -405,6 +554,12 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName }: Props
                     className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1"
                   >
                     <TrendingUp className="w-3.5 h-3.5" /> Performance Graph
+                  </button>
+                  <button
+                    onClick={() => handleOpenProjectDetails(proj, 'chat')}
+                    className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold transition-all flex items-center gap-1"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" /> Team Chat
                   </button>
                 </div>
               </div>
@@ -603,6 +758,17 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName }: Props
                 <TrendingUp className="w-3.5 h-3.5" />
                 Student Performance Graph
               </button>
+              <button
+                onClick={() => setModalTab('chat')}
+                className={`px-4 py-2.5 font-bold text-xs rounded-t-xl transition-all flex items-center gap-1.5 border-b-2 ${
+                  modalTab === 'chat'
+                    ? 'border-indigo-600 text-indigo-700 bg-indigo-50/50'
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <MessageSquare className="w-3.5 h-3.5" />
+                Team Chat
+              </button>
             </div>
 
             {/* Modal Body */}
@@ -633,10 +799,25 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName }: Props
                               <Sparkles className="w-3 h-3 text-indigo-600" /> Score: {app.hireability?.score || 300}
                             </span>
                             {app.assigned_group ? (
-                              <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
+                              <span className="text-[10px] font-semibold bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
                                 In {app.assigned_group.name}
                               </span>
                             ) : null}
+                            {app.status === 'shortlisted' && (
+                              <span className="text-[10px] font-semibold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">
+                                Shortlisted
+                              </span>
+                            )}
+                            {app.status === 'hired' && (
+                              <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
+                                Hired/Referred
+                              </span>
+                            )}
+                            {app.status === 'rejected' && (
+                              <span className="text-[10px] font-semibold bg-red-100 text-red-800 px-2 py-0.5 rounded-full">
+                                Rejected
+                              </span>
+                            )}
                           </div>
                           <p className="text-xs text-slate-500">
                             {app.student.email} · {app.student.branch || 'Student'} · Year {app.student.year || 3}
@@ -691,6 +872,39 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName }: Props
                             <span className="text-[11px] text-slate-400 italic">Create a team in tab 2 first</span>
                           )}
 
+                          <div className="flex gap-1 items-center bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
+                            <button
+                              disabled={app.status === 'shortlisted' || app.status === 'hired' || app.status === 'rejected'}
+                              onClick={() => handleStatusChange(app.application_id, app.student.name, 'shortlisted')}
+                              className="p-1.5 bg-amber-50 hover:bg-amber-100 text-amber-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              title="Shortlist"
+                            >
+                              <Star className="w-4 h-4" />
+                            </button>
+                            <button
+                              disabled={app.status === 'hired' || app.status === 'rejected'}
+                              onClick={() => handleStatusChange(app.application_id, app.student.name, 'hired')}
+                              className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              title="Hire/Refer"
+                            >
+                              <Check className="w-4 h-4" />
+                            </button>
+                            <button
+                              disabled={app.status === 'rejected' || app.status === 'hired'}
+                              onClick={() => handleStatusChange(app.application_id, app.student.name, 'rejected')}
+                              className="p-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              title="Reject"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                            <div className="w-px h-5 bg-slate-200 mx-0.5"></div>
+                            <button
+                              onClick={() => openApplicationChat(app)}
+                              className="p-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg transition-colors flex items-center gap-1 text-xs font-bold px-2"
+                            >
+                              <MessageSquare className="w-3.5 h-3.5" /> Chat
+                            </button>
+                          </div>
                           <button
                             onClick={() =>
                               setSelectedStudentProfile({
@@ -1042,6 +1256,118 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName }: Props
                   )}
                 </div>
               )}
+
+              {/* TAB 4: TEAM CHAT */}
+              {!dataLoading && modalTab === 'chat' && (() => {
+                const handleInsertLinkTeam = () => {
+                  const url = prompt("Enter the link URL (e.g. https://github.com/...)");
+                  if (!url) return;
+                  const text = prompt("Enter the text to display for the link", "Click here") || "Link";
+                  setNewMessage(prev => prev + (prev.endsWith(' ') ? '' : ' ') + `[${text}](${url}) `);
+                };
+
+                const handleImageUploadTeam = async (e: React.ChangeEvent<HTMLInputElement>) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+
+                  setUploadingImageTeam(true);
+                  const formData = new FormData();
+                  formData.append("file", file);
+
+                  try {
+                    const res = await fetch("http://localhost:8000/api/upload/file", {
+                      method: "POST",
+                      body: formData,
+                    });
+                    if (!res.ok) throw new Error("Upload failed");
+                    const data = await res.json();
+                    if (data.url) {
+                      setNewMessage(prev => prev + (prev.endsWith(' ') ? '' : ' ') + `![Image](${data.url}) `);
+                    }
+                  } catch (error) {
+                    console.error("Image upload failed:", error);
+                    alert("Failed to upload image. Please try again.");
+                  } finally {
+                    setUploadingImageTeam(false);
+                    if (fileInputRefTeam.current) fileInputRefTeam.current.value = "";
+                  }
+                };
+
+                return (
+                  <div className="flex flex-col h-[500px] border border-slate-200 rounded-2xl bg-slate-50 overflow-hidden">
+                    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                      {messages.length === 0 ? (
+                        <div className="text-center py-12 text-slate-400 text-xs">
+                          No messages yet. Start the conversation with your team!
+                        </div>
+                      ) : (
+                        messages.map(msg => {
+                          const isMe = msg.sender_type === 'alumni' && msg.sender_id === alumniId;
+                          return (
+                            <div key={msg.id} className={`flex flex-col group ${isMe ? 'items-end' : 'items-start'}`}>
+                              <div className="flex items-center gap-2 mb-1 ml-1 mr-1">
+                                {isMe && (
+                                  <button
+                                    onClick={() => handleDeleteMessage(msg.id)}
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity text-red-400 hover:text-red-600 p-1"
+                                    title="Delete message"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                )}
+                                <span className="text-[10px] text-slate-500 font-bold">
+                                  {msg.sender_name} ({msg.sender_type})
+                                </span>
+                              </div>
+                              <div className={`px-4 py-2.5 rounded-2xl text-xs max-w-[80%] ${isMe ? 'bg-indigo-600 text-white rounded-br-sm prose prose-invert max-w-none' : 'bg-white border border-slate-200 text-slate-800 rounded-bl-sm prose max-w-none'}`}>
+                                <ReactMarkdown>
+                                  {msg.message}
+                                </ReactMarkdown>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                    <form onSubmit={handleSendMessage} className="p-3 bg-white border-t border-slate-200 flex flex-col gap-2">
+                      <div className="flex gap-2">
+                        <input type="file" accept="image/*" className="hidden" ref={fileInputRefTeam} onChange={handleImageUploadTeam} />
+                        <button
+                          type="button"
+                          onClick={handleInsertLinkTeam}
+                          className="px-2 py-1.5 text-xs font-semibold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center gap-1 transition-colors"
+                        >
+                          <LinkIcon className="w-3.5 h-3.5" /> Insert Link
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => fileInputRefTeam.current?.click()}
+                          disabled={uploadingImageTeam}
+                          className="px-2 py-1.5 text-xs font-semibold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center gap-1 transition-colors disabled:opacity-50"
+                        >
+                          <ImageIcon className="w-3.5 h-3.5" /> {uploadingImageTeam ? 'Uploading...' : 'Post Image'}
+                        </button>
+                      </div>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="Type a message to your team..."
+                          value={newMessage}
+                          onChange={e => setNewMessage(e.target.value)}
+                          className="flex-1 p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                        <button
+                          type="submit"
+                          disabled={sendingMsg || !newMessage.trim()}
+                          className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center"
+                        >
+                          <Send className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -1052,6 +1378,146 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName }: Props
         data={selectedStudentProfile}
         onClose={() => setSelectedStudentProfile(null)}
       />
+
+      {/* 1-on-1 Application Chat Modal */}
+      {chatApplication && (() => {
+        const handleInsertLinkApp = () => {
+          const url = prompt("Enter the link URL (e.g. https://github.com/...)");
+          if (!url) return;
+          const text = prompt("Enter the text to display for the link", "Click here") || "Link";
+          setAppNewMessage(prev => prev + (prev.endsWith(' ') ? '' : ' ') + `[${text}](${url}) `);
+        };
+
+        const handleImageUploadApp = async (e: React.ChangeEvent<HTMLInputElement>) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+
+          setUploadingImageApp(true);
+          const formData = new FormData();
+          formData.append("file", file);
+
+          try {
+            const res = await fetch("http://localhost:8000/api/upload/file", {
+              method: "POST",
+              body: formData,
+            });
+            if (!res.ok) throw new Error("Upload failed");
+            const data = await res.json();
+            if (data.url) {
+              setAppNewMessage(prev => prev + (prev.endsWith(' ') ? '' : ' ') + `![Image](${data.url}) `);
+            }
+          } catch (error) {
+            console.error("Image upload failed:", error);
+            alert("Failed to upload image. Please try again.");
+          } finally {
+            setUploadingImageApp(false);
+            if (fileInputRefApp.current) fileInputRefApp.current.value = "";
+          }
+        };
+
+        return (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg h-[600px] flex flex-col overflow-hidden my-8 animate-in zoom-in-95 duration-200">
+              {/* Header */}
+              <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50/80">
+                <div>
+                  <h3 className="font-bold text-slate-800">Chat with {chatApplication.student.name}</h3>
+                  <p className="text-xs text-slate-500">Discuss hiring, referral, or project details</p>
+                </div>
+                <button
+                  onClick={() => setChatApplication(null)}
+                  className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-500"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Messages */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/30">
+                {loadingAppMsgs ? (
+                  <div className="text-center text-xs text-slate-400 py-10">Loading messages...</div>
+                ) : appMessages.length === 0 ? (
+                  <div className="text-center text-xs text-slate-400 py-10">No messages yet. Start the conversation!</div>
+                ) : (
+                  appMessages.map((msg) => {
+                    const isMe = msg.sender_type === 'alumni' && msg.sender_id === alumniId;
+                    return (
+                      <div key={msg.id} className={`flex flex-col group ${isMe ? 'items-end' : 'items-start'}`}>
+                        <div className="flex items-center gap-2 mb-0.5 ml-1">
+                          {isMe && (
+                            <button
+                              onClick={() => handleDeleteAppMessage(msg.id)}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity text-red-400 hover:text-red-600 p-1"
+                              title="Delete message"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          )}
+                          <span className="text-[10px] text-slate-400 font-medium">
+                            {isMe ? 'You' : msg.sender_name || 'Student'}
+                          </span>
+                        </div>
+                        <div
+                          className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm prose max-w-none ${
+                            isMe 
+                              ? 'bg-indigo-600 text-white rounded-tr-sm prose-invert' 
+                              : 'bg-white border border-slate-200 text-slate-700 rounded-tl-sm shadow-sm'
+                          }`}
+                        >
+                          <ReactMarkdown>
+                            {msg.message}
+                          </ReactMarkdown>
+                        </div>
+                        <span className="text-[9px] text-slate-400 mt-1">
+                          {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Input Form */}
+              <form onSubmit={handleSendAppMessage} className="p-3 border-t border-slate-100 bg-white flex flex-col gap-2">
+                <div className="flex gap-2 mb-1">
+                  <input type="file" accept="image/*" className="hidden" ref={fileInputRefApp} onChange={handleImageUploadApp} />
+                  <button
+                    type="button"
+                    onClick={handleInsertLinkApp}
+                    className="px-2 py-1.5 text-xs font-semibold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center gap-1 transition-colors"
+                  >
+                    <LinkIcon className="w-3.5 h-3.5" /> Insert Link
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRefApp.current?.click()}
+                    disabled={uploadingImageApp}
+                    className="px-2 py-1.5 text-xs font-semibold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center gap-1 transition-colors disabled:opacity-50"
+                  >
+                    <ImageIcon className="w-3.5 h-3.5" /> {uploadingImageApp ? 'Uploading...' : 'Post Image'}
+                  </button>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder={`Message ${chatApplication.student.name}...`}
+                    value={appNewMessage}
+                    onChange={(e) => setAppNewMessage(e.target.value)}
+                    className="flex-1 p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                  <button
+                    type="submit"
+                    disabled={sendingAppMsg || !appNewMessage.trim()}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center"
+                  >
+                    <Send className="w-4 h-4" />
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

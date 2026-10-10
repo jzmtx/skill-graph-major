@@ -417,9 +417,12 @@ async def get_college_analytics(auth_id: str):
             }
 
         all_skills = []
-        for sid in student_ids:
-            skills = supabase.table("student_skills").select("skill_name, verification_level, skill_score").eq("student_id", sid).execute()
-            all_skills.extend(skills.data)
+        try:
+            # Batch fetch skills to avoid N+1 query loops
+            skills_res = supabase.table("student_skills").select("skill_name, verification_level, skill_score").in_("student_id", student_ids).execute()
+            all_skills = skills_res.data or []
+        except Exception:
+            pass
 
         total_score = sum(s["skill_score"] for s in all_skills)
         avg_skill_score = round(total_score / len(all_skills), 1) if all_skills else 0

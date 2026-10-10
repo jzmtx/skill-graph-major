@@ -133,3 +133,29 @@ async def force_reset_password(req: StudentLoginRequest):
         return {"message": "Password updated successfully!"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/me/{student_id}/invitations")
+async def get_my_invitations(student_id: str):
+    try:
+        links = supabase.table("college_student_links").select("*, colleges(name)").eq("student_id", student_id).eq("status", "pending_student_acceptance").execute()
+        return {"invitations": links.data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/me/{student_id}/invitations/{link_id}/accept")
+async def accept_invitation(student_id: str, link_id: str):
+    try:
+        link = supabase.table("college_student_links").select("*").eq("id", link_id).eq("student_id", student_id).execute()
+        if not link.data:
+            raise HTTPException(status_code=404, detail="Invitation not found")
+            
+        college_id = link.data[0]["college_id"]
+        
+        # update link
+        supabase.table("college_student_links").update({"status": "linked"}).eq("id", link_id).execute()
+        # update student's college_id
+        supabase.table("students").update({"college_id": college_id}).eq("id", student_id).execute()
+        
+        return {"success": True, "message": "Invitation accepted"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

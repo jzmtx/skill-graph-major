@@ -24,7 +24,7 @@ export interface OpenSourceProject {
 
 export interface ProjectApplicant {
   application_id: string;
-  status: 'applied' | 'selected' | 'rejected';
+  status: 'applied' | 'selected' | 'rejected' | 'referred' | 'shortlisted' | 'hired';
   pitch?: string;
   applied_at: string;
   student: {
@@ -95,6 +95,16 @@ export interface StudentPerformanceGraphData {
   }[];
 }
 
+export interface ProjectMessage {
+  id: string;
+  project_id: string;
+  sender_type: 'alumni' | 'student';
+  sender_id: string;
+  sender_name: string;
+  message: string;
+  created_at: string;
+}
+
 // API functions
 export const listOpenSourceProjects = async (alumniId?: string): Promise<OpenSourceProject[]> => {
   const url = alumniId ? `/api/opensource/projects?alumni_id=${alumniId}` : `/api/opensource/projects`;
@@ -131,6 +141,11 @@ export const applyToOpenSourceProject = async (data: {
   pitch?: string;
 }) => {
   const res = await api.post('/api/opensource/apply', data);
+  return res.data.application;
+};
+
+export const updateApplicationStatus = async (applicationId: string, status: string) => {
+  const res = await api.patch(`/api/opensource/applications/${applicationId}/status`, { status });
   return res.data.application;
 };
 
@@ -190,4 +205,43 @@ export const getStudentPerformanceGraph = async (
 ): Promise<StudentPerformanceGraphData> => {
   const res = await api.get(`/api/opensource/performance/${projectId}/${studentId}`);
   return res.data;
+};
+
+export const getProjectMessages = async (projectId: string): Promise<ProjectMessage[]> => {
+  const res = await api.get(`/api/opensource/projects/${projectId}/messages`);
+  return res.data.messages || [];
+};
+
+export const sendProjectMessage = async (projectId: string, data: {
+  sender_type: 'alumni' | 'student';
+  sender_id: string;
+  sender_name?: string;
+  message: string;
+}) => {
+  const res = await api.post(`/api/opensource/projects/${projectId}/messages`, data);
+  return res.data.message;
+};
+
+export const getOpenSourceApplicationMessages = async (applicationId: string): Promise<ProjectMessage[]> => {
+  const res = await api.get(`/api/opensource/applications/${applicationId}/messages`);
+  return res.data.messages || [];
+};
+
+export const sendOpenSourceApplicationMessage = async (applicationId: string, data: {
+  sender_type: 'alumni' | 'student';
+  sender_id: string;
+  sender_name?: string;
+  message: string;
+}) => {
+  const res = await api.post(`/api/opensource/applications/${applicationId}/messages`, data);
+  return res.data.message;
+};
+
+export const deleteOpenSourceApplicationMessage = async (message_id: string) => {
+  const response = await api.delete(`/api/opensource/messages/application/${message_id}`);
+  return response.data;
+};
+export const deleteOpenSourceProjectMessage = async (message_id: string) => {
+  const response = await api.delete(`/api/opensource/messages/project/${message_id}`);
+  return response.data;
 };

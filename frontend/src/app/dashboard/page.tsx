@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { ArrowRight, Lock, Target, TrendingUp, Briefcase, CodeXml, ShieldAlert, Terminal, CheckCircle2, Plus, RefreshCcw, Loader2 } from 'lucide-react';
 import Link from 'next/link';
-import { extractGithubSkills, getMySkills, addSkill } from '@/lib/api';
+import { ArrowRight, Lock, Target, TrendingUp, Briefcase, CodeXml, ShieldAlert, Terminal, CheckCircle2, Plus, RefreshCcw, Loader2, X } from 'lucide-react';
+import { extractGithubSkills, getMySkills, addSkill, getStudentInvitations, acceptStudentInvitation } from '@/lib/api';
+import { getAppliedJobs } from '@/lib/companyApi';
 import { motion, AnimatePresence } from 'framer-motion';
 import HireabilityScore from '@/components/dashboard/HireabilityScore';
 
@@ -13,6 +14,8 @@ export default function DashboardPage() {
   const [syncing, setSyncing] = useState(false);
   const [addingSkill, setAddingSkill] = useState(false);
   const [customSkill, setCustomSkill] = useState("");
+  const [invitations, setInvitations] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<any[]>([]);
   
   const hasVerifiedSkills = skills.some(s => s.verification_level > 0);
 
@@ -55,6 +58,17 @@ export default function DashboardPage() {
     }
   };
 
+  const handleAcceptInvitation = async (linkId: string) => {
+    const studentId = localStorage.getItem('student_id');
+    if (!studentId) return;
+    try {
+      await acceptStudentInvitation(studentId, linkId);
+      setInvitations(invitations.filter(inv => inv.id !== linkId));
+    } catch(e) {
+      console.error("Failed to accept invitation");
+    }
+  };
+
   useEffect(() => {
     const init = async () => {
       try {
@@ -75,15 +89,36 @@ export default function DashboardPage() {
 
         // 1. Trigger extraction in background if they have github
         if (githubUrl) {
-          try {
-            await extractGithubSkills(studentId, githubUrl);
-          } catch (e) {
-            console.error("Extraction failed or already done");
-          }
+          extractGithubSkills(studentId, githubUrl)
+            .then(() => fetchSkills())
+            .catch(e => console.error("Extraction failed or already done", e));
         }
 
         // 2. Sync all skills
         await fetchSkills();
+
+        // 3. Fetch Invitations
+        try {
+          const invs = await getStudentInvitations(studentId);
+          setInvitations(invs || []);
+        } catch (error) {
+          console.error("Failed to fetch invitations:", error);
+        }
+
+        // 4. Fetch Job Applications for Notifications
+        try {
+          const apps = await getAppliedJobs(studentId);
+          if (apps) {
+            const dismissed = JSON.parse(localStorage.getItem('dismissed_notifications') || '[]');
+            const newNotifs = apps.filter((a: any) => 
+              (a.status === 'hired' || a.status === 'rejected') && !dismissed.includes(`${a.id}-${a.status}`)
+            );
+            setNotifications(newNotifs);
+          }
+        } catch(e) {
+          console.error("Failed to fetch applications for notifications");
+        }
+
       } catch (error) {
         console.error(error);
         setLoading(false);
@@ -92,6 +127,13 @@ export default function DashboardPage() {
 
     init();
   }, []);
+
+  const dismissNotification = (appId: string, status: string) => {
+    const dismissed = JSON.parse(localStorage.getItem('dismissed_notifications') || '[]');
+    dismissed.push(`${appId}-${status}`);
+    localStorage.setItem('dismissed_notifications', JSON.stringify(dismissed));
+    setNotifications(prev => prev.filter(n => n.id !== appId));
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -103,6 +145,57 @@ export default function DashboardPage() {
           <p className="text-slate-500 mt-1">Let's map out your journey from campus to top-tier placements.</p>
         </div>
       </div>
+
+      {/* Invitations Banner */}
+      {invitations.length > 0 && (
+        <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="bg-indigo-100 p-2 rounded-full text-indigo-600">
+              <Target className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-indigo-900">College Invitation</h3>
+              <p className="text-xs text-indigo-700">You have been invited to join {invitations[0].colleges?.name} on SkillGraph.</p>
+            </div>
+          </div>
+          <button 
+            onClick={() => handleAcceptInvitation(invitations[0].id)}
+            className="px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition-colors whitespace-nowrap shadow-sm"
+          >
+            Accept Invitation
+          </button>
+        </div>
+      )}
+
+      {/* Notifications */}
+      {notifications.length > 0 && (
+        <div className="mb-6 space-y-3">
+          {notifications.map(notif => {
+            const isHired = notif.status === 'hired';
+            const companyName = notif.job_postings?.companies?.name || 'a company';
+            const jobTitle = notif.job_postings?.title || 'a role';
+            
+            return (
+              <div key={notif.id} className={`p-4 rounded-xl border flex items-center justify-between ${isHired ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
+                <div className="flex items-center gap-3">
+                  {isHired ? <CheckCircle2 className="w-5 h-5 text-emerald-600" /> : <ShieldAlert className="w-5 h-5 text-amber-600" />}
+                  <div>
+                    <h4 className="font-bold">{isHired ? 'Congratulations! You are Hired!' : 'Application Update'}</h4>
+                    <p className="text-sm">
+                      {isHired 
+                        ? `You have been selected for the ${jobTitle} role at ${companyName}.`
+                        : `Your application for ${jobTitle} at ${companyName} has been reviewed but unfortunately was not selected.`}
+                    </p>
+                  </div>
+                </div>
+                <button onClick={() => dismissNotification(notif.id, notif.status)} className="p-2 hover:bg-white/50 rounded-full transition-colors">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Hireability 3D Score Widget */}
       <HireabilityScore />

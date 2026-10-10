@@ -3,8 +3,12 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict
 from database import supabase
 from services.hireability import calculate_hireability_index
+from cachetools import TTLCache
 
 router = APIRouter()
+
+# Global cache for jobs list (5 minutes TTL, up to 100 items)
+jobs_cache = TTLCache(maxsize=100, ttl=300)
 
 # ============================================================
 # Pydantic Models
@@ -34,6 +38,22 @@ class JobApplicationCreate(BaseModel):
     student_id: str
     resume_url: str
     cover_letter: Optional[str] = None
+
+class CompanyMessageCreate(BaseModel):
+    sender_type: str
+    sender_id: str
+    sender_name: str
+    message: str
+
+class CompanyAssessmentCreate(BaseModel):
+    assessment_link: str
+    guidelines: Optional[str] = None
+
+class CompanyAssessmentResult(BaseModel):
+    company_result: str
+
+class StudentAssessmentStatusUpdate(BaseModel):
+    student_status: str
 
 # ============================================================
 # Auth & Registration
@@ -95,7 +115,7 @@ async def register_company(payload: CompanyRegister):
 async def login_company(payload: CompanyLogin):
     try:
         response = supabase.auth.sign_in_with_password({
-            "email": payload.email,
+            "email": payload.email.strip(),
             "password": payload.password
         })
         user = response.user
@@ -158,6 +178,11 @@ async def post_job(auth_id: str, payload: JobPostingCreate):
             "required_skills": [s.dict() for s in payload.required_skills],
             "status": "open"
         }).execute()
+        
+        # Invalidate jobs cache when a new job is posted
+        if "all_open_jobs" in jobs_cache:
+            del jobs_cache["all_open_jobs"]
+            
         return result.data[0]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -183,23 +208,44 @@ async def get_job_applicants(auth_id: str, job_id: str):
         # Fetch applications for this job
         apps = supabase.table("job_applications").select("*").eq("job_id", job_id).order("match_score", desc=True).execute()
 
+        if not apps.data:
+            return {"applicants": []}
+
+        student_ids = [app["student_id"] for app in apps.data]
+
+        # Bulk fetch students
+        students_res = supabase.table("students").select(
+            "id, name, email, phone, branch, year, usn, github_url, linkedin_url, college_id"
+        ).in_("id", student_ids).execute()
+        students_map = {s["id"]: s for s in students_res.data}
+
+        # Bulk fetch student skills
+        skills_res = supabase.table("student_skills").select("*").in_("student_id", student_ids).execute()
+        skills_map = {}
+        for skill in skills_res.data:
+            sid = skill["student_id"]
+            if sid not in skills_map:
+                skills_map[sid] = []
+            skills_map[sid].append(skill)
+
+        # Bulk fetch colleges
+        college_ids = list(set([s["college_id"] for s in students_res.data if s.get("college_id")]))
+        colleges_map = {}
+        if college_ids:
+            colleges_res = supabase.table("colleges").select("id, name").in_("id", college_ids).execute()
+            colleges_map = {c["id"]: c["name"] for c in colleges_res.data}
+
         enriched = []
         for app in apps.data:
-            student_req = supabase.table("students").select(
-                "id, name, email, phone, branch, year, usn, github_url, linkedin_url, college_id"
-            ).eq("id", app["student_id"]).execute()
-            student_data = student_req.data[0] if student_req.data else None
-
-            skills_req = supabase.table("student_skills").select("*").eq("student_id", app["student_id"]).execute()
-            student_skills = skills_req.data or []
-
+            sid = app["student_id"]
+            student_data = students_map.get(sid)
+            student_skills = skills_map.get(sid, [])
+            
             hireability = calculate_hireability_index(student_skills)
-
+            
             college_name = None
             if student_data and student_data.get("college_id"):
-                coll = supabase.table("colleges").select("name").eq("id", student_data["college_id"]).execute()
-                if coll.data:
-                    college_name = coll.data[0]["name"]
+                college_name = colleges_map.get(student_data["college_id"])
 
             enriched.append({
                 **app,
@@ -233,6 +279,16 @@ async def update_application_status(auth_id: str, app_id: str, status: str):
             raise HTTPException(status_code=403, detail="Unauthorized")
 
         result = supabase.table("job_applications").update({"status": status}).eq("id", app_id).execute()
+        
+        status_msg = f"Your application status has been updated to: **{status.capitalize()}**"
+        supabase.table("company_messages").insert({
+            "application_id": app_id,
+            "sender_type": "company",
+            "sender_id": company["id"],
+            "sender_name": company["name"],
+            "message": status_msg
+        }).execute()
+        
         return result.data[0]
     except HTTPException:
         raise
@@ -261,6 +317,97 @@ async def get_company_dashboard(auth_id: str):
     except Exception as e:
         import traceback
         traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================================
+# Messaging Endpoints
+# ============================================================
+
+@router.get("/applications/{app_id}/messages")
+async def get_application_messages(app_id: str):
+    try:
+        print(f"DEBUG: get_application_messages called for app_id: {app_id}")
+        messages = supabase.table("company_messages").select("*").eq("application_id", app_id).order("created_at", desc=False).execute()
+        print(f"DEBUG: returning {len(messages.data)} messages")
+        return messages.data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/applications/{app_id}/messages")
+async def send_application_message(app_id: str, payload: CompanyMessageCreate):
+    try:
+        result = supabase.table("company_messages").insert({
+            "application_id": app_id,
+            "sender_type": payload.sender_type,
+            "sender_id": payload.sender_id,
+            "sender_name": payload.sender_name,
+            "message": payload.message
+        }).execute()
+        return result.data[0]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================
+# Assessment Endpoints
+# ============================================================
+
+@router.get("/applications/{app_id}/assessment")
+async def get_application_assessment(app_id: str):
+    try:
+        assmt = supabase.table("company_assessments").select("*").eq("application_id", app_id).execute()
+        return assmt.data[0] if assmt.data else None
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/applications/{app_id}/assessment")
+async def assign_application_assessment(app_id: str, payload: CompanyAssessmentCreate):
+    try:
+        # Check if one already exists
+        existing = supabase.table("company_assessments").select("*").eq("application_id", app_id).execute()
+        if existing.data:
+            raise HTTPException(status_code=400, detail="Assessment already assigned to this application")
+            
+        result = supabase.table("company_assessments").insert({
+            "application_id": app_id,
+            "assessment_link": payload.assessment_link,
+            "guidelines": payload.guidelines,
+            "student_status": "pending"
+        }).execute()
+        return result.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.put("/applications/{app_id}/assessment/student")
+async def update_assessment_student_status(app_id: str, payload: StudentAssessmentStatusUpdate):
+    try:
+        if payload.student_status not in ["pending", "accepted", "completed", "declined"]:
+            raise HTTPException(status_code=400, detail="Invalid status")
+        result = supabase.table("company_assessments").update({
+            "student_status": payload.student_status
+        }).eq("application_id", app_id).execute()
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Assessment not found")
+        return result.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.put("/applications/{app_id}/assessment/result")
+async def update_assessment_company_result(app_id: str, payload: CompanyAssessmentResult):
+    try:
+        result = supabase.table("company_assessments").update({
+            "company_result": payload.company_result
+        }).eq("application_id", app_id).execute()
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Assessment not found")
+        return result.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -302,8 +449,51 @@ def _calculate_match_score(student_skills: list, required_skills: list) -> int:
 @router.get("/student/jobs/all")
 async def get_all_jobs():
     try:
+        cache_key = "all_open_jobs"
+        if cache_key in jobs_cache:
+            return {"jobs": jobs_cache[cache_key]}
+            
         jobs = supabase.table("job_postings").select("*, companies(name)").eq("status", "open").order("created_at", desc=True).execute()
+        
+        jobs_cache[cache_key] = jobs.data
         return {"jobs": jobs.data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/student/jobs/applied/{student_id}")
+async def get_student_applications(student_id: str):
+    try:
+        # Get all applications for this student
+        apps = supabase.table("job_applications").select("*").eq("student_id", student_id).execute()
+        
+        if not apps.data:
+            return {"applications": []}
+            
+        # Fetch job postings and companies manually to avoid relation issues
+        job_ids = list(set([app["job_id"] for app in apps.data]))
+        jobs_res = supabase.table("job_postings").select("id, title, company_id").in_("id", job_ids).execute()
+        jobs_map = {job["id"]: job for job in jobs_res.data}
+        
+        company_ids = list(set([job["company_id"] for job in jobs_res.data if job.get("company_id")]))
+        companies_map = {}
+        if company_ids:
+            comp_res = supabase.table("companies").select("id, name").in_("id", company_ids).execute()
+            companies_map = {c["id"]: c["name"] for c in comp_res.data}
+            
+        enriched_apps = []
+        for app in apps.data:
+            job = jobs_map.get(app["job_id"])
+            if job:
+                comp_name = companies_map.get(job.get("company_id"))
+                app["job_postings"] = {
+                    "title": job["title"],
+                    "companies": {"name": comp_name} if comp_name else None
+                }
+            else:
+                app["job_postings"] = None
+            enriched_apps.append(app)
+            
+        return {"applications": enriched_apps}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -352,8 +542,21 @@ async def apply_to_job(job_id: str, payload: JobApplicationCreate):
             "status": "applied"
         }).execute()
 
+        # Invalidate student applications cache
+        cache_key = f"student_applications_{payload.student_id}"
+        if cache_key in jobs_cache:
+            del jobs_cache[cache_key]
+
         return {"message": "Application submitted successfully!", "application": result.data[0]}
     except Exception as e:
         if "duplicate key value" in str(e):
             raise HTTPException(status_code=400, detail="You have already applied for this job.")
         raise HTTPException(status_code=500, detail=str(e))
+@router.delete('/messages/{message_id}')
+async def delete_company_message(message_id: str):
+    try:
+        supabase.table('company_messages').delete().eq('id', message_id).execute()
+        return {'success': True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
