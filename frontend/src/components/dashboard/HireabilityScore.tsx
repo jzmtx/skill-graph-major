@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 
 import { getCachedData, setCachedData } from "@/lib/cache";
+import GLIExplanationModal from "./GLIExplanationModal";
 
 interface PointEvent {
   type: string;
@@ -47,6 +48,7 @@ export default function HireabilityScore({ studentIdProp }: { studentIdProp?: st
   const [data, setData] = useState<HireabilityData | null>(() => cachedInitial || null);
   const [loading, setLoading] = useState(() => !cachedInitial);
   const [showHistory, setShowHistory] = useState(false);
+  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
 
   // Subtle interactive hover state
   const cardRef = useRef<HTMLDivElement>(null);
@@ -176,10 +178,17 @@ export default function HireabilityScore({ studentIdProp }: { studentIdProp?: st
               </p>
             </div>
             
-            <div className="flex items-center gap-2 self-start sm:self-auto text-xs text-stone-600 bg-stone-50 border border-stone-200 px-3 py-1.5 rounded-lg">
+            <button
+              onClick={() => setIsInfoModalOpen(true)}
+              className="flex items-center gap-2 self-start sm:self-auto text-xs font-semibold text-stone-700 bg-stone-50 hover:bg-stone-100 border border-stone-200 hover:border-emerald-700/50 px-3 py-1.5 rounded-lg transition-all shadow-2xs group cursor-pointer"
+              title="Click to view mathematical breakdown and ATS ranking model"
+            >
               <ShieldCheck className="w-4 h-4 text-emerald-800" />
-              <span>Institutional Model · 300 to 850</span>
-            </div>
+              <span>Model: 300 to 850</span>
+              <span className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-900 flex items-center justify-center text-[10px] font-bold group-hover:bg-emerald-800 group-hover:text-white transition-colors">
+                i
+              </span>
+            </button>
           </div>
 
           {/* Main Visual & Breakdown Grid */}
@@ -377,6 +386,12 @@ export default function HireabilityScore({ studentIdProp }: { studentIdProp?: st
 
         </div>
       </motion.div>
+
+      <GLIExplanationModal 
+        isOpen={isInfoModalOpen} 
+        onClose={() => setIsInfoModalOpen(false)} 
+        currentScore={score} 
+      />
     </div>
   );
 }

@@ -393,6 +393,7 @@ class CompleteAssessmentRequest(BaseModel):
     history: list[dict]
     node_id: str = None
     roadmap_id: str = None
+    violations: int = 0
 
 class SimulateCodeRequest(BaseModel):
     skill_name: str
@@ -440,23 +441,33 @@ def complete_assessment(req: CompleteAssessmentRequest):
     try:
         analytics = analyze_performance(req.skill_name, req.history)
         
-        if req.score_percentage >= 60:
+        # Calculate integrity deduction if proctoring infractions exceeded threshold (>3)
+        integrity_penalty = 0
+        effective_score = req.score_percentage
+        if req.violations > 3:
+            integrity_penalty = min(35, (req.violations - 3) * 10 + 10)
+            effective_score = max(0, req.score_percentage - integrity_penalty)
+            analytics += f"\n\n**Proctoring Audit:** {req.violations} unverified window interruptions/actions flagged during examination. An integrity trust deduction of -{integrity_penalty} points was applied to your verified competency benchmark."
+        
+        if effective_score >= 60:
             skill_res = supabase.table("student_skills").select("*").eq("student_id", req.student_id).eq("skill_name", req.skill_name).execute()
             
             if skill_res.data:
-                new_score = skill_res.data[0]['skill_score'] + int(req.score_percentage / 2)
+                new_score = skill_res.data[0]['skill_score'] + int(effective_score / 2)
                 
-                supabase.table("student_skills").update({
+                update_payload = {
                     "verification_level": 1,
                     "skill_score": new_score
-                }).eq("id", skill_res.data[0]['id']).execute()
+                }
+                supabase.table("student_skills").update(update_payload).eq("id", skill_res.data[0]['id']).execute()
             else:
-                supabase.table("student_skills").insert({
+                insert_payload = {
                     "student_id": req.student_id,
                     "skill_name": req.skill_name,
                     "verification_level": 1,
-                    "skill_score": int(req.score_percentage)
-                }).execute()
+                    "skill_score": int(effective_score)
+                }
+                supabase.table("student_skills").insert(insert_payload).execute()
                 
                 # Roadmap Integration: Mark node as assessed
                 if req.node_id and req.roadmap_id and req.student_id:

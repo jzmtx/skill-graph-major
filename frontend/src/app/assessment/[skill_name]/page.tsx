@@ -1,11 +1,14 @@
 "use client";
 
-import React, { useState, useEffect, use } from 'react';
+import React, { useState, useEffect, use, useRef } from 'react';
 import { getAdaptiveQuestion, submitAnswer, completeAssessment, getCodingQuestion, evaluateCode, simulateCode, reportQuestion } from '@/lib/api';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github.css';
-import { Target, ArrowLeft, CheckCircle2, XCircle, Code, Loader2, Brain, ShieldAlert, Flag, Terminal, EyeOff, Timer } from 'lucide-react';
+import { 
+  Target, ArrowLeft, CheckCircle2, XCircle, Code, Loader2, Brain, 
+  ShieldAlert, ShieldCheck, Flag, Terminal, EyeOff, Timer, Info, X 
+} from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Editor from '@monaco-editor/react';
@@ -40,44 +43,127 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
   const [reportReason, setReportReason] = useState("");
   const [reportSubmitted, setReportSubmitted] = useState(false);
 
-  // Proctoring state
-  const MAX_VIOLATIONS = 3;
+  // Weight Info Modal state
+  const [showWeightModal, setShowWeightModal] = useState(false);
+
+  // Proctoring & Anti-Cheat State
   const [violations, setViolations] = useState(0);
-  const [showWarning, setShowWarning] = useState(false);
-  const [proctorFailed, setProctorFailed] = useState(false);
-  const lastViolationTime = React.useRef(0);
+  const [violationNotice, setViolationNotice] = useState<{ show: boolean; reason: string; count: number }>({
+    show: false,
+    reason: "",
+    count: 0
+  });
+  const lastViolationTime = useRef(0);
 
+  const triggerViolation = (reason: string) => {
+    if (isFinished) return;
+    const now = Date.now();
+    if (now - lastViolationTime.current < 2500) return; // throttle 2.5s
+    lastViolationTime.current = now;
+
+    setViolations(prev => {
+      const next = prev + 1;
+      setViolationNotice({
+        show: true,
+        reason,
+        count: next
+      });
+      return next;
+    });
+  };
+
+  // Auto-hide proctoring warning toast after 4.5s
   useEffect(() => {
-    if (isFinished || proctorFailed) return;
+    if (!violationNotice.show) return;
+    const timer = setTimeout(() => {
+      setViolationNotice(prev => ({ ...prev, show: false }));
+    }, 4500);
+    return () => clearTimeout(timer);
+  }, [violationNotice.show]);
 
-    const handleViolation = () => {
-      if (document.hidden || !document.hasFocus()) {
-        const now = Date.now();
-        if (now - lastViolationTime.current < 3000) return;
-        lastViolationTime.current = now;
+  // Anti-cheat event interceptors: Copy/Paste/Cut, ContextMenu, Screenshots, Window Blur
+  useEffect(() => {
+    if (isFinished) return;
 
-        setViolations(prev => {
-          const next = prev + 1;
-          if (next >= MAX_VIOLATIONS) {
-            setProctorFailed(true);
-            handleFinish(score, history, true);
-          } else {
-            setShowWarning(true);
-          }
-          return next;
-        });
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        triggerViolation("Active window lost focus. The testing tab must remain focused.");
       }
     };
 
-    document.addEventListener("visibilitychange", handleViolation);
-    window.addEventListener("blur", handleViolation);
+    const handleWindowBlur = () => {
+      triggerViolation("Browser window lost focus. Switching windows or applications is restricted.");
+    };
+
+    const handleCopy = (e: ClipboardEvent) => {
+      e.preventDefault();
+      triggerViolation("Copy action blocked. Clipboard access is restricted during assessment.");
+    };
+
+    const handlePaste = (e: ClipboardEvent) => {
+      e.preventDefault();
+      triggerViolation("Paste action blocked. External code or text insertion is restricted.");
+    };
+
+    const handleCut = (e: ClipboardEvent) => {
+      e.preventDefault();
+      triggerViolation("Cut action blocked during proctored assessment.");
+    };
+
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+      triggerViolation("Right-click context menu is disabled during assessment.");
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // PrintScreen detection
+      if (e.key === 'PrintScreen' || e.code === 'PrintScreen') {
+        e.preventDefault();
+        triggerViolation("Screenshot capture (PrintScreen) detected and prohibited.");
+        return;
+      }
+
+      // Windows Snipping tool / Screenshot: Win+Shift+S or Ctrl+Shift+S
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        triggerViolation("Screen capture shortcut detected and prohibited.");
+        return;
+      }
+
+      // Mac screenshot: Cmd+Shift+3, 4, 5
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && ['3', '4', '5'].includes(e.key)) {
+        e.preventDefault();
+        triggerViolation("Mac screen capture shortcut detected and prohibited.");
+        return;
+      }
+
+      // Copy/Paste hotkeys: Ctrl+C, Ctrl+V, Ctrl+X, Cmd+C, Cmd+V, Cmd+X
+      if ((e.ctrlKey || e.metaKey) && ['c', 'v', 'x'].includes(e.key.toLowerCase())) {
+        e.preventDefault();
+        triggerViolation("Clipboard shortcut (Copy/Paste/Cut) blocked.");
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("blur", handleWindowBlur);
+    window.addEventListener("copy", handleCopy, true);
+    window.addEventListener("paste", handlePaste, true);
+    window.addEventListener("cut", handleCut, true);
+    window.addEventListener("contextmenu", handleContextMenu, true);
+    window.addEventListener("keydown", handleKeyDown, true);
 
     return () => {
-      document.removeEventListener("visibilitychange", handleViolation);
-      window.removeEventListener("blur", handleViolation);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("blur", handleWindowBlur);
+      window.removeEventListener("copy", handleCopy, true);
+      window.removeEventListener("paste", handlePaste, true);
+      window.removeEventListener("cut", handleCut, true);
+      window.removeEventListener("contextmenu", handleContextMenu, true);
+      window.removeEventListener("keydown", handleKeyDown, true);
     };
-  }, [isFinished, score, history, proctorFailed]);
+  }, [isFinished]);
 
+  // Question countdown timer
   useEffect(() => {
     if (timeLeft <= 0 || isSubmitting || !!feedback || !question || isFinished || loading) return;
     const timer = setInterval(() => {
@@ -98,6 +184,7 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
       if (count === 1) setLoading(true);
       const studentId = typeof window !== 'undefined' ? localStorage.getItem('student_id') : null;
       
+      // Coding questions on Question 6 and Question 12 (5 minutes time limit = 300s)
       if (count === 6 || count === 12) {
         const codingQ = await getCodingQuestion({
           skill_name: skillName,
@@ -109,12 +196,13 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
           setStudentCode(codingQ.starter_code || '# Write your solution here\n');
           setSeenIds(prev => [...prev, codingQ.question_id || codingQ.id]);
           setSelectedOption(null);
-          setTimeLeft(120);
+          setTimeLeft(300); // 5 minutes for coding questions
           setLoading(false);
           return;
         }
       }
 
+      // Adaptive conceptual MCQ (60s time limit)
       const q = await getAdaptiveQuestion({
         skill_name: skillName,
         difficulty_level: currentDiff,
@@ -125,7 +213,7 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
         setQuestion(q);
         setSeenIds(prev => [...prev, q.question_id]);
         setSelectedOption(null);
-        setTimeLeft(60);
+        setTimeLeft(60); // 60 seconds for MCQs
       } else {
         handleFinish(score, history);
       }
@@ -155,7 +243,7 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
         code: studentCode,
         language: skillName.toLowerCase() === 'c++' ? 'cpp' : (skillName.toLowerCase() === 'node.js' || skillName.toLowerCase() === 'react' || skillName.toLowerCase() === 'nextjs' ? 'javascript' : skillName.toLowerCase())
       });
-      setExecutionOutput(res.output || "Program finished with code 0.");
+      setExecutionOutput(res.output || "Program finished with exit code 0.");
     } catch (e) {
       setExecutionOutput("Execution failed or timed out.");
     } finally {
@@ -165,8 +253,8 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
 
   const handleSubmit = async (isTimeout = false) => {
     if (isSubmitting || !!feedback) return;
-    if (!question.isCoding && !selectedOption && !isTimeout) return;
-    if (question.isCoding && !studentCode.trim() && !isTimeout) return;
+    if (!question?.isCoding && !selectedOption && !isTimeout) return;
+    if (question?.isCoding && !studentCode.trim() && !isTimeout) return;
 
     setIsSubmitting(true);
     setEvaluationPhase('evaluating');
@@ -181,8 +269,8 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
       if (question.isCoding) {
         if (isTimeout) {
           isCorrect = false;
-          correctAns = "Time expired.";
-          explanation = "You did not complete the code within the allocated time.";
+          correctAns = "Time expired (5:00 min limit).";
+          explanation = "You did not complete the coding challenge within the allocated 5-minute sandbox window.";
         } else {
           const evalRes = await evaluateCode({
             skill_name: skillName,
@@ -191,7 +279,7 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
           });
           isCorrect = evalRes.is_correct;
           correctAns = evalRes.feedback;
-          explanation = "Code evaluated successfully against test fixtures.";
+          explanation = "Code evaluated successfully against automated test fixtures.";
         }
       } else {
         const res = await submitAnswer({
@@ -272,24 +360,23 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
     }
   };
 
-  const handleFinish = async (finalScore: number, finalHistory = history, failedProctoring = false) => {
+  const handleFinish = async (finalScore: number, finalHistory = history) => {
     setIsFinished(true);
     setLoading(true);
     try {
       const studentId = typeof window !== 'undefined' ? localStorage.getItem('student_id') : null;
-      const percentage = failedProctoring ? 0 : Math.min(100, Math.round((finalScore / 600) * 100)); 
+      const percentage = Math.min(100, Math.round((finalScore / 600) * 100)); 
       
       const res = await completeAssessment({
         student_id: studentId,
         skill_name: skillName,
         score_percentage: percentage,
-        history: finalHistory
+        history: finalHistory,
+        violations: violations,
       });
       
-      setFinalPassed(failedProctoring ? false : res.passed);
-      if (failedProctoring) {
-        setAnalytics("Assessment concluded due to proctoring window interruptions.");
-      } else if (res.analytics) {
+      setFinalPassed(res.passed);
+      if (res.analytics) {
         setAnalytics(res.analytics);
       }
     } catch (e) {
@@ -298,6 +385,10 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
       setLoading(false);
     }
   };
+
+  // Current question score weight calculations
+  const questionWeightPoints = question?.isCoding ? 50 : (difficulty * 10);
+  const questionWeightPercentage = ((questionWeightPoints / 600) * 100).toFixed(1);
 
   if (isFinished && !loading) {
     return (
@@ -318,16 +409,42 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
             {finalPassed ? "Level 1 Verified!" : "Assessment Completed"}
           </h2>
           <div className="mb-4">
-            <span className="text-3xl font-black text-emerald-800">{proctorFailed ? 0 : score}</span>
-            <span className="text-stone-400 font-medium"> / 600</span>
+            <span className="text-3xl font-black text-emerald-800">{score}</span>
+            <span className="text-stone-400 font-medium"> / 600 pts</span>
+            <span className="text-xs text-stone-500 block mt-1 font-medium">
+              Overall Result: {Math.round((score / 600) * 100)}% ({finalPassed ? 'Passed >= 60%' : 'Needs Improvement'})
+            </span>
           </div>
-          <p className="text-stone-600 text-xs leading-relaxed mb-6">
-            {proctorFailed
-              ? `Your assessment concluded due to window focus violations. Formal evaluations require uninterrupted attention.`
-              : finalPassed 
-                ? `Congratulations! You scored high enough to achieve Level 1 verification in ${skillName}. Your Hireability index has updated.`
-                : `Baseline established for ${skillName}. Practice further and re-attempt to advance verification.`}
+
+          <p className="text-stone-600 text-xs leading-relaxed mb-5">
+            {finalPassed 
+              ? `Congratulations! You scored high enough to achieve Level 1 verification in ${skillName}. Your Global Learner Index (GLI) has updated.`
+              : `Baseline established for ${skillName}. Practice further and re-attempt to advance verification.`}
           </p>
+
+          {/* Proctoring Integrity Summary */}
+          <div className="bg-stone-50 border border-stone-200 rounded-lg p-3.5 mb-5 text-left">
+            <div className="flex items-center justify-between text-xs mb-1.5">
+              <span className="font-semibold text-stone-700 flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-stone-500" />
+                Proctoring Trust Audit
+              </span>
+              <span className={`font-bold px-2 py-0.5 rounded text-[11px] ${
+                violations <= 3 
+                  ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' 
+                  : 'bg-amber-50 text-amber-800 border border-amber-200'
+              }`}>
+                {violations <= 3 ? 'Verified Trusted' : `${violations} Flags Logged`}
+              </span>
+            </div>
+            <p className="text-[11px] text-stone-500 leading-relaxed">
+              {violations === 0 
+                ? 'Clean proctored session. Zero window deviations or clipboard actions detected.'
+                : violations <= 3 
+                  ? `${violations} minor focus or shortcut interruption(s) recorded within normal tolerance. Full score preserved.`
+                  : `${violations} flags recorded (>3 tolerance limit). A trust deduction was logged against your score and Global Learner Index (GLI).`}
+            </p>
+          </div>
           
           {analytics && (
             <div className="bg-stone-50 rounded-lg p-4 text-left border border-stone-200 mb-6">
@@ -340,6 +457,7 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
               </p>
             </div>
           )}
+
           <button 
             onClick={() => router.push('/dashboard')}
             className="w-full px-5 py-2.5 bg-emerald-800 text-white font-semibold text-xs rounded-lg hover:bg-emerald-900 transition-colors shadow-2xs"
@@ -396,7 +514,44 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
   }
 
   return (
-    <div className="min-h-screen bg-stone-50 flex flex-col">
+    <div className="min-h-screen bg-stone-50 flex flex-col select-none">
+      {/* Anti-cheat Proctoring Toast Notice */}
+      {violationNotice.show && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 w-full max-w-md px-4 animate-in slide-in-from-top-2 duration-200">
+          <div className={`p-3.5 rounded-lg border shadow-lg flex items-start gap-3 ${
+            violationNotice.count > 3 
+              ? 'bg-amber-50 border-amber-300 text-amber-950' 
+              : 'bg-stone-900 text-stone-100 border-stone-800'
+          }`}>
+            <ShieldAlert className={`w-4 h-4 shrink-0 mt-0.5 ${violationNotice.count > 3 ? 'text-amber-700' : 'text-amber-400'}`} />
+            <div className="flex-1 text-xs">
+              <div className="flex items-center justify-between font-bold mb-0.5">
+                <span>Proctoring Flag {violationNotice.count}</span>
+                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                  violationNotice.count > 3 ? 'bg-amber-200 text-amber-900' : 'bg-stone-800 text-stone-300'
+                }`}>
+                  {violationNotice.count > 3 ? 'GLI Trust Penalty Active' : `${violationNotice.count}/3 Warning`}
+                </span>
+              </div>
+              <p className={violationNotice.count > 3 ? 'text-amber-900 text-[11px]' : 'text-stone-300 text-[11px]'}>
+                {violationNotice.reason}
+              </p>
+              {violationNotice.count > 3 && (
+                <p className="text-[10px] text-amber-800 font-medium mt-1">
+                  Exceeding 3 proctoring flags triggers an automatic trust deduction from your score and GLI rating.
+                </p>
+              )}
+            </div>
+            <button 
+              onClick={() => setViolationNotice(prev => ({ ...prev, show: false }))} 
+              className="text-stone-400 hover:text-white text-xs ml-1"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="bg-white border-b border-stone-200 sticky top-0 z-10 shadow-2xs">
         <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
@@ -409,19 +564,47 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
               {skillName} Assessment
             </h1>
           </div>
-          <div className="flex items-center gap-3">
-            <div className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-md border ${timeLeft < 15 ? 'bg-red-50 border-red-200 text-red-700' : 'bg-stone-100 border-stone-200 text-stone-700'}`}>
+          <div className="flex items-center gap-2.5">
+            {/* Timer */}
+            <div className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-md border ${
+              timeLeft < 30 ? 'bg-red-50 border-red-200 text-red-700' : 'bg-stone-100 border-stone-200 text-stone-700'
+            }`}>
               <Timer className="w-3.5 h-3.5" />
               {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
             </div>
-            <div className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-md border bg-stone-100 border-stone-200 text-stone-700">
-              <ShieldAlert className="w-3.5 h-3.5 text-stone-500" />
-              {MAX_VIOLATIONS - violations} Warnings
+
+            {/* Proctoring Trust Indicator */}
+            <div className={`flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-md border ${
+              violations === 0 
+                ? 'bg-stone-100 border-stone-200 text-stone-700'
+                : violations <= 3
+                  ? 'bg-amber-50 border-amber-200 text-amber-800'
+                  : 'bg-red-50 border-red-200 text-red-700'
+            }`}>
+              {violations === 0 ? (
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-700" />
+              ) : (
+                <ShieldAlert className="w-3.5 h-3.5 text-amber-600" />
+              )}
+              <span className="hidden sm:inline">
+                {violations === 0 
+                  ? 'Trusted' 
+                  : violations <= 3 
+                    ? `Flag ${violations}/3` 
+                    : `${violations} Flags (Penalty)`}
+              </span>
+              <span className="sm:hidden">
+                {violations === 0 ? 'OK' : `F:${violations}`}
+              </span>
             </div>
+
+            {/* Difficulty Badge */}
             <div className="text-xs font-medium text-stone-500">
-              Level <span className="text-stone-900 font-bold">{difficulty}</span>
+              Lvl <span className="text-stone-900 font-bold">{question?.isCoding ? 'Coding' : difficulty}</span>
             </div>
-            <div className="w-24 bg-stone-200 h-1.5 rounded-full overflow-hidden hidden sm:block">
+
+            {/* Progress Bar */}
+            <div className="w-20 bg-stone-200 h-1.5 rounded-full overflow-hidden hidden sm:block">
               <div className="bg-emerald-800 h-full transition-all duration-300" style={{ width: `${(questionCount / 12) * 100}%` }} />
             </div>
             <div className="text-xs font-bold text-stone-800">{questionCount} / 12</div>
@@ -435,18 +618,57 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
           {loading && !question ? (
             <div className="bg-white rounded-xl shadow-sm border border-stone-200 p-12 text-center">
               <Loader2 className="w-8 h-8 text-emerald-800 animate-spin mx-auto mb-3" />
-              <div className="text-xs text-stone-500">Synthesizing adaptive question...</div>
+              <div className="text-xs text-stone-500">Synthesizing adaptive assessment item...</div>
             </div>
           ) : question ? (
             <div className="bg-white rounded-xl shadow-sm border border-stone-200 p-6 md:p-8 animate-in fade-in duration-200">
               
+              {/* Question Metadata Header Bar with Info Badge */}
+              <div className="flex items-center justify-between pb-3 mb-4 border-b border-stone-100">
+                <div className="flex items-center gap-2">
+                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded border ${
+                    question.isCoding 
+                      ? 'bg-amber-50 text-amber-900 border-amber-200' 
+                      : 'bg-stone-100 text-stone-700 border-stone-200'
+                  }`}>
+                    {question.isCoding ? 'Coding Sandbox (5 Min)' : `MCQ • Level ${difficulty}`}
+                  </span>
+                  <span className="text-[11px] text-stone-400">
+                    Item {questionCount} of 12
+                  </span>
+                </div>
+
+                {/* Question Weight Info Badge */}
+                <button
+                  type="button"
+                  onClick={() => setShowWeightModal(true)}
+                  className="flex items-center gap-1.5 text-[11px] font-semibold text-stone-700 bg-stone-50 hover:bg-stone-100 px-2.5 py-1 rounded-md border border-stone-200 transition-colors cursor-pointer group"
+                  title="Click to view question score weight & GLI contribution"
+                >
+                  <Info className="w-3.5 h-3.5 text-emerald-800 group-hover:scale-110 transition-transform" />
+                  <span>Weight: {questionWeightPoints} pts ({questionWeightPercentage}%)</span>
+                </button>
+              </div>
+
+              {/* Question Text */}
               <div className="text-stone-900 mb-6 text-sm leading-relaxed font-medium">
                 <ReactMarkdown rehypePlugins={[rehypeHighlight]}>{question.question_text}</ReactMarkdown>
               </div>
 
+              {/* Coding Question Sandbox or MCQ Options */}
               {question.isCoding ? (
                 <div className="space-y-3">
-                  <div className="rounded-lg overflow-hidden border border-stone-300 h-[240px]">
+                  <div className="flex items-center justify-between text-xs text-stone-500 px-1">
+                    <span className="flex items-center gap-1 font-medium">
+                      <Code className="w-3.5 h-3.5 text-emerald-800" />
+                      5-Minute Sandbox • Copy/Paste Disabled
+                    </span>
+                    <span className="text-[11px] text-stone-400">
+                      Standard coding weight: 50 pts
+                    </span>
+                  </div>
+
+                  <div className="rounded-lg overflow-hidden border border-stone-300 h-[260px]">
                     <Editor
                       height="100%"
                       defaultLanguage={skillName.toLowerCase() === 'c++' ? 'cpp' : (skillName.toLowerCase() === 'node.js' || skillName.toLowerCase() === 'react' || skillName.toLowerCase() === 'nextjs' ? 'javascript' : skillName.toLowerCase())}
@@ -458,7 +680,8 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
                         fontSize: 13,
                         padding: { top: 12, bottom: 12 },
                         scrollBeyondLastLine: false,
-                        readOnly: !!feedback || isSubmitting
+                        readOnly: !!feedback || isSubmitting,
+                        contextmenu: false,
                       }}
                     />
                   </div>
@@ -510,6 +733,7 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
                 </div>
               )}
 
+              {/* Action Bar */}
               <div className="mt-6 pt-4 border-t border-stone-100 flex justify-between items-center gap-3">
                 <button
                   onClick={() => setIsReporting(true)}
@@ -543,6 +767,81 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
           )}
         </div>
       </main>
+
+      {/* Question Weight Info Modal */}
+      {showWeightModal && (
+        <div className="fixed inset-0 bg-stone-900/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-xl border border-stone-200 animate-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-stone-100 mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-center justify-center">
+                  <Info className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-stone-900">Question Weight Breakdown</h3>
+                  <p className="text-[11px] text-stone-500">Contribution to Total Assessment & GLI</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowWeightModal(false)}
+                className="text-stone-400 hover:text-stone-700 p-1 rounded-md"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3.5 text-xs">
+              <div className="bg-stone-50 border border-stone-200 rounded-lg p-3 grid grid-cols-2 gap-3 text-center">
+                <div className="border-r border-stone-200 pr-2">
+                  <div className="text-stone-400 text-[10px] font-semibold uppercase tracking-wider mb-0.5">Points Value</div>
+                  <div className="text-xl font-black text-emerald-800">{questionWeightPoints} pts</div>
+                  <div className="text-[10px] text-stone-500">of 600 total points</div>
+                </div>
+                <div>
+                  <div className="text-stone-400 text-[10px] font-semibold uppercase tracking-wider mb-0.5">Exam Share</div>
+                  <div className="text-xl font-black text-stone-800">{questionWeightPercentage}%</div>
+                  <div className="text-[10px] text-stone-500">of assessment total</div>
+                </div>
+              </div>
+
+              <div className="space-y-2 text-stone-600 leading-relaxed text-[11px]">
+                <div className="flex justify-between py-1 border-b border-stone-100">
+                  <span className="text-stone-500 font-medium">Question Format:</span>
+                  <span className="font-semibold text-stone-800">
+                    {question?.isCoding ? 'Hands-on Coding Sandbox' : 'Adaptive Conceptual MCQ'}
+                  </span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-stone-100">
+                  <span className="text-stone-500 font-medium">Allocated Time Limit:</span>
+                  <span className="font-semibold text-stone-800">
+                    {question?.isCoding ? '5 Minutes (300 seconds)' : '1 Minute (60 seconds)'}
+                  </span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-stone-100">
+                  <span className="text-stone-500 font-medium">Difficulty Level:</span>
+                  <span className="font-semibold text-stone-800">
+                    Level {difficulty} of 5 ({question?.isCoding ? 'Practical Tier' : `${difficulty * 10} pts scale`})
+                  </span>
+                </div>
+              </div>
+
+              <div className="bg-stone-50 border border-stone-200 rounded-lg p-3 text-[11px] text-stone-600 leading-relaxed">
+                <span className="font-bold text-stone-800 block mb-1">GLI Integration Architecture:</span>
+                Your cumulative score across all 12 items feeds into the asymptotic normalization engine 
+                (<span className="font-mono text-[10px] text-stone-800">300 + 550 × (1 - e^-Raw/1000)</span>). 
+                Coding challenges contribute 50 pts each to verify practical implementation fidelity.
+              </div>
+            </div>
+
+            <button 
+              onClick={() => setShowWeightModal(false)}
+              className="w-full mt-4 py-2 bg-emerald-800 text-white font-semibold text-xs rounded-lg hover:bg-emerald-900 transition-colors shadow-2xs"
+            >
+              Understood
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Report Modal */}
       {isReporting && (
@@ -584,35 +883,6 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
                 </div>
               </>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* Proctor Warning Modal */}
-      {showWarning && (
-        <div className="fixed inset-0 bg-stone-900/60 z-[100] flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-xl border border-stone-200 text-center animate-in zoom-in-95">
-            <div className="w-12 h-12 bg-stone-100 text-stone-800 border border-stone-300 rounded-full flex items-center justify-center mx-auto mb-3">
-              <EyeOff className="w-6 h-6" />
-            </div>
-            <h2 className="text-lg font-serif font-bold text-stone-900 mb-1">Testing Window Warning</h2>
-            <p className="text-stone-600 text-xs mb-4 leading-relaxed">
-              Loss of focus detected on active testing window. Proctored exams require full concentration.
-            </p>
-            <div className="bg-stone-50 border border-stone-200 rounded-lg p-3 mb-4 text-xs">
-              <p className="text-stone-800 font-bold">
-                Violation {violations} of {MAX_VIOLATIONS}
-              </p>
-              <p className="text-stone-500 mt-0.5">
-                Exceeding the warning threshold will conclude the examination session.
-              </p>
-            </div>
-            <button 
-              onClick={() => setShowWarning(false)}
-              className="w-full py-2.5 bg-emerald-800 text-white font-semibold text-xs rounded-lg hover:bg-emerald-900 transition-colors shadow-2xs"
-            >
-              Acknowledge & Return to Assessment
-            </button>
           </div>
         </div>
       )}

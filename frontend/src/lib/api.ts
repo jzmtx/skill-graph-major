@@ -80,6 +80,9 @@ export const completeAssessment = async (data: {
   skill_name: string;
   score_percentage: number;
   history: {topic: string, is_correct: boolean, difficulty: number}[];
+  violations?: number;
+  node_id?: string;
+  roadmap_id?: string;
 }) => {
   const response = await api.post('/api/assessment/complete', data);
   return response.data;
