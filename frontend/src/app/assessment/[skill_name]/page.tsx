@@ -191,18 +191,22 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
     try {
       setLoading(true);
       const studentId = typeof window !== 'undefined' ? localStorage.getItem('student_id') : null;
+      const cleanExcludes = (excludeIds || []).filter((id): id is string => 
+        typeof id === 'string' && id.trim().length > 0 && id !== 'null' && id !== 'undefined'
+      );
       
       // STRICT RULE: Coding questions ONLY on Question 6 and Question 12 (5 minutes time limit = 300s)
       if (count === 6 || count === 12) {
         const codingQ = await getCodingQuestion({
           skill_name: skillName,
           difficulty_type: currentDiff.toString(),
-          student_id: studentId || null,
+          student_id: studentId || undefined,
         });
         if (codingQ && codingQ.question_text) {
-          setQuestion({ ...codingQ, isCoding: true });
+          const qId = codingQ.question_id || codingQ.id || `coding_${count}`;
+          setQuestion({ ...codingQ, question_id: qId, isCoding: true });
           setStudentCode(codingQ.starter_code || '# Write your solution here\n');
-          setSeenIds(prev => [...prev, codingQ.question_id || codingQ.id]);
+          setSeenIds(prev => [...prev.filter((id): id is string => typeof id === 'string' && id.trim().length > 0), qId]);
           setSelectedOption(null);
           setTimeLeft(300); // 5 minutes for coding questions
           setLoading(false);
@@ -214,20 +218,47 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
       const q = await getAdaptiveQuestion({
         skill_name: skillName,
         difficulty_level: currentDiff,
-        exclude_question_ids: excludeIds,
-        student_id: studentId || null,
+        exclude_question_ids: cleanExcludes,
+        student_id: studentId || undefined,
       });
       if (q && q.question_text) {
-        setQuestion({ ...q, isCoding: false }); // Explicitly false!
-        setSeenIds(prev => [...prev, q.question_id]);
+        const options = Array.isArray(q.options) && q.options.length > 0
+          ? q.options
+          : ["Option A", "Option B", "Option C", "Option D"];
+        setQuestion({ ...q, options, isCoding: false }); // Explicitly false!
+        setStudentCode('');
+        setExecutionOutput(null);
+        const qId = q.question_id || `mcq_${count}`;
+        setSeenIds(prev => [...prev.filter((id): id is string => typeof id === 'string' && id.trim().length > 0), qId]);
         setSelectedOption(null);
         setTimeLeft(60); // 60 seconds for MCQs
       } else {
         handleFinish(score, history);
       }
     } catch (e) {
-      console.error(e);
-      if (count === 1) handleFinish(score, history);
+      console.error("fetchNextQuestion error:", e);
+      // Fallback: Retry with fresh baseline query to prevent blocking student
+      try {
+        const fallbackQ = await getAdaptiveQuestion({
+          skill_name: skillName,
+          difficulty_level: currentDiff,
+          exclude_question_ids: [],
+        });
+        if (fallbackQ && fallbackQ.question_text) {
+          const options = Array.isArray(fallbackQ.options) && fallbackQ.options.length > 0
+            ? fallbackQ.options
+            : ["Option A", "Option B", "Option C", "Option D"];
+          setQuestion({ ...fallbackQ, options, isCoding: false });
+          setStudentCode('');
+          setExecutionOutput(null);
+          setSelectedOption(null);
+          setTimeLeft(60);
+          return;
+        }
+      } catch (fallbackErr) {
+        console.error("Fallback question error:", fallbackErr);
+      }
+      handleFinish(score, history);
     } finally {
       setLoading(false);
     }
@@ -281,6 +312,7 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
           isCorrect = false;
           correctAns = "Time expired (5:00 min limit).";
           explanation = "You did not complete the coding challenge within the allocated 5-minute sandbox window.";
+          nextDiff = Math.max(1, difficulty - 1);
         } else {
           const evalRes = await evaluateCode({
             skill_name: skillName,
@@ -290,6 +322,7 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
           isCorrect = evalRes.is_correct;
           correctAns = evalRes.feedback;
           explanation = "Code evaluated successfully against automated test fixtures.";
+          nextDiff = isCorrect ? Math.min(5, difficulty + 1) : Math.max(1, difficulty - 1);
         }
       } else {
         const res = await submitAnswer({

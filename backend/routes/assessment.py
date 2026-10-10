@@ -5,18 +5,20 @@ from services.llm import generate_questions, analyze_performance, generate_codin
 import random
 import json
 
+from typing import Optional, List, Any
+
 router = APIRouter()
 
 class GetQuestionRequest(BaseModel):
     skill_name: str
     difficulty_level: int
-    student_id: str = None
-    exclude_question_ids: list[str] = []
-    topics: list[str] = []
-    node_id: str = None
+    student_id: Optional[str] = None
+    exclude_question_ids: Optional[List[Any]] = []
+    topics: Optional[List[str]] = []
+    node_id: Optional[str] = None
 
 class SubmitAnswerRequest(BaseModel):
-    student_id: str
+    student_id: Optional[str] = None
     skill_name: str
     question_id: str
     selected_option: str
@@ -31,7 +33,11 @@ def get_adaptive_question(req: GetQuestionRequest):
             seen_res = supabase.table("student_seen_questions").select("question_id").eq("student_id", req.student_id).execute()
             global_seen_ids = [s['question_id'] for s in seen_res.data]
             
-        all_excludes = list(set(req.exclude_question_ids + global_seen_ids))
+        clean_client_excludes = [
+            str(x).strip() for x in (req.exclude_question_ids or []) 
+            if x is not None and str(x).strip() and str(x) not in ("None", "null", "undefined")
+        ]
+        all_excludes = list(set(clean_client_excludes + global_seen_ids))
         
         seen_texts = set()
         seen_topics = req.topics if req.topics else []
@@ -295,7 +301,7 @@ def submit_answer(req: SubmitAnswerRequest, background_tasks: BackgroundTasks):
 class GetCodingQuestionRequest(BaseModel):
     skill_name: str
     difficulty_type: str # basic or conceptual
-    student_id: str = None
+    student_id: Optional[str] = None
 
 @router.post("/get-coding-question")
 def get_coding_question(req: GetCodingQuestionRequest):
@@ -359,7 +365,10 @@ def get_coding_question(req: GetCodingQuestionRequest):
             except Exception as e:
                 print("Already seen or error marking coding question as seen:", e)
                 
+        q_id = str(selected_q.get("id")) if selected_q.get("id") else f"coding_{random.randint(1000, 9999)}"
         return {
+            "question_id": q_id,
+            "id": q_id,
             "question_text": selected_q.get("question_base_text", ""),
             "topic": selected_q.get("topic", "Coding"),
             "starter_code": selected_q.get("starter_code", "")

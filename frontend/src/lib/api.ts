@@ -91,7 +91,7 @@ export const completeAssessment = async (data: {
 export const getCodingQuestion = async (data: {
   skill_name: string;
   difficulty_type: string;
-  student_id: string | null;
+  student_id?: string | null;
 }) => {
   const response = await api.post('/api/assessment/get-coding-question', data);
   return response.data;
