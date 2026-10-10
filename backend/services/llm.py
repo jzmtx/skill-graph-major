@@ -118,20 +118,31 @@ def generate_questions(skill_name: str, count: int = 5, seen_topics: list = None
         topic_context = f"\nCRITICAL TOPIC ENFORCEMENT: You MUST generate questions exclusively focused on the following specific sub-topics of {skill_name}: {', '.join(target_topics)}.\nDo NOT generate generic {skill_name} questions."
         
     diff_desc = {
-        1: "Level 1 (Beginner): Fundamentals, basic syntax, and simple concepts.",
-        2: "Level 2 (Novice): Common use cases, standard standard library functions, and basic problem solving.",
-        3: "Level 3 (Intermediate): Advanced features, best practices, and architecture principles.",
-        4: "Level 4 (Advanced): Complex scenarios, performance optimization, and deep underlying mechanics.",
-        5: "Level 5 (Expert): Edge cases, deep internals, highly obscure nuances, and system design."
+        1: "Level 1 (Beginner): Core syntax, fundamental definitions, elementary keywords, and basic data types.",
+        2: "Level 2 (Elementary): Standard library functions, collection transformations, basic error handling, and idiomatic patterns.",
+        3: "Level 3 (Intermediate): Design patterns, closure scope, asynchronous promises/coroutines, state management, and practical debugging.",
+        4: "Level 4 (Advanced): Complex execution order, concurrency race conditions, memory profiling, and runtime lifecycle hooks.",
+        5: "Level 5 (Expert / Principal Engineer): Deep language internals, obscure runtime mechanics, bytecode/memory layouts, metaclasses/descriptors, and subtle multi-step code traps."
     }
     diff_string = diff_desc.get(target_difficulty, diff_desc[1])
     
     advanced_enforcement = ""
-    if target_difficulty >= 4:
+    if target_difficulty == 5:
         advanced_enforcement = f"""
-        CRITICAL FOR LEVEL {target_difficulty}: You MUST generate extremely advanced, obscure, and complex questions suitable for a Senior/Staff engineer. 
-        DO NOT generate 'Hello World', basic slicing, or simple syntax questions. If you generate a simple question, you have failed.
-        Include complex `code_snippet`s focusing on edge cases, memory management, algorithmic complexity, or deep system internals.
+        CRITICAL FOR LEVEL 5 (EXPERT / PRINCIPAL ENGINEER LEVEL):
+        - Questions MUST require rigorous, line-by-line mental tracing of complex, non-trivial code snippets containing subtle corner cases, mutation traps, execution order nuances, or runtime internals.
+        - BASIC TRIVIA, DEFINITIONS, AND SIMPLE CODE (e.g. 'What is X?', 'Which keyword is used for Y?') ARE STRICTLY FORBIDDEN. If you generate a basic question, it is an automatic failure.
+        - In Python: Focus on CPython memory/GIL semantics, metaclass instantiation order (__new__ vs __init__), generator send()/throw() state machines, descriptor protocol precedence, subtle asyncio cancellation leak traps.
+        - In JavaScript/TypeScript: Focus on event loop microtask vs macrotask execution orders, prototype shadowing edge cases, deep generic mapped/conditional infer type gymnastics, closure memory leak traps.
+        - In React: Focus on fiber reconciliation tearing, concurrent mode transitions, closure staleness traps across re-renders, useLayoutEffect vs useEffect flushing timing.
+        - Every question MUST include a realistic, challenging `code_snippet`. Every option must be technical, subtle, and require genuine mastery to distinguish from the correct answer.
+        """
+    elif target_difficulty == 4:
+        advanced_enforcement = f"""
+        CRITICAL FOR LEVEL 4 (ADVANCED):
+        - Focus on advanced production architecture, performance bottlenecks, concurrency, and non-trivial lifecycle mechanics.
+        - Include realistic multi-line `code_snippet`s testing practical debugging and subtle runtime behaviors.
+        - Avoid beginner syntax or simple trivia.
         """
 
     prompt = f"""

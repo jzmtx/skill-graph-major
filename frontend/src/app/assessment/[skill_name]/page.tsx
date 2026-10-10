@@ -188,12 +188,12 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
   }, [hasAcceptedRules, timeLeft, isSubmitting, feedback, question, isFinished, loading]);
 
   const fetchNextQuestion = async (currentDiff: number, excludeIds: string[], count: number) => {
+    const studentId = typeof window !== 'undefined' ? localStorage.getItem('student_id') : null;
+    const cleanExcludes = (excludeIds || []).filter((id): id is string => 
+      typeof id === 'string' && id.trim().length > 0 && id !== 'null' && id !== 'undefined'
+    );
     try {
       setLoading(true);
-      const studentId = typeof window !== 'undefined' ? localStorage.getItem('student_id') : null;
-      const cleanExcludes = (excludeIds || []).filter((id): id is string => 
-        typeof id === 'string' && id.trim().length > 0 && id !== 'null' && id !== 'undefined'
-      );
       
       // STRICT RULE: Coding questions ONLY on Question 6 and Question 12 (5 minutes time limit = 300s)
       if (count === 6 || count === 12) {
@@ -237,12 +237,13 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
       }
     } catch (e) {
       console.error("fetchNextQuestion error:", e);
-      // Fallback: Retry with fresh baseline query to prevent blocking student
+      // Fallback: Retry query with proper student exclusions to prevent blocking student
       try {
         const fallbackQ = await getAdaptiveQuestion({
           skill_name: skillName,
           difficulty_level: currentDiff,
-          exclude_question_ids: [],
+          exclude_question_ids: cleanExcludes,
+          student_id: studentId || undefined,
         });
         if (fallbackQ && fallbackQ.question_text) {
           const options = Array.isArray(fallbackQ.options) && fallbackQ.options.length > 0
