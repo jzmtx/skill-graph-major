@@ -245,3 +245,42 @@ export const deleteOpenSourceProjectMessage = async (message_id: string) => {
   const response = await api.delete(`/api/opensource/messages/project/${message_id}`);
   return response.data;
 };
+
+export interface ProjectActivity {
+  id: string;
+  project_id: string;
+  group_id?: string;
+  student_id?: string;
+  student_name?: string;
+  activity_type: 'pull_request' | 'commit' | 'task' | 'milestone' | 'review' | 'discussion';
+  title: string;
+  description?: string;
+  link_url?: string;
+  status: 'completed' | 'in_progress' | 'pending_review';
+  created_at: string;
+}
+
+export const getProjectActivities = async (projectId: string, groupId?: string): Promise<ProjectActivity[]> => {
+  const url = groupId ? `/api/opensource/projects/${projectId}/activities?group_id=${groupId}` : `/api/opensource/projects/${projectId}/activities`;
+  const res = await api.get(url);
+  return res.data.activities || [];
+};
+
+export const logProjectActivity = async (projectId: string, data: {
+  group_id?: string;
+  student_id?: string;
+  student_name?: string;
+  activity_type: string;
+  title: string;
+  description?: string;
+  link_url?: string;
+  status?: string;
+}): Promise<ProjectActivity> => {
+  const res = await api.post(`/api/opensource/projects/${projectId}/activities`, data);
+  return res.data.activity;
+};
+
+export const deleteProjectActivity = async (activityId: string) => {
+  const res = await api.delete(`/api/opensource/activities/${activityId}`);
+  return res.data;
+};

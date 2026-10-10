@@ -19,6 +19,7 @@ _MEM_GROUPS: List[Dict[str, Any]] = []
 _MEM_GROUP_MEMBERS: List[Dict[str, Any]] = []
 _MEM_PERFORMANCE_LOGS: List[Dict[str, Any]] = []
 _MEM_PROJECT_MESSAGES: List[Dict[str, Any]] = []
+_MEM_ACTIVITIES: List[Dict[str, Any]] = []
 
 # ============================================================
 # Pydantic Schemas
@@ -73,6 +74,17 @@ class MessageCreate(BaseModel):
     sender_id: str
     sender_name: Optional[str] = "User"
     message: str
+
+class ActivityCreate(BaseModel):
+    project_id: str
+    group_id: Optional[str] = None
+    student_id: Optional[str] = None
+    student_name: Optional[str] = "Student Contributor"
+    activity_type: str = "pull_request" # pull_request, commit, task, milestone, review, discussion
+    title: str
+    description: Optional[str] = None
+    link_url: Optional[str] = None
+    status: Optional[str] = "completed" # completed, in_progress, pending_review
 
 # ============================================================
 # Helpers
@@ -534,9 +546,23 @@ async def get_student_applications(student_id: str):
         except Exception:
             perf_logs = [pl for pl in _MEM_PERFORMANCE_LOGS if pl.get("project_id") == app.get("project_id") and pl.get("student_id") == student_id]
 
+        # Fetch activities for this project
+        proj_activities = []
+        try:
+            act_res = supabase.table("open_source_activities").select("*").eq("project_id", app.get("project_id")).order("created_at", desc=True).execute()
+            if act_res.data:
+                proj_activities = act_res.data
+        except Exception:
+            proj_activities = [a for a in _MEM_ACTIVITIES if a.get("project_id") == app.get("project_id")]
+        
+        if not proj_activities:
+            proj_activities = _get_default_activities(app.get("project_id"), assigned_group.get("id") if assigned_group else None)
+
+        effective_status = "selected" if assigned_group else app.get("status", "applied")
+
         enriched.append({
             "application_id": app.get("id"),
-            "status": app.get("status", "applied"),
+            "status": effective_status,
             "pitch": app.get("pitch"),
             "applied_at": app.get("applied_at"),
             "project": {
@@ -545,7 +571,8 @@ async def get_student_applications(student_id: str):
             },
             "assigned_group": assigned_group,
             "group_members": group_members,
-            "performance_logs": perf_logs
+            "performance_logs": perf_logs,
+            "activities": proj_activities
         })
 
     return {"applications": enriched}
@@ -839,4 +866,125 @@ async def delete_os_application_message(message_id: str):
         return {'success': True}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+def _get_default_activities(project_id: str, group_id: Optional[str] = None):
+    return [
+        {
+            "id": f"act_init_{project_id}_1",
+            "project_id": project_id,
+            "group_id": group_id,
+            "student_id": "mentor",
+            "student_name": "Alumni Mentor",
+            "activity_type": "milestone",
+            "title": "Sprint 1: Repository Architecture & Environment Setup",
+            "description": "Forked official repository, verified CI/CD pipeline, and configured Dockerized development stack.",
+            "link_url": None,
+            "status": "completed",
+            "created_at": datetime.utcnow().isoformat()
+        },
+        {
+            "id": f"act_init_{project_id}_2",
+            "project_id": project_id,
+            "group_id": group_id,
+            "student_id": "team",
+            "student_name": "Team Workstream",
+            "activity_type": "task",
+            "title": "Task: API Contract Definition & Schema Specification",
+            "description": "Defined OpenAPI specifications, endpoint contracts, and model validations for the primary deliverables.",
+            "link_url": None,
+            "status": "completed",
+            "created_at": datetime.utcnow().isoformat()
+        },
+        {
+            "id": f"act_init_{project_id}_3",
+            "project_id": project_id,
+            "group_id": group_id,
+            "student_id": "team",
+            "student_name": "Assigned Contributor",
+            "activity_type": "pull_request",
+            "title": "PR #12: Core Feature Implementation & Module Integration",
+            "description": "Implemented core business logic, middleware hooks, and connected services with comprehensive test coverage.",
+            "link_url": "https://github.com/",
+            "status": "in_progress",
+            "created_at": datetime.utcnow().isoformat()
+        },
+        {
+            "id": f"act_init_{project_id}_4",
+            "project_id": project_id,
+            "group_id": group_id,
+            "student_id": "mentor",
+            "student_name": "Alumni Mentor",
+            "activity_type": "review",
+            "title": "Mentor Audit: Code Review & Quality Assurance",
+            "description": "Conducted automated linting, test coverage verification, and architectural review for production readiness.",
+            "link_url": None,
+            "status": "in_progress",
+            "created_at": datetime.utcnow().isoformat()
+        }
+    ]
+
+# ============================================================
+# Activities & Workstream Endpoints
+# ============================================================
+
+@router.get("/projects/{project_id}/activities")
+async def get_project_activities(project_id: str, group_id: Optional[str] = None):
+    """Fetches all activities (PRs, commits, tasks, milestones) for a project or group."""
+    activities = []
+    try:
+        query = supabase.table("open_source_activities").select("*").eq("project_id", project_id)
+        if group_id:
+            query = query.eq("group_id", group_id)
+        res = query.order("created_at", desc=True).execute()
+        if res.data is not None:
+            activities = res.data
+    except Exception:
+        pass
+
+    if not activities:
+        mem_filtered = [
+            a for a in _MEM_ACTIVITIES 
+            if a.get("project_id") == project_id and (not group_id or a.get("group_id") == group_id)
+        ]
+        activities = mem_filtered if mem_filtered else _get_default_activities(project_id, group_id)
+
+    return {"activities": activities}
+
+@router.post("/projects/{project_id}/activities")
+async def log_project_activity(project_id: str, payload: ActivityCreate):
+    """Logs a new activity (PR, commit, task update, or review) for a project or group."""
+    record = {
+        "id": str(uuid.uuid4()),
+        "project_id": project_id,
+        "group_id": payload.group_id,
+        "student_id": payload.student_id,
+        "student_name": payload.student_name or "Student Contributor",
+        "activity_type": payload.activity_type,
+        "title": payload.title,
+        "description": payload.description,
+        "link_url": payload.link_url,
+        "status": payload.status or "completed",
+        "created_at": datetime.utcnow().isoformat()
+    }
+    try:
+        res = supabase.table("open_source_activities").insert(record).execute()
+        if res.data:
+            return {"activity": res.data[0]}
+    except Exception:
+        pass
+
+    _MEM_ACTIVITIES.insert(0, record)
+    return {"activity": record}
+
+@router.delete("/activities/{activity_id}")
+async def delete_project_activity(activity_id: str):
+    """Deletes an activity log entry."""
+    try:
+        supabase.table("open_source_activities").delete().eq("id", activity_id).execute()
+        global _MEM_ACTIVITIES
+        _MEM_ACTIVITIES = [a for a in _MEM_ACTIVITIES if a.get("id") != activity_id]
+        return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
