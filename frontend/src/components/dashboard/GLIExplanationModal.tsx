@@ -16,7 +16,9 @@ import {
   TrendingUp,
   BrainCircuit,
   Sliders,
-  FileText
+  FileText,
+  Calculator,
+  ArrowRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -27,9 +29,13 @@ interface GLIExplanationModalProps {
 }
 
 export default function GLIExplanationModal({ isOpen, onClose, currentScore = 300 }: GLIExplanationModalProps) {
-  const [activeTab, setActiveTab] = useState<'formula' | 'scale' | 'normalization' | 'ats'>('formula');
+  const [activeTab, setActiveTab] = useState<'scenario' | 'formula' | 'normalization' | 'scale' | 'ats'>('scenario');
+  const [interactiveRaw, setInteractiveRaw] = useState<number>(1000);
 
   if (!isOpen) return null;
+
+  // Interactive formula calculator: 300 + 550 * (1 - exp(-Raw / 1000))
+  const interactiveGLI = Math.min(849, Math.round(300 + 550 * (1 - Math.exp(-interactiveRaw / 1000))));
 
   return (
     <AnimatePresence>
@@ -63,7 +69,7 @@ export default function GLIExplanationModal({ isOpen, onClose, currentScore = 30
             </div>
             <button 
               onClick={onClose}
-              className="p-2 text-stone-400 hover:text-stone-700 hover:bg-stone-200/60 rounded-lg transition-colors"
+              className="p-2 text-stone-400 hover:text-stone-700 hover:bg-stone-200/60 rounded-lg transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -72,8 +78,19 @@ export default function GLIExplanationModal({ isOpen, onClose, currentScore = 30
           {/* Tab Navigation */}
           <div className="flex border-b border-stone-200 bg-white px-6 gap-2 overflow-x-auto text-xs font-semibold">
             <button
+              onClick={() => setActiveTab('scenario')}
+              className={`py-3 px-3 border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                activeTab === 'scenario'
+                  ? 'border-emerald-800 text-emerald-800 font-bold'
+                  : 'border-transparent text-stone-500 hover:text-stone-800'
+              }`}
+            >
+              <Calculator className="w-3.5 h-3.5" />
+              10-Project Roadmap Scenario
+            </button>
+            <button
               onClick={() => setActiveTab('formula')}
-              className={`py-3 px-3 border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${
+              className={`py-3 px-3 border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
                 activeTab === 'formula'
                   ? 'border-emerald-800 text-emerald-800 font-bold'
                   : 'border-transparent text-stone-500 hover:text-stone-800'
@@ -83,19 +100,8 @@ export default function GLIExplanationModal({ isOpen, onClose, currentScore = 30
               Score Contribution Split
             </button>
             <button
-              onClick={() => setActiveTab('scale')}
-              className={`py-3 px-3 border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${
-                activeTab === 'scale'
-                  ? 'border-emerald-800 text-emerald-800 font-bold'
-                  : 'border-transparent text-stone-500 hover:text-stone-800'
-              }`}
-            >
-              <Award className="w-3.5 h-3.5" />
-              Why 300 to 850 Scale?
-            </button>
-            <button
               onClick={() => setActiveTab('normalization')}
-              className={`py-3 px-3 border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${
+              className={`py-3 px-3 border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
                 activeTab === 'normalization'
                   ? 'border-emerald-800 text-emerald-800 font-bold'
                   : 'border-transparent text-stone-500 hover:text-stone-800'
@@ -105,8 +111,19 @@ export default function GLIExplanationModal({ isOpen, onClose, currentScore = 30
               Asymptotic Normalization
             </button>
             <button
+              onClick={() => setActiveTab('scale')}
+              className={`py-3 px-3 border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                activeTab === 'scale'
+                  ? 'border-emerald-800 text-emerald-800 font-bold'
+                  : 'border-transparent text-stone-500 hover:text-stone-800'
+              }`}
+            >
+              <Award className="w-3.5 h-3.5" />
+              Why 300 to 850 Scale?
+            </button>
+            <button
               onClick={() => setActiveTab('ats')}
-              className={`py-3 px-3 border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${
+              className={`py-3 px-3 border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
                 activeTab === 'ats'
                   ? 'border-emerald-800 text-emerald-800 font-bold'
                   : 'border-transparent text-stone-500 hover:text-stone-800'
@@ -120,7 +137,173 @@ export default function GLIExplanationModal({ isOpen, onClose, currentScore = 30
           {/* Modal Body */}
           <div className="p-6 overflow-y-auto space-y-6 text-xs leading-relaxed text-stone-700">
             
-            {/* TAB 1: FORMULA & SCORE SPLIT */}
+            {/* TAB 1: 10-PROJECT ROADMAP SCENARIO (THE KEY USER QUESTION) */}
+            {activeTab === 'scenario' && (
+              <div className="space-y-4">
+                <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-1">
+                    <h3 className="text-sm font-bold text-emerald-950 font-serif">
+                      The Concept: Why Raw Score ≠ Final GLI
+                    </h3>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-white text-emerald-800 border border-emerald-200">
+                      Raw Accumulator vs Credit Scale
+                    </span>
+                  </div>
+                  <p className="text-emerald-900 text-xs leading-relaxed">
+                    If 1 project gives 100 raw points, completing a 10-project roadmap accumulates <span className="font-bold">1,000 raw points</span>. 
+                    With Level 2 multipliers ($3\times$), synergies, and velocity bonuses, raw points easily reach <span className="font-bold">1,500 to 3,000+</span>. 
+                    Here is why your final score never exceeds 850 and how the mathematical normalization works.
+                  </p>
+                </div>
+
+                {/* Key Insight Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                  <div className="bg-stone-50 border border-stone-200 rounded-xl p-3.5 space-y-1.5">
+                    <span className="font-bold text-stone-900 text-xs flex items-center gap-1.5">
+                      <Target className="w-3.5 h-3.5 text-stone-600" />
+                      1. Raw Score Accumulator (0 to ∞)
+                    </span>
+                    <p className="text-[11px] text-stone-600 leading-normal">
+                      Every project, code defense, quiz, and bonus accumulates raw points indefinitely. There is zero upper ceiling on raw score, rewarding continuous learning over months.
+                    </p>
+                  </div>
+
+                  <div className="bg-stone-50 border border-stone-200 rounded-xl p-3.5 space-y-1.5">
+                    <span className="font-bold text-stone-900 text-xs flex items-center gap-1.5">
+                      <Award className="w-3.5 h-3.5 text-emerald-800" />
+                      2. Normalized GLI Scale (300 to 850)
+                    </span>
+                    <p className="text-[11px] text-stone-600 leading-normal">
+                      Like a FICO credit score (300–850), GLI normalizes your raw output into a standard institutional bracket that companies trust to evaluate real production competence.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Concrete Roadmap Milestone Table */}
+                <div className="border border-stone-200 rounded-xl overflow-hidden bg-white shadow-2xs">
+                  <div className="bg-stone-50 px-4 py-2.5 border-b border-stone-200 font-bold text-xs text-stone-900 flex items-center justify-between">
+                    <span>Roadmap Progression & GLI Conversion Table</span>
+                    <span className="text-[10px] font-mono text-stone-500">Formula: 300 + 550 × (1 - e^-Raw/1000)</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-[11px] text-left">
+                      <thead className="bg-stone-100/70 text-stone-600 border-b border-stone-200">
+                        <tr>
+                          <th className="py-2 px-3 font-semibold">Student Milestone</th>
+                          <th className="py-2 px-3 font-semibold text-center">Raw Points</th>
+                          <th className="py-2 px-3 font-semibold text-center">Multiplier</th>
+                          <th className="py-2 px-3 font-semibold text-center">Final GLI</th>
+                          <th className="py-2 px-3 font-semibold">Employability Tier</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-stone-100 text-stone-700">
+                        <tr>
+                          <td className="py-2 px-3 font-medium">New Enrolled Student</td>
+                          <td className="py-2 px-3 font-mono text-center">0 pts</td>
+                          <td className="py-2 px-3 font-mono text-center text-stone-500">0.000</td>
+                          <td className="py-2 px-3 font-bold text-stone-700 font-mono text-center">300</td>
+                          <td className="py-2 px-3 text-stone-500">Platform Baseline</td>
+                        </tr>
+                        <tr>
+                          <td className="py-2 px-3 font-medium">1–2 Quizzes Passed</td>
+                          <td className="py-2 px-3 font-mono text-center">300 pts</td>
+                          <td className="py-2 px-3 font-mono text-center text-stone-500">0.259</td>
+                          <td className="py-2 px-3 font-bold text-stone-800 font-mono text-center">442</td>
+                          <td className="py-2 px-3 text-stone-600">Foundational Learner</td>
+                        </tr>
+                        <tr>
+                          <td className="py-2 px-3 font-medium">5 Projects Completed</td>
+                          <td className="py-2 px-3 font-mono text-center">600 pts</td>
+                          <td className="py-2 px-3 font-mono text-center text-stone-500">0.451</td>
+                          <td className="py-2 px-3 font-bold text-stone-900 font-mono text-center">548</td>
+                          <td className="py-2 px-3 text-amber-800 font-medium">Intermediate Developer</td>
+                        </tr>
+                        <tr className="bg-emerald-50/50">
+                          <td className="py-2.5 px-3 font-bold text-emerald-950">
+                            10 Projects (Full Roadmap)
+                          </td>
+                          <td className="py-2.5 px-3 font-mono font-bold text-center text-emerald-900">1,000 pts</td>
+                          <td className="py-2.5 px-3 font-mono text-center text-emerald-800">0.632</td>
+                          <td className="py-2.5 px-3 font-black text-emerald-800 font-mono text-center text-sm">647</td>
+                          <td className="py-2.5 px-3 font-bold text-emerald-900">Industry Ready (Top 25%)</td>
+                        </tr>
+                        <tr>
+                          <td className="py-2 px-3 font-medium">10 Projects + Stack Synergies + Velocity</td>
+                          <td className="py-2 px-3 font-mono text-center">1,600 pts</td>
+                          <td className="py-2 px-3 font-mono text-center text-stone-500">0.798</td>
+                          <td className="py-2 px-3 font-bold text-emerald-800 font-mono text-center">739</td>
+                          <td className="py-2 px-3 text-emerald-950 font-bold">Elite Candidate (Top 10%)</td>
+                        </tr>
+                        <tr>
+                          <td className="py-2 px-3 font-medium">2 Full Roadmaps (20 Projects) + Hackathons</td>
+                          <td className="py-2 px-3 font-mono text-center">2,500 pts</td>
+                          <td className="py-2 px-3 font-mono text-center text-stone-500">0.918</td>
+                          <td className="py-2 px-3 font-bold text-emerald-900 font-mono text-center">805</td>
+                          <td className="py-2 px-3 text-emerald-950 font-bold">Principal / Staff Tier</td>
+                        </tr>
+                        <tr>
+                          <td className="py-2 px-3 font-medium">Extreme Multi-Domain Master</td>
+                          <td className="py-2 px-3 font-mono text-center">4,000+ pts</td>
+                          <td className="py-2 px-3 font-mono text-center text-stone-500">0.982</td>
+                          <td className="py-2 px-3 font-bold text-stone-900 font-mono text-center">840</td>
+                          <td className="py-2 px-3 text-stone-800 font-bold">National Top 0.1%</td>
+                        </tr>
+                        <tr className="bg-stone-50 font-semibold text-stone-500">
+                          <td className="py-2 px-3">Infinite Effort (Mathematical Limit)</td>
+                          <td className="py-2 px-3 font-mono text-center">∞</td>
+                          <td className="py-2 px-3 font-mono text-center">1.000</td>
+                          <td className="py-2 px-3 font-mono text-center text-stone-800">→ 850</td>
+                          <td className="py-2 px-3 text-stone-600">Asymptotic Ceiling</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Interactive Simulation Slider */}
+                <div className="bg-stone-50 border border-stone-200 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-stone-900 text-xs flex items-center gap-1.5">
+                      <Calculator className="w-4 h-4 text-emerald-800" />
+                      Live Normalization Calculator
+                    </span>
+                    <span className="text-[11px] font-mono text-stone-600">
+                      Raw: <strong className="text-stone-900">{interactiveRaw} pts</strong> → GLI: <strong className="text-emerald-800 text-sm font-black">{interactiveGLI}</strong>
+                    </span>
+                  </div>
+                  <input 
+                    type="range"
+                    min="0"
+                    max="4000"
+                    step="50"
+                    value={interactiveRaw}
+                    onChange={(e) => setInteractiveRaw(Number(e.target.value))}
+                    className="w-full accent-emerald-800 cursor-pointer"
+                  />
+                  <div className="flex justify-between text-[10px] text-stone-400 font-mono">
+                    <span>0 pts (300 GLI)</span>
+                    <span>1,000 pts (647 GLI)</span>
+                    <span>2,000 pts (775 GLI)</span>
+                    <span>3,000 pts (822 GLI)</span>
+                    <span>4,000 pts (840 GLI)</span>
+                  </div>
+                </div>
+
+                {/* Why Linear Addition Breaks */}
+                <div className="bg-amber-50/60 border border-amber-200 rounded-xl p-3.5 space-y-1.5 text-[11px] text-amber-950">
+                  <span className="font-bold block text-xs text-amber-900">
+                    Why Simple Addition Breaks:
+                  </span>
+                  <p className="leading-relaxed">
+                    If GLI were a simple sum ($300 + 1,000$), a student would get <strong className="font-mono">1,300</strong>, breaking the 850 ceiling. 
+                    If we capped at 850 linearly, a student would hit 850 after only 5 projects and lose all motivation to complete projects 6 through 10. 
+                    The asymptotic curve guarantees <strong className="font-bold">diminishing marginal returns</strong>: early projects give huge boosts ($+350$), while pushing past 750 requires true mastery that cannot be faked.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 2: SCORE CONTRIBUTION SPLIT */}
             {activeTab === 'formula' && (
               <div className="space-y-4">
                 <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-xl p-4">
@@ -208,7 +391,45 @@ export default function GLIExplanationModal({ isOpen, onClose, currentScore = 30
               </div>
             )}
 
-            {/* TAB 2: WHY 300 TO 850 SCALE */}
+            {/* TAB 3: ASYMPTOTIC NORMALIZATION */}
+            {activeTab === 'normalization' && (
+              <div className="space-y-4">
+                <div className="bg-stone-50 border border-stone-200 rounded-xl p-4">
+                  <h3 className="text-sm font-bold text-stone-900 font-serif mb-1">
+                    The Exponential Asymptotic Curve
+                  </h3>
+                  <p className="text-stone-600 text-xs leading-relaxed">
+                    To guarantee that no student can game the system by taking dozens of easy tests, raw points pass through an exponential decay formula:
+                  </p>
+                  <div className="mt-3 p-3 bg-white rounded-lg border border-stone-200 font-mono text-center text-xs font-bold text-emerald-900 shadow-2xs">
+                    GLI = 300 + 550 × (1 - e^( -Raw Score / 1000 ))
+                  </div>
+                </div>
+
+                <div className="space-y-2.5 text-xs text-stone-600">
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-800 shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="text-stone-900">Diminishing Marginal Returns:</strong> As your raw score increases, each additional point requires significantly more verified code depth. Moving from 300 to 500 is straightforward; pushing from 700 to 750 requires rigorous Level 2 masteries.
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-800 shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="text-stone-900">Asymptotic Ceiling (850):</strong> The mathematical limit mathematically guarantees nobody achieves a fake "100%", establishing credibility with elite engineering hiring managers.
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-800 shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="text-stone-900">Time Decay Protection:</strong> Fast-evolving technologies (e.g. Next.js, PyTorch) feature exponential half-lives to reward engineers who maintain live production skills.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 4: WHY 300 TO 850 SCALE */}
             {activeTab === 'scale' && (
               <div className="space-y-4">
                 <div className="bg-stone-100 rounded-xl p-4 border border-stone-200">
@@ -276,45 +497,7 @@ export default function GLIExplanationModal({ isOpen, onClose, currentScore = 30
               </div>
             )}
 
-            {/* TAB 3: ASYMPTOTIC NORMALIZATION */}
-            {activeTab === 'normalization' && (
-              <div className="space-y-4">
-                <div className="bg-stone-50 border border-stone-200 rounded-xl p-4">
-                  <h3 className="text-sm font-bold text-stone-900 font-serif mb-1">
-                    The Exponential Asymptotic Curve
-                  </h3>
-                  <p className="text-stone-600 text-xs leading-relaxed">
-                    To guarantee that no student can game the system by taking dozens of easy tests, raw points pass through an exponential decay formula:
-                  </p>
-                  <div className="mt-3 p-3 bg-white rounded-lg border border-stone-200 font-mono text-center text-xs font-bold text-emerald-900">
-                    Final Score = 300 + 550 × (1 - e^( -Raw Score / 1000 ))
-                  </div>
-                </div>
-
-                <div className="space-y-2 text-xs text-stone-600">
-                  <div className="flex items-start gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-800 shrink-0 mt-0.5" />
-                    <div>
-                      <strong className="text-stone-900">Diminishing Marginal Returns:</strong> As your raw score increases, each additional point requires significantly more verified code depth. Moving from 300 to 500 is straightforward; pushing from 700 to 750 requires rigorous Level 2 masteries.
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-800 shrink-0 mt-0.5" />
-                    <div>
-                      <strong className="text-stone-900">Asymptotic Ceiling (850):</strong> The mathematical limit mathematically guarantees nobody achieves a fake "100%", establishing credibility with elite engineering hiring managers.
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-800 shrink-0 mt-0.5" />
-                    <div>
-                      <strong className="text-stone-900">Time Decay Protection:</strong> Fast-evolving technologies (e.g. Next.js, PyTorch) feature exponential half-lives to reward engineers who maintain live production skills.
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* TAB 4: COMPANY ATS MATCHING (JD) */}
+            {/* TAB 5: COMPANY ATS MATCHING (JD) */}
             {activeTab === 'ats' && (
               <div className="space-y-4">
                 <div className="bg-orange-50/70 border border-orange-200 rounded-xl p-4">
@@ -369,11 +552,11 @@ export default function GLIExplanationModal({ isOpen, onClose, currentScore = 30
           <div className="p-4 border-t border-stone-200 bg-stone-50 flex items-center justify-between">
             <div className="flex items-center gap-2 text-stone-600 text-xs">
               <ShieldCheck className="w-4 h-4 text-emerald-800" />
-              <span>Institutional Model: 300 – 850 pts</span>
+              <span>Institutional Model: 300 – 850 pts (10-Project Roadmap = 647 GLI)</span>
             </div>
             <button
               onClick={onClose}
-              className="px-4 py-2 bg-emerald-800 hover:bg-emerald-900 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors"
+              className="px-4 py-2 bg-emerald-800 hover:bg-emerald-900 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
             >
               Close Architecture Breakdown
             </button>

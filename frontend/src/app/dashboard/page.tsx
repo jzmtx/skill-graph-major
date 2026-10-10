@@ -22,7 +22,8 @@ import {
   Check,
   AlertCircle,
   MessageSquare,
-  Sparkles
+  Sparkles,
+  Info
 } from 'lucide-react';
 import { 
   extractGithubSkills, 
@@ -36,6 +37,7 @@ import {
 import { getAppliedJobs } from '@/lib/companyApi';
 import { motion, AnimatePresence } from 'framer-motion';
 import HireabilityScore from '@/components/dashboard/HireabilityScore';
+import GLIExplanationModal from '@/components/dashboard/GLIExplanationModal';
 import StudentProfileModal, { StudentProfileData } from '@/components/dashboard/StudentProfileModal';
 import { SmartTopBarLoader, SmartDashboardSkeleton } from '@/components/common/SmartLoader';
 import { getCachedData, setCachedData } from '@/lib/cache';
@@ -55,6 +57,7 @@ export default function DashboardPage() {
   const [collegeName, setCollegeName] = useState<string>(() => getCachedData<string>('student_college') || "");
   const [hireabilityData, setHireabilityData] = useState<any>(() => getCachedData<any>('student_hireability') || null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isGLIModalOpen, setIsGLIModalOpen] = useState(false);
 
   // Skill filter
   const [skillFilter, setSkillFilter] = useState<'all' | 'verified' | 'unverified'>('all');
@@ -298,6 +301,33 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* GLI Mathematical Normalization & 10-Project Scenario Alert Banner */}
+      <div className="bg-stone-50 border border-stone-200 rounded-xl p-4 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+        <div className="flex items-start sm:items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-center justify-center shrink-0">
+            <Info className="w-4 h-4" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-stone-900">GLI Normalization Architecture</span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-orange-50 text-orange-900 border border-orange-200">
+                10 Projects = 647 GLI
+              </span>
+            </div>
+            <p className="text-stone-600 text-[11px] mt-0.5 leading-relaxed">
+              Completing 10 roadmap projects yields 1,000 raw points, normalized asymptotically to 647 GLI on the 300–850 institutional credit scale.
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={() => setIsGLIModalOpen(true)}
+          className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-emerald-800 bg-white hover:bg-emerald-50 border border-emerald-200 transition-colors shrink-0 shadow-2xs flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+        >
+          <span>Formula & Scenario</span>
+          <ArrowRight className="w-3 h-3" />
+        </button>
+      </div>
+
       {/* College Invitations Alert */}
       {invitations.length > 0 && (
         <div className="bg-stone-100 border border-stone-300 rounded-xl p-4 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -371,7 +401,16 @@ export default function DashboardPage() {
         {/* KPI 1: Hireability Index */}
         <div className="bg-white border border-stone-200 rounded-xl p-5 shadow-2xs">
           <div className="flex items-center justify-between text-stone-500 text-xs font-semibold uppercase tracking-wider">
-            <span>Hireability Index</span>
+            <span className="flex items-center gap-1.5">
+              Hireability Index
+              <button 
+                onClick={() => setIsGLIModalOpen(true)}
+                className="w-4 h-4 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center justify-center text-[10px] font-bold transition-colors cursor-pointer"
+                title="View 10-project roadmap scenario & normalization formula"
+              >
+                i
+              </button>
+            </span>
             <Target className="w-4 h-4 text-emerald-800" />
           </div>
           <div className="mt-3 flex items-baseline gap-2">
@@ -380,9 +419,17 @@ export default function DashboardPage() {
             </span>
             <span className="text-xs font-medium text-stone-500">/ 850 pts</span>
           </div>
-          <div className="mt-2 text-xs text-stone-600 flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-800"></span>
-            <span>Verified competency model</span>
+          <div className="mt-2 text-xs text-stone-600 flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-800"></span>
+              <span>Verified model</span>
+            </div>
+            <button 
+              onClick={() => setIsGLIModalOpen(true)}
+              className="text-[11px] font-semibold text-emerald-800 hover:text-emerald-950 underline underline-offset-2 cursor-pointer"
+            >
+              How it works
+            </button>
           </div>
         </div>
 
@@ -790,6 +837,15 @@ export default function DashboardPage() {
         <StudentProfileModal
           data={modalData}
           onClose={() => setIsProfileModalOpen(false)}
+        />
+      )}
+
+      {/* Global Learner Index (GLI) Architecture & Normalization Modal */}
+      {isGLIModalOpen && (
+        <GLIExplanationModal
+          isOpen={isGLIModalOpen}
+          onClose={() => setIsGLIModalOpen(false)}
+          currentScore={hireabilityData?.score || 300}
         />
       )}
 
