@@ -35,6 +35,8 @@ import {
   Trash2
 } from 'lucide-react';
 import CreativeChatConsole from '@/components/chat/CreativeChatConsole';
+import { getCachedData, setCachedData } from '@/lib/cache';
+import { SmartTopBarLoader } from '@/components/common/SmartLoader';
 
 const GithubIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
   <svg className={className} fill="currentColor" viewBox="0 0 24 24">
@@ -44,9 +46,10 @@ const GithubIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
 
 export default function StudentOpenSourcePage() {
   const [activeTab, setActiveTab] = useState<'explore' | 'my_teams'>('explore');
-  const [projects, setProjects] = useState<OpenSourceProject[]>([]);
-  const [myApplications, setMyApplications] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [projects, setProjects] = useState<OpenSourceProject[]>(() => getCachedData<OpenSourceProject[]>('os_projects') || []);
+  const [myApplications, setMyApplications] = useState<any[]>(() => getCachedData<any[]>('os_my_apps') || []);
+  const [loading, setLoading] = useState(() => !getCachedData<OpenSourceProject[]>('os_projects')?.length);
+  const [syncing, setSyncing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
 
@@ -81,19 +84,27 @@ export default function StudentOpenSourcePage() {
   }, []);
 
   const loadData = async (sId: string | null) => {
-    setLoading(true);
+    setSyncing(true);
     try {
-      const allProjects = await listOpenSourceProjects();
-      setProjects(allProjects || []);
+      const [projectsRes, appsRes] = await Promise.allSettled([
+        listOpenSourceProjects(),
+        sId ? getStudentApplications(sId) : Promise.resolve([])
+      ]);
 
-      if (sId) {
-        const apps = await getStudentApplications(sId);
-        setMyApplications(apps || []);
+      if (projectsRes.status === 'fulfilled' && projectsRes.value) {
+        setProjects(projectsRes.value);
+        setCachedData('os_projects', projectsRes.value);
+      }
+
+      if (appsRes.status === 'fulfilled' && appsRes.value) {
+        setMyApplications(appsRes.value);
+        setCachedData('os_my_apps', appsRes.value);
       }
     } catch (err) {
       console.error('Error fetching open source projects:', err);
     } finally {
       setLoading(false);
+      setSyncing(false);
     }
   };
 
@@ -248,6 +259,8 @@ export default function StudentOpenSourcePage() {
 
   return (
     <div className="space-y-6">
+      <SmartTopBarLoader active={syncing} />
+
       {/* Top Banner */}
       <div className="bg-white border border-stone-200 rounded-xl p-6 md:p-8 shadow-sm">
         <div className="max-w-3xl">

@@ -8,6 +8,9 @@ import { getOpportunitiesForStudent, getAlumniMessages, sendAlumniMessage, delet
 import { Briefcase, Building, Mail, Clock, CheckCircle, XCircle, ChevronRight, MessageSquare, Send, X, ClipboardList, Link as LinkIcon, Image as ImageIcon, GitBranch, Trash2, Sparkles } from 'lucide-react';
 import CreativeChatConsole from '@/components/chat/CreativeChatConsole';
 
+import { getCachedData, setCachedData } from '@/lib/cache';
+import { SmartTopBarLoader, SmartListSkeleton } from '@/components/common/SmartLoader';
+
 interface UnifiedApplication {
   id: string;
   title: string;
@@ -18,9 +21,10 @@ interface UnifiedApplication {
 }
 
 export default function JobOffersPage() {
-  const [loading, setLoading] = useState(true);
-  const [applications, setApplications] = useState<UnifiedApplication[]>([]);
-  const [assessments, setAssessments] = useState<Record<string, any>>({});
+  const [applications, setApplications] = useState<UnifiedApplication[]>(() => getCachedData<UnifiedApplication[]>('job_offers_apps') || []);
+  const [loading, setLoading] = useState(() => !getCachedData<UnifiedApplication[]>('job_offers_apps')?.length);
+  const [syncing, setSyncing] = useState(false);
+  const [assessments, setAssessments] = useState<Record<string, any>>(() => getCachedData<Record<string, any>>('job_offers_assmts') || {});
   
   // Chat state
   const [chatApp, setChatApp] = useState<UnifiedApplication | null>(null);
@@ -38,8 +42,18 @@ export default function JobOffersPage() {
     }
 
     const fetchApps = async () => {
+      setSyncing(true);
       try {
-        const apps = await getAppliedJobs(studentId);
+        const [appsRes, osRes, oppsRes] = await Promise.allSettled([
+          getAppliedJobs(studentId),
+          getStudentApplications(studentId),
+          getOpportunitiesForStudent(studentId)
+        ]);
+
+        const apps = appsRes.status === 'fulfilled' ? appsRes.value : [];
+        const osApps = osRes.status === 'fulfilled' ? osRes.value : [];
+        const allOpps = oppsRes.status === 'fulfilled' ? oppsRes.value : [];
+
         const jobs: UnifiedApplication[] = (apps || []).map((app: any) => ({
           id: app.id,
           title: app.job_postings?.title || 'Unknown Job',
@@ -48,50 +62,49 @@ export default function JobOffersPage() {
           status: app.status,
           originalData: app
         }));
-        
-        let os: UnifiedApplication[] = [];
-        try {
-          const osApps = await getStudentApplications(studentId);
-          os = osApps.map((osApp: any) => ({
-            id: osApp.application_id,
-            title: osApp.project?.title || 'Unknown Project',
-            companyName: osApp.project?.posted_by?.name ? `${osApp.project.posted_by.name} (Alumni Open Source)` : 'Alumni Open Source',
-            type: 'opensource',
-            status: osApp.status,
-            originalData: osApp
-          }));
-        } catch(e) {}
 
-        let oppsList: UnifiedApplication[] = [];
-        try {
-          const allOpps = await getOpportunitiesForStudent(studentId);
-          const interestedOpps = allOpps.filter((o: any) => o.already_interested);
-          oppsList = interestedOpps.map((opp: any) => ({
-            id: opp.id,
-            title: opp.title,
-            companyName: opp.posted_by?.name ? `${opp.posted_by.name} (${opp.type})` : `Alumni ${opp.type}`,
-            type: 'alumni_opp',
-            status: opp.status,
-            originalData: opp
-          }));
-        } catch(e) {}
+        const os: UnifiedApplication[] = (osApps || []).map((osApp: any) => ({
+          id: osApp.application_id,
+          title: osApp.project?.title || 'Unknown Project',
+          companyName: osApp.project?.posted_by?.name ? `${osApp.project.posted_by.name} (Alumni Open Source)` : 'Alumni Open Source',
+          type: 'opensource',
+          status: osApp.status,
+          originalData: osApp
+        }));
+
+        const interestedOpps = (allOpps || []).filter((o: any) => o.already_interested);
+        const oppsList: UnifiedApplication[] = interestedOpps.map((opp: any) => ({
+          id: opp.id,
+          title: opp.title,
+          companyName: opp.posted_by?.name ? `${opp.posted_by.name} (${opp.type})` : `Alumni ${opp.type}`,
+          type: 'alumni_opp',
+          status: opp.status,
+          originalData: opp
+        }));
 
         const allApplications = [...jobs, ...os, ...oppsList];
         setApplications(allApplications);
-        
-        // Fetch assessments for job apps
-        const assmts: Record<string, any> = {};
-        for(const app of jobs) {
-          try {
-             const data = await getApplicationAssessment(app.id);
-             if(data) assmts[app.id] = data;
-          } catch(e) {}
+        setCachedData('job_offers_apps', allApplications);
+
+        // Fetch assessments in parallel instead of sequential await loop
+        if (jobs.length > 0) {
+          const assmtResults = await Promise.allSettled(
+            jobs.map(app => getApplicationAssessment(app.id).then(data => ({ id: app.id, data })))
+          );
+          const assmtsMap: Record<string, any> = {};
+          assmtResults.forEach(r => {
+            if (r.status === 'fulfilled' && r.value?.data) {
+              assmtsMap[r.value.id] = r.value.data;
+            }
+          });
+          setAssessments(assmtsMap);
+          setCachedData('job_offers_assmts', assmtsMap);
         }
-        setAssessments(assmts);
       } catch (err) {
         console.error("Failed to load applications", err);
       } finally {
         setLoading(false);
+        setSyncing(false);
       }
     };
     fetchApps();
@@ -202,16 +215,17 @@ export default function JobOffersPage() {
     }
   };
 
-  if (loading) {
+  if (loading && applications.length === 0) {
     return (
-      <div className="flex items-center justify-center min-h-[50vh]">
-        <div className="w-8 h-8 border-2 border-emerald-800 border-t-transparent rounded-full animate-spin"></div>
+      <div className="max-w-5xl mx-auto space-y-6">
+        <SmartListSkeleton count={4} />
       </div>
     );
   }
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
+      <SmartTopBarLoader active={syncing} />
       <div>
         <h1 className="text-2xl font-serif font-bold text-stone-900 tracking-tight flex items-center gap-2.5">
           <Mail className="w-6 h-6 text-emerald-800" /> Application Pipeline & Communications

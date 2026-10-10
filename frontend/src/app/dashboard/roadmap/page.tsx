@@ -8,40 +8,55 @@ import Link from "next/link";
 import RoadmapCanvas from "@/components/roadmap/RoadmapCanvas";
 import RoadmapAnalysis from "@/components/roadmap/RoadmapAnalysis";
 import LoadingSpectacle from "@/components/roadmap/LoadingSpectacle";
+import { getCachedData, setCachedData } from "@/lib/cache";
+import { SmartTopBarLoader } from "@/components/common/SmartLoader";
 
 export default function RoadmapsPage() {
-  const [step, setStep] = useState<"list" | "role" | "ecosystem" | "generating" | "roadmap">("list");
+  const cachedInitialRoadmaps = getCachedData<any[]>('my_roadmaps');
+  const [step, setStep] = useState<"list" | "role" | "ecosystem" | "generating" | "roadmap">(() => {
+    return cachedInitialRoadmaps && cachedInitialRoadmaps.length > 0 ? "list" : "role";
+  });
   const [selectedRole, setSelectedRole] = useState<string>("Full Stack Developer");
   const [selectedEcosystem, setSelectedEcosystem] = useState<string | null>(null);
   const [roadmap, setRoadmap] = useState<any>(null);
   const [analytics, setAnalytics] = useState<any>(null);
   const [currentRequestId, setCurrentRequestId] = useState<string>("");
   
-  const [myRoadmaps, setMyRoadmaps] = useState<any[]>([]);
-  const [loadingList, setLoadingList] = useState(true);
+  const [myRoadmaps, setMyRoadmaps] = useState<any[]>(() => cachedInitialRoadmaps || []);
+  const [loadingList, setLoadingList] = useState(() => !cachedInitialRoadmaps?.length);
+  const [syncing, setSyncing] = useState(false);
   const [weeklyHours, setWeeklyHours] = useState<number>(20);
 
   useEffect(() => {
     const fetchMyRoadmaps = async () => {
       const studentId = typeof window !== 'undefined' ? localStorage.getItem("student_id") : null;
       if (!studentId) {
-        setStep("role");
+        if (!cachedInitialRoadmaps || cachedInitialRoadmaps.length === 0) {
+          setStep("role");
+        }
         setLoadingList(false);
         return;
       }
+      setSyncing(true);
       try {
         const roadmaps = await roadmapsApi.getMyRoadmaps(studentId);
         if (roadmaps && roadmaps.length > 0) {
           setMyRoadmaps(roadmaps);
+          setCachedData('my_roadmaps', roadmaps);
           setStep("list");
         } else {
+          setMyRoadmaps([]);
+          setCachedData('my_roadmaps', []);
           setStep("role");
         }
       } catch (err) {
         console.error(err);
-        setStep("role");
+        if (!cachedInitialRoadmaps || cachedInitialRoadmaps.length === 0) {
+          setStep("role");
+        }
       } finally {
         setLoadingList(false);
+        setSyncing(false);
       }
     };
     fetchMyRoadmaps();
@@ -124,7 +139,8 @@ export default function RoadmapsPage() {
   // Phase 0: Saved Roadmaps List
   if (step === "list") {
     return (
-      <div className="bg-stone-50 min-h-[80vh] rounded-2xl p-6 md:p-8 border border-stone-200 shadow-sm">
+      <div className="bg-stone-50 min-h-[80vh] rounded-2xl p-6 md:p-8 border border-stone-200 shadow-sm relative">
+        <SmartTopBarLoader active={syncing} />
         <div className="max-w-6xl mx-auto py-4">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6">
             <div>

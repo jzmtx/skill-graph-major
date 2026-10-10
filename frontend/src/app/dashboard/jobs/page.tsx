@@ -6,13 +6,16 @@ import { getOpportunitiesForStudent, expressInterest, getAlumniMessages, sendAlu
 import { Briefcase, Building2, CheckCircle2, Zap, X, GraduationCap, Users, ExternalLink, MessageSquare, Send, Link as LinkIcon, Image as ImageIcon, Trash2, Sparkles } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import CreativeChatConsole from '@/components/chat/CreativeChatConsole';
+import { getCachedData, setCachedData } from '@/lib/cache';
+import { SmartTopBarLoader, SmartListSkeleton } from '@/components/common/SmartLoader';
 
 export default function StudentJobsPage() {
   const [activeTab, setActiveTab] = useState<'all' | 'eligible' | 'alumni'>('eligible');
-  const [allJobs, setAllJobs] = useState<any[]>([]);
-  const [eligibleJobs, setEligibleJobs] = useState<any[]>([]);
-  const [alumniOpportunities, setAlumniOpportunities] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [allJobs, setAllJobs] = useState<any[]>(() => getCachedData<any[]>('jobs_all') || []);
+  const [eligibleJobs, setEligibleJobs] = useState<any[]>(() => getCachedData<any[]>('jobs_eligible') || []);
+  const [alumniOpportunities, setAlumniOpportunities] = useState<any[]>(() => getCachedData<any[]>('jobs_alumni') || []);
+  const [loading, setLoading] = useState(() => !getCachedData<any[]>('jobs_eligible')?.length);
+  const [syncing, setSyncing] = useState(false);
   
   const [applyingJob, setApplyingJob] = useState<any | null>(null);
   const [resumeUrl, setResumeUrl] = useState('');
@@ -36,6 +39,7 @@ export default function StudentJobsPage() {
     const load = async () => {
       const studentId = typeof window !== 'undefined' ? localStorage.getItem('student_id') : null;
       if (!studentId) return;
+      setSyncing(true);
       try {
         const [all, eligible, opps, applied] = await Promise.all([
           getAllJobs(),
@@ -46,6 +50,10 @@ export default function StudentJobsPage() {
         setAllJobs(all || []);
         setEligibleJobs(eligible || []);
         setAlumniOpportunities(opps || []);
+
+        setCachedData('jobs_all', all || []);
+        setCachedData('jobs_eligible', eligible || []);
+        setCachedData('jobs_alumni', opps || []);
 
         const interestedSet = new Set<string>();
         (opps || []).forEach((o: any) => {
@@ -62,6 +70,7 @@ export default function StudentJobsPage() {
         console.error(e);
       } finally {
         setLoading(false);
+        setSyncing(false);
       }
     };
     load();
@@ -353,16 +362,17 @@ export default function StudentJobsPage() {
 
   const currentJobs = activeTab === 'eligible' ? eligibleJobs : allJobs;
 
-  if (loading) {
+  if (loading && currentJobs.length === 0) {
     return (
-      <div className="flex items-center justify-center min-h-[50vh]">
-        <div className="w-8 h-8 border-2 border-emerald-800 border-t-transparent rounded-full animate-spin"></div>
+      <div className="space-y-6">
+        <SmartListSkeleton count={4} />
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
+      <SmartTopBarLoader active={syncing} />
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-2xl font-serif font-bold text-stone-900 tracking-tight">Career Placement & Opportunities</h1>

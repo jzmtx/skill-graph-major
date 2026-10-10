@@ -16,6 +16,8 @@ import {
   Target
 } from "lucide-react";
 
+import { getCachedData, setCachedData } from "@/lib/cache";
+
 interface PointEvent {
   type: string;
   icon?: string;
@@ -41,8 +43,9 @@ interface HireabilityData {
 }
 
 export default function HireabilityScore({ studentIdProp }: { studentIdProp?: string }) {
-  const [data, setData] = useState<HireabilityData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const cachedInitial = getCachedData<HireabilityData>('student_hireability');
+  const [data, setData] = useState<HireabilityData | null>(() => cachedInitial || null);
+  const [loading, setLoading] = useState(() => !cachedInitial);
   const [showHistory, setShowHistory] = useState(false);
 
   // Subtle interactive hover state
@@ -57,8 +60,8 @@ export default function HireabilityScore({ studentIdProp }: { studentIdProp?: st
   const rotateX = useTransform(y, [-200, 200], [1.5, -1.5]);
   const rotateY = useTransform(x, [-200, 200], [-1.5, 1.5]);
 
-  // Animated Counter
-  const count = useMotionValue(300);
+  // Animated Counter (initialized immediately with cached score if present)
+  const count = useMotionValue(cachedInitial?.score || 300);
   const rounded = useTransform(count, Math.round);
 
   useEffect(() => {
@@ -68,6 +71,7 @@ export default function HireabilityScore({ studentIdProp }: { studentIdProp?: st
         if (studentId) {
           const res = await getHireabilityScore(studentId);
           setData(res);
+          setCachedData('student_hireability', res);
           animate(count, res.score || 300, { duration: 1.6, ease: "easeOut" });
         }
       } catch (e) {

@@ -37,21 +37,23 @@ import { getAppliedJobs } from '@/lib/companyApi';
 import { motion, AnimatePresence } from 'framer-motion';
 import HireabilityScore from '@/components/dashboard/HireabilityScore';
 import StudentProfileModal, { StudentProfileData } from '@/components/dashboard/StudentProfileModal';
+import { SmartTopBarLoader, SmartDashboardSkeleton } from '@/components/common/SmartLoader';
+import { getCachedData, setCachedData } from '@/lib/cache';
 
 export default function DashboardPage() {
-  const [skills, setSkills] = useState<any[]>([]);
+  const [skills, setSkills] = useState<any[]>(() => getCachedData<any[]>('student_skills') || []);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [addingSkill, setAddingSkill] = useState(false);
   const [customSkill, setCustomSkill] = useState("");
-  const [invitations, setInvitations] = useState<any[]>([]);
+  const [invitations, setInvitations] = useState<any[]>(() => getCachedData<any[]>('student_invs') || []);
   const [notifications, setNotifications] = useState<any[]>([]);
-  const [appliedJobsCount, setAppliedJobsCount] = useState<number>(0);
+  const [appliedJobsCount, setAppliedJobsCount] = useState<number>(() => getCachedData<number>('student_apps_count') || 0);
   
-  // Student profile state
-  const [studentProfile, setStudentProfile] = useState<any>(null);
-  const [collegeName, setCollegeName] = useState<string>("");
-  const [hireabilityData, setHireabilityData] = useState<any>(null);
+  // Student profile state (synchronously loaded from instant cache)
+  const [studentProfile, setStudentProfile] = useState<any>(() => getCachedData<any>('student_profile') || null);
+  const [collegeName, setCollegeName] = useState<string>(() => getCachedData<string>('student_college') || "");
+  const [hireabilityData, setHireabilityData] = useState<any>(() => getCachedData<any>('student_hireability') || null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   // Skill filter
@@ -69,7 +71,7 @@ export default function DashboardPage() {
       const mySkills = await getMySkills(studentId);
       
       if (mySkills) {
-        localStorage.setItem('cached_skills', JSON.stringify(mySkills));
+        setCachedData('student_skills', mySkills);
         setSkills(mySkills);
       }
     } catch (error) {
@@ -104,7 +106,9 @@ export default function DashboardPage() {
     if (!studentId) return;
     try {
       await acceptStudentInvitation(studentId, linkId);
-      setInvitations(invitations.filter(inv => inv.id !== linkId));
+      const updated = invitations.filter(inv => inv.id !== linkId);
+      setInvitations(updated);
+      setCachedData('student_invs', updated);
     } catch(e) {
       console.error("Failed to accept invitation", e);
     }
@@ -116,10 +120,10 @@ export default function DashboardPage() {
         const studentId = typeof window !== 'undefined' ? localStorage.getItem('student_id') : null;
         const githubUrl = typeof window !== 'undefined' ? localStorage.getItem('student_github') : null;
         
-        // Optimistic UI cache load
-        const cached = typeof window !== 'undefined' ? localStorage.getItem('cached_skills') : null;
-        if (cached) {
-          setSkills(JSON.parse(cached));
+        // Fast optimistic cache initialization
+        const cachedSkills = getCachedData<any[]>('student_skills');
+        if (cachedSkills && cachedSkills.length > 0) {
+          setSkills(cachedSkills);
           setLoading(false);
         }
         
@@ -128,63 +132,73 @@ export default function DashboardPage() {
           return;
         }
 
-        // 1. Fetch Profile Data
-        try {
-          const profData = await getStudentProfile(studentId);
-          if (profData?.student) {
-            setStudentProfile(profData.student);
-            setCollegeName(profData.college_name || "");
-            if (profData.student.name && typeof window !== 'undefined') {
-              localStorage.setItem('student_name', profData.student.name);
-            }
+        setSyncing(true);
+
+        // Run all critical data queries simultaneously in parallel (eliminates 3.5s sequential waiting)
+        const [profResult, hScoreResult, skillsResult, invsResult, appsResult] = await Promise.allSettled([
+          getStudentProfile(studentId),
+          getHireabilityScore(studentId),
+          getMySkills(studentId),
+          getStudentInvitations(studentId),
+          getAppliedJobs(studentId)
+        ]);
+
+        // 1. Profile Data
+        if (profResult.status === 'fulfilled' && profResult.value?.student) {
+          const profData = profResult.value;
+          setStudentProfile(profData.student);
+          setCachedData('student_profile', profData.student);
+          if (profData.college_name) {
+            setCollegeName(profData.college_name);
+            setCachedData('student_college', profData.college_name);
           }
-        } catch (err) {
-          console.warn("Could not load student profile", err);
+          if (profData.student.name && typeof window !== 'undefined') {
+            localStorage.setItem('student_name', profData.student.name);
+          }
         }
 
-        // 2. Fetch Hireability Score
-        try {
-          const hScore = await getHireabilityScore(studentId);
-          setHireabilityData(hScore);
-        } catch (err) {
-          console.warn("Could not load hireability data", err);
+        // 2. Hireability Score
+        if (hScoreResult.status === 'fulfilled' && hScoreResult.value) {
+          setHireabilityData(hScoreResult.value);
+          setCachedData('student_hireability', hScoreResult.value);
         }
 
-        // 3. Trigger extraction in background if github exists
+        // 3. Verified Skills
+        if (skillsResult.status === 'fulfilled' && skillsResult.value) {
+          setSkills(skillsResult.value);
+          setCachedData('student_skills', skillsResult.value);
+        }
+
+        // 4. College Invitations
+        if (invsResult.status === 'fulfilled' && invsResult.value) {
+          setInvitations(invsResult.value);
+          setCachedData('student_invs', invsResult.value);
+        }
+
+        // 5. Job Applications & Notifications
+        if (appsResult.status === 'fulfilled' && appsResult.value) {
+          const apps = appsResult.value;
+          setAppliedJobsCount(apps.length);
+          setCachedData('student_apps_count', apps.length);
+
+          const dismissed = JSON.parse(localStorage.getItem('dismissed_notifications') || '[]');
+          const newNotifs = apps.filter((a: any) => 
+            (a.status === 'hired' || a.status === 'rejected') && !dismissed.includes(`${a.id}-${a.status}`)
+          );
+          setNotifications(newNotifs);
+        }
+
+        // Background GitHub skill extraction if configured
         if (githubUrl) {
           extractGithubSkills(studentId, githubUrl)
             .then(() => fetchSkills())
             .catch(e => console.error("GitHub extraction skipped or done", e));
         }
 
-        // 4. Sync all skills
-        await fetchSkills();
-
-        // 5. Fetch Invitations
-        try {
-          const invs = await getStudentInvitations(studentId);
-          setInvitations(invs || []);
-        } catch (error) {
-          console.error("Failed to fetch invitations:", error);
-        }
-
-        // 6. Fetch Job Applications
-        try {
-          const apps = await getAppliedJobs(studentId);
-          if (apps) {
-            setAppliedJobsCount(apps.length);
-            const dismissed = JSON.parse(localStorage.getItem('dismissed_notifications') || '[]');
-            const newNotifs = apps.filter((a: any) => 
-              (a.status === 'hired' || a.status === 'rejected') && !dismissed.includes(`${a.id}-${a.status}`)
-            );
-            setNotifications(newNotifs);
-          }
-        } catch(e) {
-          console.error("Failed to fetch applications for notifications", e);
-        }
-
       } catch (error) {
-        console.error(error);
+        console.error("Dashboard initialization error:", error);
+      } finally {
+        setSyncing(false);
         setLoading(false);
       }
     };
@@ -230,8 +244,13 @@ export default function DashboardPage() {
 
   const studentDisplayName = studentProfile?.name || (typeof window !== 'undefined' ? localStorage.getItem('student_name') : null) || 'Student';
 
+  if (loading && !studentProfile && skills.length === 0) {
+    return <SmartDashboardSkeleton />;
+  }
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300 text-stone-900">
+      <SmartTopBarLoader active={syncing} />
       
       {/* Executive Header Banner (Classical Warm White & Stone with Warm Orange Accent Trim) */}
       <div className="bg-white border border-stone-200 rounded-2xl p-6 md:p-8 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden">

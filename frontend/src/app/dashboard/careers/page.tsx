@@ -1,10 +1,12 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
 import { Briefcase, Building2, MapPin, ExternalLink, Calendar, Search, Filter, Loader2, Zap, Clock, Globe } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
+import { api } from '@/lib/api';
+import { getCachedData, smartFetchWithCache } from '@/lib/cache';
+import { SmartTopBarLoader, SmartListSkeleton } from '@/components/common/SmartLoader';
 
 interface RawJob {
   id: string;
@@ -18,8 +20,9 @@ interface RawJob {
 }
 
 export default function CareersPage() {
-  const [jobs, setJobs] = useState<RawJob[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [jobs, setJobs] = useState<RawJob[]>(() => getCachedData<RawJob[]>('careers_raw_jds') || []);
+  const [loading, setLoading] = useState(() => !getCachedData<RawJob[]>('careers_raw_jds')?.length);
+  const [syncing, setSyncing] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedRole, setSelectedRole] = useState<string>("All");
   const [userLocation, setUserLocation] = useState("");
@@ -38,15 +41,31 @@ export default function CareersPage() {
     }
 
     const fetchJobs = async () => {
+      setSyncing(true);
       try {
-        const res = await axios.get('http://localhost:8000/api/roadmaps/raw-jds/admin');
-        if (res.data && res.data.raw_jds) {
-          setJobs(res.data.raw_jds);
+        const data = await smartFetchWithCache<RawJob[]>(
+          'careers_raw_jds',
+          async () => {
+            const res = await api.get('/api/roadmaps/raw-jds/admin');
+            return res.data?.raw_jds || [];
+          },
+          {
+            ttl: 10 * 60 * 1000, // 10 minutes cache
+            onFresh: (freshData) => {
+              if (freshData && freshData.length > 0) {
+                setJobs(freshData);
+              }
+            }
+          }
+        );
+        if (data && data.length > 0) {
+          setJobs(data);
         }
       } catch (err) {
         console.error("Failed to fetch jobs", err);
       } finally {
         setLoading(false);
+        setSyncing(false);
       }
     };
     fetchJobs();
@@ -92,6 +111,8 @@ export default function CareersPage() {
 
   return (
     <div className="space-y-6">
+      <SmartTopBarLoader active={syncing} />
+
       {/* Header Banner */}
       <div className="bg-white border border-stone-200 rounded-xl p-6 md:p-8 shadow-sm">
         <div className="max-w-3xl">
@@ -164,10 +185,7 @@ export default function CareersPage() {
 
       {/* Job Grid */}
       {loading ? (
-        <div className="flex flex-col items-center justify-center py-16 text-stone-500">
-          <Loader2 className="w-8 h-8 text-emerald-800 animate-spin mb-3" />
-          <p className="text-xs font-medium">Aggregating industry vacancy listings...</p>
-        </div>
+        <SmartListSkeleton count={6} />
       ) : filteredJobs.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-xl border border-stone-200 p-8 shadow-2xs">
           <Briefcase className="w-10 h-10 text-stone-300 mx-auto mb-3" />
