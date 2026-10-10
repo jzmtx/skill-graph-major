@@ -7,7 +7,8 @@ import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github.css';
 import { 
   Target, ArrowLeft, CheckCircle2, XCircle, Code, Loader2, Brain, 
-  ShieldAlert, ShieldCheck, Flag, Terminal, EyeOff, Timer, Info, X 
+  ShieldAlert, ShieldCheck, Flag, Terminal, EyeOff, Timer, Info, X,
+  Check, ArrowRight, AlertTriangle, FileText, Lock
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -18,7 +19,11 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
   const unwrappedParams = use(params);
   const skillName = decodeURIComponent(unwrappedParams.skill_name);
   
-  const [loading, setLoading] = useState(true);
+  // Initial Student Agreement & Instructions Screen
+  const [hasAcceptedRules, setHasAcceptedRules] = useState(false);
+  const [acknowledgedPolicy, setAcknowledgedPolicy] = useState(false);
+
+  const [loading, setLoading] = useState(false);
   const [question, setQuestion] = useState<any>(null);
   const [questionCount, setQuestionCount] = useState(1);
   const [difficulty, setDifficulty] = useState(1);
@@ -55,8 +60,11 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
   });
   const lastViolationTime = useRef(0);
 
+  // STRICT RULE: Only Question 6 and Question 12 can ever be coding questions
+  const isCurrentItemCoding = (questionCount === 6 || questionCount === 12) && Boolean(question?.isCoding);
+
   const triggerViolation = (reason: string) => {
-    if (isFinished) return;
+    if (!hasAcceptedRules || isFinished) return;
     const now = Date.now();
     if (now - lastViolationTime.current < 2500) return; // throttle 2.5s
     lastViolationTime.current = now;
@@ -81,23 +89,23 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
     return () => clearTimeout(timer);
   }, [violationNotice.show]);
 
-  // Anti-cheat event interceptors: Copy/Paste/Cut, ContextMenu, Screenshots, Window Blur
+  // Anti-cheat event interceptors (Active only after rules accepted)
   useEffect(() => {
-    if (isFinished) return;
+    if (!hasAcceptedRules || isFinished) return;
 
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        triggerViolation("Active window lost focus. The testing tab must remain focused.");
+        triggerViolation("Active window lost focus. The testing tab must remain in foreground focus.");
       }
     };
 
     const handleWindowBlur = () => {
-      triggerViolation("Browser window lost focus. Switching windows or applications is restricted.");
+      triggerViolation("Browser window lost focus. Switching windows or applications is prohibited.");
     };
 
     const handleCopy = (e: ClipboardEvent) => {
       e.preventDefault();
-      triggerViolation("Copy action blocked. Clipboard access is restricted during assessment.");
+      triggerViolation("Copy action blocked. Clipboard copying is disabled during assessment.");
     };
 
     const handlePaste = (e: ClipboardEvent) => {
@@ -161,11 +169,11 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
       window.removeEventListener("contextmenu", handleContextMenu, true);
       window.removeEventListener("keydown", handleKeyDown, true);
     };
-  }, [isFinished]);
+  }, [hasAcceptedRules, isFinished]);
 
-  // Question countdown timer
+  // Question countdown timer (Active only after rules accepted)
   useEffect(() => {
-    if (timeLeft <= 0 || isSubmitting || !!feedback || !question || isFinished || loading) return;
+    if (!hasAcceptedRules || timeLeft <= 0 || isSubmitting || !!feedback || !question || isFinished || loading) return;
     const timer = setInterval(() => {
       setTimeLeft(t => {
         if (t <= 1) {
@@ -177,14 +185,14 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [timeLeft, isSubmitting, feedback, question, isFinished, loading]);
+  }, [hasAcceptedRules, timeLeft, isSubmitting, feedback, question, isFinished, loading]);
 
   const fetchNextQuestion = async (currentDiff: number, excludeIds: string[], count: number) => {
     try {
-      if (count === 1) setLoading(true);
+      setLoading(true);
       const studentId = typeof window !== 'undefined' ? localStorage.getItem('student_id') : null;
       
-      // Coding questions on Question 6 and Question 12 (5 minutes time limit = 300s)
+      // STRICT RULE: Coding questions ONLY on Question 6 and Question 12 (5 minutes time limit = 300s)
       if (count === 6 || count === 12) {
         const codingQ = await getCodingQuestion({
           skill_name: skillName,
@@ -202,7 +210,7 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
         }
       }
 
-      // Adaptive conceptual MCQ (60s time limit)
+      // All other items (1, 2, 3, 4, 5, 7, 8, 9, 10, 11) are STRICTLY conceptual MCQs (60s limit)
       const q = await getAdaptiveQuestion({
         skill_name: skillName,
         difficulty_level: currentDiff,
@@ -210,7 +218,7 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
         student_id: studentId || null,
       });
       if (q && q.question_text) {
-        setQuestion(q);
+        setQuestion({ ...q, isCoding: false }); // Explicitly false!
         setSeenIds(prev => [...prev, q.question_id]);
         setSelectedOption(null);
         setTimeLeft(60); // 60 seconds for MCQs
@@ -225,9 +233,11 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
     }
   };
 
-  useEffect(() => {
+  const handleStartAssessment = () => {
+    if (!acknowledgedPolicy) return;
+    setHasAcceptedRules(true);
     fetchNextQuestion(difficulty, [], 1);
-  }, [skillName]);
+  };
 
   const handleOptionSelect = (opt: string) => {
     if (feedback || isSubmitting) return;
@@ -253,8 +263,8 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
 
   const handleSubmit = async (isTimeout = false) => {
     if (isSubmitting || !!feedback) return;
-    if (!question?.isCoding && !selectedOption && !isTimeout) return;
-    if (question?.isCoding && !studentCode.trim() && !isTimeout) return;
+    if (!isCurrentItemCoding && !selectedOption && !isTimeout) return;
+    if (isCurrentItemCoding && !studentCode.trim() && !isTimeout) return;
 
     setIsSubmitting(true);
     setEvaluationPhase('evaluating');
@@ -266,7 +276,7 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
       let explanation = "";
       let nextDiff = difficulty;
 
-      if (question.isCoding) {
+      if (isCurrentItemCoding) {
         if (isTimeout) {
           isCorrect = false;
           correctAns = "Time expired (5:00 min limit).";
@@ -303,13 +313,13 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
       
       setEvaluationPhase('fetching');
       
-      const topic = question.topic || (question.isCoding ? "Coding" : "General");
-      const newHistory = [...history, { topic, is_correct: isCorrect, difficulty: question.isCoding ? 5 : difficulty }];
+      const topic = question.topic || (isCurrentItemCoding ? "Coding" : "General");
+      const newHistory = [...history, { topic, is_correct: isCorrect, difficulty: isCurrentItemCoding ? 5 : difficulty }];
       setHistory(newHistory);
       
       let newScore = score;
       if (isCorrect) {
-        newScore += (question.isCoding ? 50 : difficulty * 10);
+        newScore += (isCurrentItemCoding ? 50 : difficulty * 10);
         setScore(newScore);
       }
       
@@ -387,9 +397,123 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
   };
 
   // Current question score weight calculations
-  const questionWeightPoints = question?.isCoding ? 50 : (difficulty * 10);
+  const questionWeightPoints = isCurrentItemCoding ? 50 : (difficulty * 10);
   const questionWeightPercentage = ((questionWeightPoints / 600) * 100).toFixed(1);
 
+  // ==========================================
+  // INITIAL INSTRUCTIONS & AGREEMENT SCREEN
+  // ==========================================
+  if (!hasAcceptedRules) {
+    return (
+      <div className="min-h-screen bg-stone-50 flex items-center justify-center p-4">
+        <div className="w-full max-w-2xl bg-white rounded-2xl border border-stone-200 shadow-sm p-6 md:p-8 animate-in fade-in duration-200">
+          
+          {/* Header */}
+          <div className="flex items-center gap-3 pb-5 border-b border-stone-200">
+            <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center justify-center font-bold shadow-2xs">
+              <Target className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl md:text-2xl font-bold font-serif text-stone-900">
+                  {skillName} Level 1 Verification
+                </h1>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-orange-50 text-orange-800 border border-orange-200">
+                  Proctored
+                </span>
+              </div>
+              <p className="text-xs text-stone-500 mt-0.5">
+                Standardized 12-item adaptive technical examination & anti-cheat guidelines.
+              </p>
+            </div>
+          </div>
+
+          {/* Guidelines Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 my-6 text-xs text-stone-700">
+            
+            <div className="bg-stone-50 border border-stone-200 rounded-xl p-3.5 space-y-1">
+              <span className="font-bold text-stone-900 flex items-center gap-1.5">
+                <Target className="w-4 h-4 text-emerald-800" />
+                12 Total Questions (2 Coding)
+              </span>
+              <p className="text-[11px] text-stone-500 leading-normal">
+                10 adaptive conceptual MCQs scaling across Levels 1–5, plus <strong className="text-stone-800">exactly 2 hands-on coding challenges</strong> (Item 6 & Item 12).
+              </p>
+            </div>
+
+            <div className="bg-stone-50 border border-stone-200 rounded-xl p-3.5 space-y-1">
+              <span className="font-bold text-stone-900 flex items-center gap-1.5">
+                <Timer className="w-4 h-4 text-emerald-800" />
+                Pacing: 60s MCQ • 5 Min Coding
+              </span>
+              <p className="text-[11px] text-stone-500 leading-normal">
+                Each MCQ has a 60-second timer. Each coding sandbox grants <strong className="text-stone-800">strictly 5:00 minutes (300s)</strong> to write, execute, and verify code.
+              </p>
+            </div>
+
+            <div className="bg-stone-50 border border-stone-200 rounded-xl p-3.5 space-y-1">
+              <span className="font-bold text-stone-900 flex items-center gap-1.5">
+                <Info className="w-4 h-4 text-emerald-800" />
+                600 Points & Weight Info (i)
+              </span>
+              <p className="text-[11px] text-stone-500 leading-normal">
+                Passing threshold is 60% (360 pts). Coding challenges award 50 pts each. Click the <strong className="text-stone-800">(i) badge</strong> on any item to view its exact score weight.
+              </p>
+            </div>
+
+            <div className="bg-stone-50 border border-stone-200 rounded-xl p-3.5 space-y-1">
+              <span className="font-bold text-stone-900 flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-emerald-800" />
+                Anti-Cheat & Proctoring Flags
+              </span>
+              <p className="text-[11px] text-stone-500 leading-normal">
+                Copy-paste, cut, and screenshots are blocked. Flags 1–3 give warnings. <strong className="text-stone-800">&gt;3 flags triggers an automatic trust penalty</strong> on your score &amp; GLI.
+              </p>
+            </div>
+
+          </div>
+
+          {/* Student Declaration Checkbox */}
+          <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-xl p-4 mb-6">
+            <label className="flex items-start gap-3 cursor-pointer select-none">
+              <input 
+                type="checkbox"
+                checked={acknowledgedPolicy}
+                onChange={(e) => setAcknowledgedPolicy(e.target.checked)}
+                className="mt-0.5 w-4 h-4 rounded text-emerald-800 accent-emerald-800 focus:ring-emerald-800 cursor-pointer"
+              />
+              <span className="text-xs text-stone-700 leading-relaxed font-medium">
+                I confirm that I will complete this assessment independently. I understand that the browser tab must remain in focus, clipboard operations and screenshots are restricted, and violations exceeding 3 flags will negatively impact my Global Learner Index (GLI).
+              </span>
+            </label>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+            <Link 
+              href="/dashboard"
+              className="w-full sm:w-auto px-4 py-2.5 rounded-lg text-xs font-semibold text-stone-600 hover:text-stone-900 hover:bg-stone-100 transition-colors text-center"
+            >
+              Cancel &amp; Return to Dashboard
+            </Link>
+            <button
+              onClick={handleStartAssessment}
+              disabled={!acknowledgedPolicy}
+              className="w-full sm:w-auto px-6 py-2.5 bg-emerald-800 hover:bg-emerald-900 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <span>Accept Guidelines &amp; Begin Assessment</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+        </div>
+      </div>
+    );
+  }
+
+  // ==========================================
+  // COMPLETION SCREEN
+  // ==========================================
   if (isFinished && !loading) {
     return (
       <div className="min-h-screen bg-stone-50 flex items-center justify-center p-4">
@@ -460,7 +584,7 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
 
           <button 
             onClick={() => router.push('/dashboard')}
-            className="w-full px-5 py-2.5 bg-emerald-800 text-white font-semibold text-xs rounded-lg hover:bg-emerald-900 transition-colors shadow-2xs"
+            className="w-full px-5 py-2.5 bg-emerald-800 text-white font-semibold text-xs rounded-lg hover:bg-emerald-900 transition-colors shadow-2xs cursor-pointer"
           >
             Return to Dashboard
           </button>
@@ -469,6 +593,9 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
     );
   }
 
+  // ==========================================
+  // EVALUATION & FEEDBACK PHASE
+  // ==========================================
   if (evaluationPhase !== 'idle') {
     return (
       <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center p-4">
@@ -502,7 +629,7 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
                        <Loader2 className="w-4 h-4 animate-spin text-emerald-800" /> Synthesizing next question...
                     </div>
                  ) : (
-                    <button onClick={handleContinue} className="w-full py-2.5 bg-emerald-800 hover:bg-emerald-900 text-white rounded-lg text-xs font-semibold transition-colors shadow-2xs">
+                    <button onClick={handleContinue} className="w-full py-2.5 bg-emerald-800 hover:bg-emerald-900 text-white rounded-lg text-xs font-semibold transition-colors shadow-2xs cursor-pointer">
                        Proceed to Next Item
                     </button>
                  )}
@@ -513,6 +640,9 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
     );
   }
 
+  // ==========================================
+  // ACTIVE QUESTION SCREEN
+  // ==========================================
   return (
     <div className="min-h-screen bg-stone-50 flex flex-col select-none">
       {/* Anti-cheat Proctoring Toast Notice */}
@@ -544,7 +674,7 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
             </div>
             <button 
               onClick={() => setViolationNotice(prev => ({ ...prev, show: false }))} 
-              className="text-stone-400 hover:text-white text-xs ml-1"
+              className="text-stone-400 hover:text-white text-xs ml-1 cursor-pointer"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -600,7 +730,7 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
 
             {/* Difficulty Badge */}
             <div className="text-xs font-medium text-stone-500">
-              Lvl <span className="text-stone-900 font-bold">{question?.isCoding ? 'Coding' : difficulty}</span>
+              Lvl <span className="text-stone-900 font-bold">{isCurrentItemCoding ? 'Coding' : difficulty}</span>
             </div>
 
             {/* Progress Bar */}
@@ -627,11 +757,11 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
               <div className="flex items-center justify-between pb-3 mb-4 border-b border-stone-100">
                 <div className="flex items-center gap-2">
                   <span className={`text-[11px] font-bold px-2 py-0.5 rounded border ${
-                    question.isCoding 
+                    isCurrentItemCoding 
                       ? 'bg-amber-50 text-amber-900 border-amber-200' 
                       : 'bg-stone-100 text-stone-700 border-stone-200'
                   }`}>
-                    {question.isCoding ? 'Coding Sandbox (5 Min)' : `MCQ • Level ${difficulty}`}
+                    {isCurrentItemCoding ? 'Coding Sandbox (5 Min)' : `MCQ • Level ${difficulty}`}
                   </span>
                   <span className="text-[11px] text-stone-400">
                     Item {questionCount} of 12
@@ -656,7 +786,7 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
               </div>
 
               {/* Coding Question Sandbox or MCQ Options */}
-              {question.isCoding ? (
+              {isCurrentItemCoding ? (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between text-xs text-stone-500 px-1">
                     <span className="flex items-center gap-1 font-medium">
@@ -664,7 +794,7 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
                       5-Minute Sandbox • Copy/Paste Disabled
                     </span>
                     <span className="text-[11px] text-stone-400">
-                      Standard coding weight: 50 pts
+                      Standard coding challenge: 50 pts
                     </span>
                   </div>
 
@@ -705,7 +835,7 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
                 </div>
               ) : (
                 <div className="space-y-2.5">
-                  {question.options.map((opt: string, i: number) => {
+                  {(question.options || []).map((opt: string, i: number) => {
                     const isSelected = selectedOption === opt;
                     const showCorrect = feedback && feedback.correctAnswer === opt;
                     const showWrong = feedback && isSelected && !feedback.isCorrect;
@@ -720,7 +850,7 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
                         key={i}
                         onClick={() => handleOptionSelect(opt)}
                         disabled={!!feedback || isSubmitting}
-                        className={`w-full text-left p-3.5 rounded-lg border transition-all text-xs ${optStyle}`}
+                        className={`w-full text-left p-3.5 rounded-lg border transition-all text-xs cursor-pointer ${optStyle}`}
                       >
                         <div className="flex items-center justify-between">
                           <span className="font-medium whitespace-pre-wrap leading-relaxed"><ReactMarkdown rehypePlugins={[rehypeHighlight]}>{opt}</ReactMarkdown></span>
@@ -737,24 +867,24 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
               <div className="mt-6 pt-4 border-t border-stone-100 flex justify-between items-center gap-3">
                 <button
                   onClick={() => setIsReporting(true)}
-                  className="text-stone-400 hover:text-stone-700 text-xs font-medium flex items-center gap-1 transition-colors"
+                  className="text-stone-400 hover:text-stone-700 text-xs font-medium flex items-center gap-1 transition-colors cursor-pointer"
                 >
                   <Flag className="w-3.5 h-3.5" /> Report Issue
                 </button>
                 <div className="flex gap-2">
-                  {question.isCoding && (
+                  {isCurrentItemCoding && (
                     <button
                       onClick={handleRunCode}
                       disabled={!studentCode.trim() || isSubmitting || !!feedback || isExecuting}
-                      className="px-4 py-2 bg-stone-100 border border-stone-300 text-stone-800 text-xs font-semibold rounded-lg hover:bg-stone-200 flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                      className="px-4 py-2 bg-stone-100 border border-stone-300 text-stone-800 text-xs font-semibold rounded-lg hover:bg-stone-200 flex items-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
                     >
                       <Terminal className="w-3.5 h-3.5" /> {isExecuting ? "Executing..." : "Execute"}
                     </button>
                   )}
                   <button
                     onClick={() => handleSubmit(false)}
-                    disabled={(question.isCoding ? !studentCode.trim() : !selectedOption) || isSubmitting || !!feedback}
-                    className="px-6 py-2 bg-emerald-800 text-white text-xs font-semibold rounded-lg hover:bg-emerald-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-2xs"
+                    disabled={(isCurrentItemCoding ? !studentCode.trim() : !selectedOption) || isSubmitting || !!feedback}
+                    className="px-6 py-2 bg-emerald-800 text-white text-xs font-semibold rounded-lg hover:bg-emerald-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-2xs cursor-pointer"
                   >
                     {isSubmitting ? "Submitting..." : "Submit Answer"}
                   </button>
@@ -779,12 +909,12 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-stone-900">Question Weight Breakdown</h3>
-                  <p className="text-[11px] text-stone-500">Contribution to Total Assessment & GLI</p>
+                  <p className="text-[11px] text-stone-500">Contribution to Total Assessment &amp; GLI</p>
                 </div>
               </div>
               <button 
                 onClick={() => setShowWeightModal(false)}
-                className="text-stone-400 hover:text-stone-700 p-1 rounded-md"
+                className="text-stone-400 hover:text-stone-700 p-1 rounded-md cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -808,19 +938,19 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
                 <div className="flex justify-between py-1 border-b border-stone-100">
                   <span className="text-stone-500 font-medium">Question Format:</span>
                   <span className="font-semibold text-stone-800">
-                    {question?.isCoding ? 'Hands-on Coding Sandbox' : 'Adaptive Conceptual MCQ'}
+                    {isCurrentItemCoding ? 'Hands-on Coding Sandbox' : 'Adaptive Conceptual MCQ'}
                   </span>
                 </div>
                 <div className="flex justify-between py-1 border-b border-stone-100">
                   <span className="text-stone-500 font-medium">Allocated Time Limit:</span>
                   <span className="font-semibold text-stone-800">
-                    {question?.isCoding ? '5 Minutes (300 seconds)' : '1 Minute (60 seconds)'}
+                    {isCurrentItemCoding ? '5 Minutes (300 seconds)' : '1 Minute (60 seconds)'}
                   </span>
                 </div>
                 <div className="flex justify-between py-1 border-b border-stone-100">
                   <span className="text-stone-500 font-medium">Difficulty Level:</span>
                   <span className="font-semibold text-stone-800">
-                    Level {difficulty} of 5 ({question?.isCoding ? 'Practical Tier' : `${difficulty * 10} pts scale`})
+                    Level {difficulty} of 5 ({isCurrentItemCoding ? 'Practical Tier (50 pts)' : `${difficulty * 10} pts scale`})
                   </span>
                 </div>
               </div>
@@ -835,7 +965,7 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
 
             <button 
               onClick={() => setShowWeightModal(false)}
-              className="w-full mt-4 py-2 bg-emerald-800 text-white font-semibold text-xs rounded-lg hover:bg-emerald-900 transition-colors shadow-2xs"
+              className="w-full mt-4 py-2 bg-emerald-800 text-white font-semibold text-xs rounded-lg hover:bg-emerald-900 transition-colors shadow-2xs cursor-pointer"
             >
               Understood
             </button>
@@ -869,14 +999,14 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
                 <div className="flex justify-end gap-2">
                   <button 
                     onClick={() => setIsReporting(false)}
-                    className="px-3 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-100 rounded-md"
+                    className="px-3 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-100 rounded-md cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button 
                     onClick={handleReportSubmit}
                     disabled={!reportReason.trim()}
-                    className="px-4 py-1.5 bg-emerald-800 text-white text-xs font-semibold rounded-md hover:bg-emerald-900 disabled:opacity-50"
+                    className="px-4 py-1.5 bg-emerald-800 text-white text-xs font-semibold rounded-md hover:bg-emerald-900 disabled:opacity-50 cursor-pointer"
                   >
                     Submit Report
                   </button>
