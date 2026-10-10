@@ -134,6 +134,20 @@ async def force_reset_password(req: StudentLoginRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/me/{student_id}")
+async def get_my_profile(student_id: str):
+    try:
+        res = supabase.table("students").select("*, colleges(name)").eq("id", student_id).execute()
+        if not res.data:
+            raise HTTPException(status_code=404, detail="Student profile not found")
+        student = res.data[0]
+        college_name = student.get("colleges", {}).get("name") if student.get("colleges") else None
+        return {"student": student, "college_name": college_name}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/me/{student_id}/invitations")
 async def get_my_invitations(student_id: str):
     try:

@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import React, { useEffect, useState } from "react";
 import { adminApi } from "@/lib/adminApi";
-import { GitGraph, RefreshCw, ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
+import { GitGraph, RefreshCw } from "lucide-react";
 import {
   ReactFlow,
   MiniMap,
@@ -18,11 +18,11 @@ import "@xyflow/react/dist/style.css";
 
 // ─── Custom Nodes ─────────────────────────────────────────────────────────────
 const OccupationNode = ({ data }: { data: any }) => (
-  <div className="px-4 py-2 shadow-xl shadow-amber-500/20 rounded-xl bg-slate-900 border-2 border-amber-500 min-w-[150px] text-center relative group">
-    <Handle type="source" position={Position.Bottom} className="w-2 h-2 bg-amber-500 !border-none" />
-    <div className="text-[10px] font-black uppercase tracking-widest text-amber-500 mb-1">Career Role</div>
-    <div className="text-sm font-bold text-white">{data.label}</div>
-    <Handle type="target" position={Position.Top} className="w-2 h-2 bg-amber-500 !border-none" />
+  <div className="px-4 py-2 rounded-xl bg-stone-900 text-white border-2 border-stone-800 min-w-[150px] text-center shadow-sm relative">
+    <Handle type="source" position={Position.Bottom} className="w-2 h-2 bg-stone-700 !border-none" />
+    <div className="text-[9px] font-bold uppercase tracking-wider text-stone-300 mb-0.5">Career Role</div>
+    <div className="text-xs font-bold text-white">{data.label}</div>
+    <Handle type="target" position={Position.Top} className="w-2 h-2 bg-stone-700 !border-none" />
   </div>
 );
 
@@ -30,20 +30,20 @@ const SkillNode = ({ data }: { data: any }) => {
   const isFoundation = data.difficulty === "foundation";
   const isAdvanced = data.difficulty === "advanced";
   
-  const colors = isFoundation 
-    ? { border: "border-cyan-500", text: "text-cyan-400", bg: "bg-cyan-500/10 shadow-cyan-500/20" } 
+  const styles = isFoundation 
+    ? "bg-white border border-stone-300 text-stone-800" 
     : isAdvanced 
-      ? { border: "border-pink-500", text: "text-pink-400", bg: "bg-pink-500/10 shadow-pink-500/20" }
-      : { border: "border-indigo-500", text: "text-indigo-400", bg: "bg-indigo-500/10 shadow-indigo-500/20" };
+      ? "bg-emerald-50 border-2 border-emerald-800 text-emerald-950"
+      : "bg-white border-2 border-emerald-700 text-stone-900";
 
   return (
-    <div className={`px-4 py-2 shadow-lg rounded-xl bg-slate-900 border ${colors.border} min-w-[130px] text-center`}>
-      <Handle type="target" position={Position.Top} className={`w-2 h-2 !border-none ${isFoundation ? "bg-cyan-500" : isAdvanced ? "bg-pink-500" : "bg-indigo-500"}`} />
-      <div className={`text-[10px] font-black uppercase tracking-widest mb-1 ${colors.text}`}>
+    <div className={`px-3.5 py-2 rounded-xl shadow-xs ${styles} min-w-[130px] text-center`}>
+      <Handle type="target" position={Position.Top} className="w-2 h-2 !border-none bg-emerald-800" />
+      <div className="text-[9px] font-bold uppercase tracking-wider mb-0.5 text-stone-500">
         {data.difficulty || "Core"}
       </div>
-      <div className="text-sm font-bold text-white">{data.label}</div>
-      <Handle type="source" position={Position.Bottom} className={`w-2 h-2 !border-none ${isFoundation ? "bg-cyan-500" : isAdvanced ? "bg-pink-500" : "bg-indigo-500"}`} />
+      <div className="text-xs font-bold">{data.label}</div>
+      <Handle type="source" position={Position.Bottom} className="w-2 h-2 !border-none bg-emerald-800" />
     </div>
   );
 };
@@ -58,7 +58,7 @@ export default function KnowledgeGraphPage() {
   const [nodes, setNodes, onNodesChange] = useNodesState<any>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<any>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [, setError] = useState("");
   const [stats, setStats] = useState({ techs: 0, nodes: 0, edges: 0, occupations: 0 });
 
   useEffect(() => {
@@ -91,7 +91,7 @@ export default function KnowledgeGraphPage() {
 
       // 1. Occupations (Outer Ring)
       occupations.forEach((o: any, i: number) => {
-        const angle = (i / occupations.length) * 2 * Math.PI;
+        const angle = (i / Math.max(1, occupations.length)) * 2 * Math.PI;
         const r = 600;
         rfNodes.push({
           id: `occ_${o.id}`,
@@ -130,8 +130,8 @@ export default function KnowledgeGraphPage() {
           source: `node_${e.prerequisite_node_id}`,
           target: `node_${e.node_id}`,
           animated: true,
-          style: { stroke: "#818cf8", strokeWidth: 2 },
-          markerEnd: { type: MarkerType.ArrowClosed, color: "#818cf8" }
+          style: { stroke: "#166534", strokeWidth: 2 },
+          markerEnd: { type: MarkerType.ArrowClosed, color: "#166534" }
         });
       });
 
@@ -149,7 +149,7 @@ export default function KnowledgeGraphPage() {
             id: `e_occ_${os.occupation_id}_${nid}`,
             source: `occ_${os.occupation_id}`,
             target: nid,
-            style: { stroke: "#f59e0b", strokeWidth: 1.5, strokeDasharray: "5 5" },
+            style: { stroke: "#a16207", strokeWidth: 1.5, strokeDasharray: "4 4" },
           });
         });
       });
@@ -157,53 +157,53 @@ export default function KnowledgeGraphPage() {
       setNodes(rfNodes);
       setEdges(rfEdges);
       setLoading(false);
-    } catch (e: any) {
+    } catch {
       setError("Failed to load graph data.");
       setLoading(false);
     }
   };
 
   return (
-    <div className="h-screen flex flex-col bg-slate-950 overflow-hidden">
+    <div className="h-screen flex flex-col bg-stone-50 font-sans overflow-hidden text-stone-900">
       {/* Header */}
-      <div className="p-5 border-b border-slate-800 flex items-center justify-between shrink-0">
+      <div className="p-4 border-b border-stone-200 bg-white flex items-center justify-between shrink-0 shadow-xs">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-indigo-500/15 rounded-xl">
-            <GitGraph className="w-6 h-6 text-indigo-400" />
+          <div className="p-2 bg-emerald-50 rounded-lg text-emerald-800 border border-emerald-200">
+            <GitGraph className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-white">Knowledge Graph Explorer</h1>
-            <p className="text-slate-400 text-sm">Visual map of all technologies, learning nodes, and prerequisites</p>
+            <h1 className="text-base font-bold text-stone-900 leading-tight">Knowledge Graph Ontology</h1>
+            <p className="text-stone-500 text-xs">Interactive graph model of concepts, prerequisites, and competency nodes</p>
           </div>
         </div>
         <button
           onClick={loadGraph}
-          className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-sm transition-all"
+          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-lg text-xs font-semibold transition-colors border border-stone-200 shadow-xs"
         >
-          <RefreshCw className="w-4 h-4" /> Refresh
+          <RefreshCw className="w-3.5 h-3.5" /> Recompute Topology
         </button>
       </div>
 
       {/* Stats Row */}
-      <div className="px-5 py-3 border-b border-slate-800 flex gap-4 shrink-0 bg-slate-900/50">
+      <div className="px-4 py-2.5 border-b border-stone-200 flex gap-3 shrink-0 bg-stone-100/70">
         {[
-          { label: "Technologies", value: stats.techs, color: "text-slate-400", bg: "bg-slate-800" },
-          { label: "Learning Nodes", value: stats.nodes, color: "text-indigo-400", bg: "bg-indigo-500/10" },
-          { label: "Prerequisite Edges", value: stats.edges, color: "text-purple-400", bg: "bg-purple-500/10" },
-          { label: "Career Roles", value: stats.occupations, color: "text-amber-400", bg: "bg-amber-500/10" },
+          { label: "Technologies", value: stats.techs, color: "text-stone-800" },
+          { label: "Concept Nodes", value: stats.nodes, color: "text-emerald-800" },
+          { label: "Prerequisite Edges", value: stats.edges, color: "text-stone-700" },
+          { label: "Career Occupations", value: stats.occupations, color: "text-amber-800" },
         ].map(s => (
-          <div key={s.label} className={`flex items-center gap-2 px-3 py-1.5 ${s.bg} rounded-lg`}>
-            <span className={`text-lg font-bold ${s.color}`}>{s.value}</span>
-            <span className="text-slate-400 text-xs">{s.label}</span>
+          <div key={s.label} className="flex items-center gap-2 px-2.5 py-1 bg-white border border-stone-200 rounded-md text-xs shadow-xs">
+            <span className={`font-bold ${s.color}`}>{s.value}</span>
+            <span className="text-stone-500 text-[11px] font-medium">{s.label}</span>
           </div>
         ))}
       </div>
 
       {/* Canvas */}
-      <div className="flex-1 relative">
+      <div className="flex-1 relative bg-stone-100">
         {loading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-slate-950/80 z-10">
-            <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+          <div className="absolute inset-0 flex items-center justify-center bg-stone-50/80 z-10">
+            <div className="w-8 h-8 border-2 border-emerald-800 border-t-transparent rounded-full animate-spin" />
           </div>
         )}
         
@@ -214,20 +214,19 @@ export default function KnowledgeGraphPage() {
           onEdgesChange={onEdgesChange}
           nodeTypes={nodeTypes}
           fitView
-          className="bg-slate-950"
-          colorMode="dark"
+          className="bg-stone-100"
+          colorMode="light"
         >
-          <Background color="#1e293b" gap={20} size={1} />
-          <Controls className="bg-slate-900 border-slate-800 fill-slate-300" />
+          <Background color="#E7E5E4" gap={20} size={1} />
+          <Controls className="bg-white border-stone-300 fill-stone-700 shadow-xs" />
           <MiniMap 
             nodeColor={(node) => {
-              if (node.type === 'occupation') return '#f59e0b';
-              if (node.data?.difficulty === 'foundation') return '#06b6d4';
-              if (node.data?.difficulty === 'advanced') return '#ec4899';
-              return '#6366f1';
+              if (node.type === 'occupation') return '#292524';
+              if (node.data?.difficulty === 'advanced') return '#166534';
+              return '#a8a29e';
             }}
-            maskColor="rgba(15, 23, 42, 0.7)"
-            className="bg-slate-900 border border-slate-800 rounded-xl"
+            maskColor="rgba(245, 245, 244, 0.7)"
+            className="bg-white border border-stone-200 rounded-lg shadow-xs"
           />
         </ReactFlow>
       </div>

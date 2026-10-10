@@ -36,9 +36,6 @@ import {
   Sparkles,
   CheckCircle2,
   X,
-  ExternalLink,
-  ChevronRight,
-  UserPlus,
   Trash2,
   AlertCircle,
   MessageSquare,
@@ -331,15 +328,6 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName, alumniN
     if (!selectedProject) return;
     try {
       await updateApplicationStatus(applicationId, newStatus);
-      if (newStatus === 'referred') {
-        alert(`Referral request for ${studentName} initiated!`);
-      } else if (newStatus === 'shortlisted') {
-        alert(`${studentName} has been shortlisted.`);
-      } else if (newStatus === 'hired') {
-        alert(`${studentName} has been hired/referred.`);
-      } else if (newStatus === 'rejected') {
-        alert(`${studentName}'s application has been rejected.`);
-      }
       const appData = await getProjectApplicants(selectedProject.id);
       setApplicants(appData);
     } catch (err) {
@@ -371,7 +359,7 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName, alumniN
       const msg = await sendOpenSourceApplicationMessage(chatApplication.application_id, {
         sender_type: 'alumni',
         sender_id: alumniId,
-        sender_name: alumniName || 'Alumni',
+        sender_name: alumniName || 'Alumni Lead',
         message: appNewMessage
       });
       setAppMessages([...appMessages, msg]);
@@ -441,21 +429,21 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName, alumniN
   return (
     <div className="space-y-6">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-2xl border border-stone-200 shadow-xs">
         <div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 text-xs font-bold uppercase tracking-wider mb-2 border border-indigo-100">
-            <GitBranch className="w-3.5 h-3.5 text-indigo-600" />
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 text-xs font-bold uppercase tracking-wider mb-2 border border-emerald-200">
+            <GitBranch className="w-3.5 h-3.5 text-emerald-800" />
             Open Source Lab
           </div>
-          <h2 className="text-xl font-bold text-slate-800">Your Open Source Repositories</h2>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <h2 className="text-xl font-bold text-stone-900">Your Open Source Repositories</h2>
+          <p className="text-xs text-stone-500 mt-0.5">
             Share production projects, form contributor teams from applicants, and track student performance.
           </p>
         </div>
 
         <button
           onClick={() => setShowCreateModal(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-sm shadow-indigo-600/20 transition-all active:scale-[0.98]"
+          className="flex items-center gap-2 px-4 py-2.5 bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors"
         >
           <Plus className="w-4 h-4" /> Share New Open Source Project
         </button>
@@ -464,21 +452,21 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName, alumniN
       {/* Projects List */}
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="h-44 bg-slate-100 rounded-2xl animate-pulse" />
-          <div className="h-44 bg-slate-100 rounded-2xl animate-pulse" />
+          <div className="h-44 bg-stone-100 rounded-2xl animate-pulse" />
+          <div className="h-44 bg-stone-100 rounded-2xl animate-pulse" />
         </div>
       ) : projects.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-sm">
-          <div className="w-14 h-14 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-3">
+        <div className="bg-white rounded-2xl border border-stone-200 p-12 text-center shadow-xs">
+          <div className="w-14 h-14 bg-emerald-50 text-emerald-800 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-emerald-200">
             <GitBranch className="w-7 h-7" />
           </div>
-          <h3 className="text-base font-bold text-slate-800 mb-1">No Open Source Projects Posted</h3>
-          <p className="text-xs text-slate-500 max-w-sm mx-auto mb-5">
+          <h3 className="text-base font-bold text-stone-900 mb-1">No Open Source Projects Posted</h3>
+          <p className="text-xs text-stone-500 max-w-sm mx-auto mb-5">
             Post an open source repository to invite motivated student contributors from your college.
           </p>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="px-4 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-xl hover:bg-indigo-700 transition-all"
+            className="px-4 py-2 bg-emerald-800 text-white text-xs font-semibold rounded-xl hover:bg-emerald-900 transition-colors"
           >
             Share Project Now
           </button>
@@ -488,15 +476,15 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName, alumniN
           {projects.map((proj) => (
             <div
               key={proj.id}
-              className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
+              className="bg-white rounded-2xl border border-stone-200 p-5 shadow-xs hover:border-stone-300 transition-all flex flex-col justify-between"
             >
               <div>
                 <div className="flex items-start justify-between gap-3 mb-2">
                   <span
-                    className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                    className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
                       proj.status === 'open'
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                        : 'bg-slate-100 text-slate-600'
+                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                        : 'bg-stone-100 text-stone-600 border-stone-200'
                     }`}
                   >
                     {proj.status.replace('_', ' ')}
@@ -507,7 +495,7 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName, alumniN
                       href={proj.repo_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-slate-400 hover:text-slate-900 transition-colors p-1"
+                      className="text-stone-400 hover:text-stone-900 transition-colors p-1"
                       title="View GitHub"
                     >
                       <GithubIcon className="w-4 h-4" />
@@ -515,15 +503,15 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName, alumniN
                   )}
                 </div>
 
-                <h3 className="font-bold text-slate-800 text-base mb-1 line-clamp-1">{proj.title}</h3>
-                <p className="text-xs text-slate-500 line-clamp-2 mb-3">
+                <h3 className="font-bold text-stone-900 text-base mb-1 line-clamp-1">{proj.title}</h3>
+                <p className="text-xs text-stone-500 line-clamp-2 mb-3">
                   {proj.description || 'No description provided.'}
                 </p>
 
                 {proj.tech_stack && proj.tech_stack.length > 0 && (
                   <div className="flex flex-wrap gap-1 mb-3">
                     {proj.tech_stack.map((t) => (
-                      <span key={t} className="text-[10px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-medium">
+                      <span key={t} className="text-[10px] bg-stone-100 text-stone-700 px-2 py-0.5 rounded-md font-medium border border-stone-200">
                         {t}
                       </span>
                     ))}
@@ -531,13 +519,13 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName, alumniN
                 )}
               </div>
 
-              <div className="border-t border-slate-100 pt-3 mt-2 flex items-center justify-between">
-                <div className="flex items-center gap-3 text-xs text-slate-500">
-                  <span className="font-semibold text-slate-700">
+              <div className="border-t border-stone-100 pt-3 mt-2 flex items-center justify-between">
+                <div className="flex items-center gap-3 text-xs text-stone-500">
+                  <span className="font-semibold text-stone-700">
                     {proj.applicant_count || 0} Applicants
                   </span>
                   <span>·</span>
-                  <span className="font-semibold text-indigo-600">
+                  <span className="font-semibold text-emerald-800">
                     {proj.group_count || 0} Teams Formed
                   </span>
                 </div>
@@ -545,21 +533,21 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName, alumniN
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => handleOpenProjectDetails(proj, 'applicants')}
-                    className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold transition-all flex items-center gap-1"
+                    className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 border border-stone-200"
                   >
-                    <Users className="w-3.5 h-3.5" /> Manage & Groups
+                    <Users className="w-3.5 h-3.5" /> Teams & Applicants
                   </button>
                   <button
                     onClick={() => handleOpenProjectDetails(proj, 'performance')}
-                    className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1"
+                    className="px-3 py-1.5 bg-stone-800 hover:bg-stone-900 text-white rounded-lg text-xs font-semibold transition-colors flex items-center gap-1"
                   >
-                    <TrendingUp className="w-3.5 h-3.5" /> Performance Graph
+                    <TrendingUp className="w-3.5 h-3.5" /> Metrics
                   </button>
                   <button
                     onClick={() => handleOpenProjectDetails(proj, 'chat')}
-                    className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold transition-all flex items-center gap-1"
+                    className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1"
                   >
-                    <MessageSquare className="w-3.5 h-3.5" /> Team Chat
+                    <MessageSquare className="w-3.5 h-3.5" /> Chat
                   </button>
                 </div>
               </div>
@@ -570,114 +558,112 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName, alumniN
 
       {/* CREATE PROJECT MODAL */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 md:p-8 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-6">
+        <div className="fixed inset-0 z-50 bg-stone-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 md:p-8 shadow-xl border border-stone-200 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-4 border-b border-stone-200 mb-6">
               <div>
-                <h3 className="text-lg font-bold text-slate-900">Share Open Source Project</h3>
-                <p className="text-xs text-slate-500">Post repository details for student contributors</p>
+                <h3 className="text-base font-bold text-stone-900">Share Open Source Project</h3>
+                <p className="text-xs text-stone-500">Post repository details for student contributors</p>
               </div>
               <button
                 onClick={() => setShowCreateModal(false)}
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500"
+                className="w-7 h-7 rounded-lg bg-stone-100 hover:bg-stone-200 flex items-center justify-center text-stone-500"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {createError && (
-              <div className="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700 flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <div className="mb-4 p-3 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-800 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
                 {createError}
               </div>
             )}
 
             <form onSubmit={handleCreateProject} className="space-y-4 text-xs">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Project Title *</label>
+                <label className="block font-semibold text-stone-700 mb-1">Project Title *</label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Distributed Task Queue & Telemetry Engine"
+                  placeholder="e.g. Distributed Consensus Engine"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-lg focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-700 text-stone-900"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Description</label>
-                <textarea
-                  rows={2}
-                  placeholder="Briefly describe what this repository does and what contributors will build..."
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                <label className="block font-semibold text-stone-700 mb-1">Repository URL (GitHub / GitLab)</label>
+                <input
+                  type="url"
+                  placeholder="https://github.com/organization/repo"
+                  value={repoUrl}
+                  onChange={(e) => setRepoUrl(e.target.value)}
+                  className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-lg focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-700 text-stone-900"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">GitHub Repo URL</label>
+                  <label className="block font-semibold text-stone-700 mb-1">Tech Stack (comma separated)</label>
                   <input
-                    type="url"
-                    placeholder="https://github.com/org/repo"
-                    value={repoUrl}
-                    onChange={(e) => setRepoUrl(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    type="text"
+                    placeholder="e.g. Rust, Tokio, gRPC"
+                    value={techStackStr}
+                    onChange={(e) => setTechStackStr(e.target.value)}
+                    className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-lg focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-700 text-stone-900"
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Max Contributors</label>
+                  <label className="block font-semibold text-stone-700 mb-1">Max Contributors</label>
                   <input
                     type="number"
                     min={1}
                     max={50}
                     value={maxContributors}
                     onChange={(e) => setMaxContributors(parseInt(e.target.value) || 5)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-lg focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-700 text-stone-900"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Required Tech Stack (comma separated)
-                </label>
-                <input
-                  type="text"
-                  placeholder="React, TypeScript, FastAPI, PostgreSQL, Docker"
-                  value={techStackStr}
-                  onChange={(e) => setTechStackStr(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                <label className="block font-semibold text-stone-700 mb-1">Project Overview</label>
+                <textarea
+                  rows={2}
+                  placeholder="Summary of project goals, architecture, and expected deliverables..."
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-lg focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-700 text-stone-900"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Guidelines & Initial Milestones</label>
+                <label className="block font-semibold text-stone-700 mb-1">Contribution Guidelines & Prerequisites</label>
                 <textarea
                   rows={2}
-                  placeholder="e.g. PR conventions, weekly sync times, coding standards, or issues to solve..."
+                  placeholder="e.g. Must understand async concurrency and have working knowledge of Git workflows."
                   value={guidelines}
                   onChange={(e) => setGuidelines(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-lg focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-700 text-stone-900"
                 />
               </div>
 
-              <div className="flex gap-3 pt-3">
+              <div className="flex gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setShowCreateModal(false)}
-                  className="flex-1 py-2.5 font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"
+                  className="flex-1 py-2.5 font-semibold text-stone-600 bg-stone-100 hover:bg-stone-200 rounded-lg transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={createLoading}
-                  className="flex-1 py-2.5 font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5"
+                  className="flex-1 py-2.5 font-semibold text-white bg-emerald-800 hover:bg-emerald-900 rounded-lg shadow-xs transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
                 >
-                  {createLoading ? 'Publishing...' : 'Publish Project'}
+                  {createLoading ? 'Sharing...' : 'Publish Repository'}
                 </button>
               </div>
             </form>
@@ -685,46 +671,46 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName, alumniN
         </div>
       )}
 
-      {/* PROJECT DETAILS & MANAGEMENT MODAL (APPLICANTS, GROUPS, PERFORMANCE) */}
+      {/* MANAGE PROJECT MODAL (Applicants, Groups, Performance, Chat) */}
       {selectedProject && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 md:p-6">
-          <div className="bg-white rounded-3xl max-w-4xl w-full p-6 md:p-8 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200 max-h-[92vh] flex flex-col">
+        <div className="fixed inset-0 z-50 bg-stone-900/50 backdrop-blur-xs flex items-center justify-center p-3 md:p-6">
+          <div className="bg-white rounded-2xl max-w-4xl w-full p-6 shadow-xl border border-stone-200 max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
             {/* Modal Header */}
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100 shrink-0">
+            <div className="flex items-center justify-between pb-4 border-b border-stone-200 mb-4 shrink-0">
               <div>
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-[10px] font-bold uppercase tracking-wider bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full border border-indigo-100">
-                    Project Management
+                  <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-200">
+                    Repository Management
                   </span>
                   {selectedProject.repo_url && (
                     <a
                       href={selectedProject.repo_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs text-slate-500 hover:text-slate-900 flex items-center gap-1"
+                      className="text-xs text-stone-500 hover:text-stone-900 flex items-center gap-1"
                     >
-                      <GithubIcon className="w-3.5 h-3.5" /> Repo <ExternalLink className="w-2.5 h-2.5" />
+                      <GithubIcon className="w-3.5 h-3.5" /> View Repo
                     </a>
                   )}
                 </div>
-                <h3 className="text-xl font-bold text-slate-900">{selectedProject.title}</h3>
+                <h3 className="text-lg font-bold text-stone-900">{selectedProject.title}</h3>
               </div>
               <button
                 onClick={() => setSelectedProject(null)}
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500"
+                className="w-7 h-7 rounded-lg bg-stone-100 hover:bg-stone-200 flex items-center justify-center text-stone-500"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Modal Navigation Tabs */}
-            <div className="flex border-b border-slate-200 gap-2 pt-3 shrink-0">
+            {/* Sub-Tabs Navigation */}
+            <div className="flex gap-2 border-b border-stone-200 mb-4 pb-0 shrink-0">
               <button
                 onClick={() => setModalTab('applicants')}
-                className={`px-4 py-2.5 font-bold text-xs rounded-t-xl transition-all flex items-center gap-1.5 border-b-2 ${
+                className={`px-3 py-2 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 ${
                   modalTab === 'applicants'
-                    ? 'border-indigo-600 text-indigo-700 bg-indigo-50/50'
-                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                    ? 'border-emerald-800 text-emerald-800 bg-emerald-50/50'
+                    : 'border-transparent text-stone-500 hover:text-stone-800'
                 }`}
               >
                 <Users className="w-3.5 h-3.5" />
@@ -732,38 +718,32 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName, alumniN
               </button>
               <button
                 onClick={() => setModalTab('groups')}
-                className={`px-4 py-2.5 font-bold text-xs rounded-t-xl transition-all flex items-center gap-1.5 border-b-2 ${
+                className={`px-3 py-2 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 ${
                   modalTab === 'groups'
-                    ? 'border-indigo-600 text-indigo-700 bg-indigo-50/50'
-                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                    ? 'border-emerald-800 text-emerald-800 bg-emerald-50/50'
+                    : 'border-transparent text-stone-500 hover:text-stone-800'
                 }`}
               >
                 <Layers className="w-3.5 h-3.5" />
-                Teams & Groups ({groups.length})
+                Teams / Subgroups ({groups.length})
               </button>
               <button
-                onClick={() => {
-                  setModalTab('performance');
-                  const firstCandidate = applicants[0]?.student || groups[0]?.members[0];
-                  if (firstCandidate && !activeStudentForPerf) {
-                    handleSelectStudentForPerf(selectedProject.id, firstCandidate.id, firstCandidate.name);
-                  }
-                }}
-                className={`px-4 py-2.5 font-bold text-xs rounded-t-xl transition-all flex items-center gap-1.5 border-b-2 ${
+                onClick={() => setModalTab('performance')}
+                className={`px-3 py-2 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 ${
                   modalTab === 'performance'
-                    ? 'border-indigo-600 text-indigo-700 bg-indigo-50/50'
-                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                    ? 'border-emerald-800 text-emerald-800 bg-emerald-50/50'
+                    : 'border-transparent text-stone-500 hover:text-stone-800'
                 }`}
               >
                 <TrendingUp className="w-3.5 h-3.5" />
-                Student Performance Graph
+                Performance Metrics
               </button>
               <button
                 onClick={() => setModalTab('chat')}
-                className={`px-4 py-2.5 font-bold text-xs rounded-t-xl transition-all flex items-center gap-1.5 border-b-2 ${
+                className={`px-3 py-2 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 ${
                   modalTab === 'chat'
-                    ? 'border-indigo-600 text-indigo-700 bg-indigo-50/50'
-                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                    ? 'border-emerald-800 text-emerald-800 bg-emerald-50/50'
+                    : 'border-transparent text-stone-500 hover:text-stone-800'
                 }`}
               >
                 <MessageSquare className="w-3.5 h-3.5" />
@@ -771,60 +751,58 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName, alumniN
               </button>
             </div>
 
-            {/* Modal Body */}
-            <div className="flex-1 overflow-y-auto pt-4 pr-1">
+            {/* Tab Body */}
+            <div className="flex-1 overflow-y-auto pr-1">
               {dataLoading ? (
-                <div className="h-48 flex items-center justify-center text-xs text-slate-400">
-                  Loading project data...
-                </div>
+                <div className="text-center py-12 text-stone-400 text-xs">Loading data...</div>
               ) : null}
 
               {/* TAB 1: APPLICANTS */}
               {!dataLoading && modalTab === 'applicants' && (
                 <div className="space-y-3">
                   {applicants.length === 0 ? (
-                    <div className="text-center py-12 text-slate-400 text-xs">
+                    <div className="text-center py-12 text-stone-400 text-xs">
                       No students have applied for this project yet.
                     </div>
                   ) : (
                     applicants.map((app) => (
                       <div
                         key={app.application_id}
-                        className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4"
+                        className="bg-stone-50 border border-stone-200 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4"
                       >
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
-                            <h4 className="font-bold text-slate-900 text-sm">{app.student.name}</h4>
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-100 text-indigo-800 text-[10px] font-extrabold rounded-md">
-                              <Sparkles className="w-3 h-3 text-indigo-600" /> Score: {app.hireability?.score || 300}
+                            <h4 className="font-bold text-stone-900 text-xs">{app.student.name}</h4>
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-800 text-[10px] font-bold rounded-md border border-emerald-200">
+                              Score: {app.hireability?.score || 300}
                             </span>
                             {app.assigned_group ? (
-                              <span className="text-[10px] font-semibold bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
+                              <span className="text-[10px] font-semibold bg-stone-100 text-stone-700 px-2 py-0.5 rounded-full border border-stone-200">
                                 In {app.assigned_group.name}
                               </span>
                             ) : null}
                             {app.status === 'shortlisted' && (
-                              <span className="text-[10px] font-semibold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">
+                              <span className="text-[10px] font-semibold bg-amber-50 text-amber-800 px-2 py-0.5 rounded-full border border-amber-200">
                                 Shortlisted
                               </span>
                             )}
                             {app.status === 'hired' && (
-                              <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
-                                Hired/Referred
+                              <span className="text-[10px] font-semibold bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-200">
+                                Referred
                               </span>
                             )}
                             {app.status === 'rejected' && (
-                              <span className="text-[10px] font-semibold bg-red-100 text-red-800 px-2 py-0.5 rounded-full">
+                              <span className="text-[10px] font-semibold bg-rose-50 text-rose-800 px-2 py-0.5 rounded-full border border-rose-200">
                                 Rejected
                               </span>
                             )}
                           </div>
-                          <p className="text-xs text-slate-500">
+                          <p className="text-xs text-stone-500">
                             {app.student.email} · {app.student.branch || 'Student'} · Year {app.student.year || 3}
                           </p>
 
                           {app.pitch && (
-                            <p className="text-xs text-slate-600 italic bg-white p-2.5 rounded-xl border border-slate-100 mt-2">
+                            <p className="text-xs text-stone-600 italic bg-white p-2.5 rounded-lg border border-stone-200 mt-2">
                               &quot;{app.pitch}&quot;
                             </p>
                           )}
@@ -835,7 +813,7 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName, alumniN
                               {app.skills.slice(0, 4).map((sk, idx) => (
                                 <span
                                   key={idx}
-                                  className="text-[10px] px-2 py-0.5 bg-white text-slate-700 rounded border border-slate-200 font-medium"
+                                  className="text-[10px] px-2 py-0.5 bg-white text-stone-700 rounded border border-stone-200 font-medium"
                                 >
                                   {sk.skill_name}
                                   {sk.verification_level >= 1 ? ' ✓' : ''}
@@ -848,11 +826,11 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName, alumniN
                         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
                           {/* Assign to Group Button / Form */}
                           {groups.length > 0 ? (
-                            <div className="flex items-center gap-1.5 bg-white p-1.5 rounded-xl border border-slate-200">
+                            <div className="flex items-center gap-1.5 bg-white p-1.5 rounded-lg border border-stone-200">
                               <select
                                 value={targetGroupId}
                                 onChange={(e) => setTargetGroupId(e.target.value)}
-                                className="text-[11px] p-1.5 bg-slate-50 border border-slate-200 rounded-lg outline-none font-medium"
+                                className="text-[11px] p-1.5 bg-stone-50 border border-stone-200 rounded-md outline-none font-medium text-stone-800"
                               >
                                 {groups.map((g) => (
                                   <option key={g.id} value={g.id}>
@@ -863,46 +841,46 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName, alumniN
                               <button
                                 onClick={() => handleAssignStudent(app.student.id)}
                                 disabled={assignLoading}
-                                className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[11px] font-bold transition-all disabled:opacity-50"
+                                className="px-2.5 py-1.5 bg-emerald-800 hover:bg-emerald-900 text-white rounded-md text-[11px] font-semibold transition-colors disabled:opacity-50"
                               >
                                 {app.assigned_group ? 'Reassign' : 'Add to Team'}
                               </button>
                             </div>
                           ) : (
-                            <span className="text-[11px] text-slate-400 italic">Create a team in tab 2 first</span>
+                            <span className="text-[11px] text-stone-400 italic">Create a team in tab 2 first</span>
                           )}
 
-                          <div className="flex gap-1 items-center bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
+                          <div className="flex gap-1 items-center bg-white p-1 rounded-lg border border-stone-200 shadow-xs">
                             <button
                               disabled={app.status === 'shortlisted' || app.status === 'hired' || app.status === 'rejected'}
                               onClick={() => handleStatusChange(app.application_id, app.student.name, 'shortlisted')}
-                              className="p-1.5 bg-amber-50 hover:bg-amber-100 text-amber-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              className="p-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-amber-200"
                               title="Shortlist"
                             >
-                              <Star className="w-4 h-4" />
+                              <Star className="w-3.5 h-3.5" />
                             </button>
                             <button
                               disabled={app.status === 'hired' || app.status === 'rejected'}
                               onClick={() => handleStatusChange(app.application_id, app.student.name, 'hired')}
-                              className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-emerald-200"
                               title="Hire/Refer"
                             >
-                              <Check className="w-4 h-4" />
+                              <Check className="w-3.5 h-3.5" />
                             </button>
                             <button
                               disabled={app.status === 'rejected' || app.status === 'hired'}
                               onClick={() => handleStatusChange(app.application_id, app.student.name, 'rejected')}
-                              className="p-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-800 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-rose-200"
                               title="Reject"
                             >
-                              <X className="w-4 h-4" />
+                              <X className="w-3.5 h-3.5" />
                             </button>
-                            <div className="w-px h-5 bg-slate-200 mx-0.5"></div>
+                            <div className="w-px h-5 bg-stone-200 mx-0.5"></div>
                             <button
                               onClick={() => openApplicationChat(app)}
-                              className="p-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg transition-colors flex items-center gap-1 text-xs font-bold px-2"
+                              className="p-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-md transition-colors flex items-center gap-1 text-xs font-semibold px-2 border border-stone-200"
                             >
-                              <MessageSquare className="w-3.5 h-3.5" /> Chat
+                              <MessageSquare className="w-3 h-3" /> Chat
                             </button>
                           </div>
                           <button
@@ -914,7 +892,7 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName, alumniN
                                 hireability: app.hireability
                               })
                             }
-                            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1"
+                            className="px-3 py-1.5 bg-stone-800 hover:bg-stone-900 text-white text-xs font-semibold rounded-lg transition-colors flex items-center justify-center gap-1"
                           >
                             <Eye className="w-3.5 h-3.5" /> Profile
                           </button>
@@ -931,37 +909,37 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName, alumniN
                   {/* Create Group Form */}
                   <form
                     onSubmit={handleCreateGroup}
-                    className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row gap-3 items-stretch sm:items-end"
+                    className="bg-stone-50 border border-stone-200 rounded-xl p-4 flex flex-col sm:flex-row gap-3 items-stretch sm:items-end"
                   >
                     <div className="flex-1">
-                      <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      <label className="block text-[11px] font-semibold text-stone-700 uppercase tracking-wider mb-1">
                         Create New Team / Subgroup
                       </label>
                       <input
                         type="text"
                         required
-                        placeholder="e.g. Core Engine Team, Frontend & UI, Testing..."
+                        placeholder="e.g. Core Engine Team, Testing & Verification..."
                         value={newGroupName}
                         onChange={(e) => setNewGroupName(e.target.value)}
-                        className="w-full text-xs p-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                        className="w-full text-xs p-2.5 bg-white border border-stone-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-700 font-medium text-stone-900"
                       />
                     </div>
                     <div className="flex-1">
-                      <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                        Team Focus / Description
+                      <label className="block text-[11px] font-semibold text-stone-700 uppercase tracking-wider mb-1">
+                        Team Focus / Objective
                       </label>
                       <input
                         type="text"
-                        placeholder="e.g. Builds authentication and GraphQL endpoints"
+                        placeholder="e.g. Builds query optimizers and benchmarks"
                         value={newGroupDesc}
                         onChange={(e) => setNewGroupDesc(e.target.value)}
-                        className="w-full text-xs p-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                        className="w-full text-xs p-2.5 bg-white border border-stone-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-700 font-medium text-stone-900"
                       />
                     </div>
                     <button
                       type="submit"
                       disabled={creatingGroup}
-                      className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shrink-0 flex items-center justify-center gap-1.5 disabled:opacity-50"
+                      className="px-4 py-2.5 bg-emerald-800 hover:bg-emerald-900 text-white rounded-lg text-xs font-semibold transition-colors shrink-0 flex items-center justify-center gap-1.5 disabled:opacity-50"
                     >
                       <Plus className="w-4 h-4" /> Add Team
                     </button>
@@ -969,33 +947,33 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName, alumniN
 
                   {/* Existing Groups Grid */}
                   {groups.length === 0 ? (
-                    <div className="text-center py-10 text-slate-400 text-xs">
+                    <div className="text-center py-10 text-stone-400 text-xs">
                       No groups created yet. Use the form above to organize contributors into teams.
                     </div>
                   ) : (
                     <div className="space-y-4">
                       {groups.map((grp) => (
-                        <div key={grp.id} className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs">
-                          <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
+                        <div key={grp.id} className="bg-white rounded-xl border border-stone-200 p-5 shadow-xs">
+                          <div className="flex items-center justify-between pb-3 border-b border-stone-100 mb-3">
                             <div className="flex items-center gap-2">
-                              <div className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs">
+                              <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-800 flex items-center justify-center font-bold text-xs border border-emerald-200">
                                 <Layers className="w-4 h-4" />
                               </div>
                               <div>
-                                <h4 className="font-bold text-slate-900 text-sm">{grp.name}</h4>
+                                <h4 className="font-bold text-stone-900 text-xs">{grp.name}</h4>
                                 {grp.description && (
-                                  <p className="text-xs text-slate-500">{grp.description}</p>
+                                  <p className="text-[11px] text-stone-500">{grp.description}</p>
                                 )}
                               </div>
                             </div>
-                            <span className="text-xs font-semibold bg-slate-100 text-slate-700 px-2.5 py-1 rounded-full">
+                            <span className="text-xs font-semibold bg-stone-100 text-stone-700 px-2.5 py-1 rounded-full border border-stone-200">
                               {grp.members?.length || 0} Members
                             </span>
                           </div>
 
                           {/* Member chips */}
                           {!grp.members || grp.members.length === 0 ? (
-                            <p className="text-xs text-slate-400 italic">
+                            <p className="text-xs text-stone-400 italic">
                               No members assigned yet. Assign candidates from the Applicants tab.
                             </p>
                           ) : (
@@ -1003,15 +981,15 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName, alumniN
                               {grp.members.map((m) => (
                                 <div
                                   key={m.id}
-                                  className="flex items-center justify-between bg-slate-50 p-2.5 rounded-xl border border-slate-100"
+                                  className="flex items-center justify-between bg-stone-50 p-2.5 rounded-lg border border-stone-200"
                                 >
                                   <div className="flex items-center gap-2.5">
-                                    <div className="w-6 h-6 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center">
+                                    <div className="w-6 h-6 rounded-full bg-emerald-800 text-white font-bold text-[10px] flex items-center justify-center">
                                       {m.name.charAt(0)}
                                     </div>
                                     <div>
-                                      <p className="text-xs font-bold text-slate-800">{m.name}</p>
-                                      <p className="text-[10px] text-slate-500">
+                                      <p className="text-xs font-bold text-stone-900">{m.name}</p>
+                                      <p className="text-[10px] text-stone-500">
                                         Role: <span className="font-semibold uppercase">{m.role || 'Contributor'}</span>
                                         {m.avg_performance ? ` · Avg Score: ${m.avg_performance}%` : ''}
                                       </p>
@@ -1024,13 +1002,13 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName, alumniN
                                         setModalTab('performance');
                                         handleSelectStudentForPerf(selectedProject.id, m.id, m.name);
                                       }}
-                                      className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[10px] font-bold rounded-lg transition-all flex items-center gap-1"
+                                      className="px-2.5 py-1 bg-stone-100 hover:bg-stone-200 text-stone-800 text-[10px] font-semibold rounded-md transition-colors flex items-center gap-1 border border-stone-200"
                                     >
-                                      <TrendingUp className="w-3 h-3" /> Graph
+                                      <TrendingUp className="w-3 h-3 text-emerald-800" /> Graph
                                     </button>
                                     <button
                                       onClick={() => handleRemoveMember(grp.id, m.id)}
-                                      className="p-1 text-slate-400 hover:text-rose-600 transition-colors"
+                                      className="p-1 text-stone-400 hover:text-rose-600 transition-colors"
                                       title="Remove from team"
                                     >
                                       <Trash2 className="w-3.5 h-3.5" />
@@ -1051,8 +1029,8 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName, alumniN
               {!dataLoading && modalTab === 'performance' && (
                 <div className="space-y-6">
                   {/* Student Selector Bar */}
-                  <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
-                    <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">
+                  <div className="bg-stone-50 p-3 rounded-xl border border-stone-200">
+                    <label className="block text-[11px] font-semibold text-stone-700 uppercase tracking-wider mb-2">
                       Select Student Contributor:
                     </label>
                     <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
@@ -1066,10 +1044,10 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName, alumniN
                               app.student.name
                             )
                           }
-                          className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors flex items-center gap-1.5 ${
                             activeStudentForPerf?.id === app.student.id
-                              ? 'bg-indigo-600 text-white shadow-sm'
-                              : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                              ? 'bg-emerald-800 text-white shadow-xs'
+                              : 'bg-white text-stone-700 hover:bg-stone-100 border border-stone-200'
                           }`}
                         >
                           <div className="w-4 h-4 rounded-full bg-white/20 text-current flex items-center justify-center text-[9px] font-bold">
@@ -1082,60 +1060,60 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName, alumniN
                   </div>
 
                   {perfLoading ? (
-                    <div className="h-56 bg-slate-100 rounded-2xl animate-pulse" />
+                    <div className="h-56 bg-stone-100 rounded-xl animate-pulse" />
                   ) : perfData && activeStudentForPerf ? (
                     <div className="space-y-6">
                       {/* Overall Metric Header */}
-                      <div className="bg-gradient-to-r from-slate-900 to-indigo-950 text-white rounded-2xl p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg">
+                      <div className="bg-emerald-800 border border-emerald-700 text-white rounded-xl p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
                         <div>
-                          <span className="text-[10px] font-bold tracking-wider uppercase text-indigo-300">
-                            Performance Radar: {activeStudentForPerf.name}
+                          <span className="text-[10px] font-bold tracking-wider uppercase text-emerald-200">
+                            Performance Assessment: {activeStudentForPerf.name}
                           </span>
-                          <h4 className="text-3xl font-extrabold mt-1">
+                          <h4 className="text-2xl font-bold mt-1">
                             {perfData.logs.length === 0 ? (
-                              <span className="text-2xl text-slate-300">Not Evaluated Yet</span>
+                              <span className="text-xl text-stone-200">Not Evaluated Yet</span>
                             ) : (
                               <>
-                                {perfData.overall_performance_score} <span className="text-base text-indigo-400">/ 100</span>
+                                {perfData.overall_performance_score} <span className="text-sm text-emerald-200">/ 100</span>
                               </>
                             )}
                           </h4>
-                          <p className="text-xs text-slate-300 mt-1">
+                          <p className="text-xs text-stone-200 mt-1">
                             {perfData.logs.length === 0
                               ? "No evaluations recorded yet for this project. Once the student begins tasks, record their performance below."
-                              : "Calculated across Code Quality, Velocity, Collaboration & Consistency."}
+                              : "Calculated across Code Quality, Velocity, Collaboration & Reliability."}
                           </p>
                         </div>
-                        <div className="w-14 h-14 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 shrink-0">
-                          <Award className="w-7 h-7 text-amber-400" />
+                        <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center border border-white/20 shrink-0">
+                          <Award className="w-6 h-6 text-amber-300" />
                         </div>
                       </div>
 
                       {/* Visual Contribution Breakdown (Bar Chart) */}
-                      <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs">
-                        <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-4">
+                      <div className="bg-white rounded-xl border border-stone-200 p-5 shadow-xs">
+                        <h4 className="text-xs font-bold text-stone-900 uppercase tracking-wider mb-4">
                           Individual Competency Breakdown
                         </h4>
                         {perfData.metric_breakdown.length === 0 ? (
-                          <div className="text-center py-8 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                            <p className="text-xs text-slate-600 font-semibold">
+                          <div className="text-center py-8 bg-stone-50 rounded-xl border border-dashed border-stone-200">
+                            <p className="text-xs text-stone-600 font-semibold">
                               No performance evaluations recorded yet for {activeStudentForPerf.name}.
                             </p>
-                            <p className="text-[11px] text-slate-400 mt-1">
+                            <p className="text-[11px] text-stone-400 mt-1">
                               Submit a rating below once they begin contributing to this project.
                             </p>
                           </div>
                         ) : (
                           <div className="space-y-3">
                             {perfData.metric_breakdown.map((item) => (
-                              <div key={item.metric} className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                                <div className="flex justify-between items-center text-xs font-bold text-slate-800 mb-1">
+                              <div key={item.metric} className="bg-stone-50 p-3 rounded-lg border border-stone-200">
+                                <div className="flex justify-between items-center text-xs font-semibold text-stone-800 mb-1">
                                   <span>{item.metric}</span>
-                                  <span className="text-indigo-600">{item.score}%</span>
+                                  <span className="text-emerald-800 font-bold">{item.score}%</span>
                                 </div>
-                                <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                                <div className="w-full bg-stone-200 rounded-full h-2 overflow-hidden">
                                   <div
-                                    className="bg-indigo-600 h-2 rounded-full transition-all duration-700"
+                                    className="bg-emerald-800 h-2 rounded-full transition-all duration-700"
                                     style={{ width: `${Math.min(100, Math.max(5, item.score))}%` }}
                                   />
                                 </div>
@@ -1147,21 +1125,21 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName, alumniN
 
                       {/* Weekly Progress Progression Chart */}
                       {perfData.weekly_progress.length > 0 && (
-                        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs">
-                          <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-4">
+                        <div className="bg-white rounded-xl border border-stone-200 p-5 shadow-xs">
+                          <h4 className="text-xs font-bold text-stone-900 uppercase tracking-wider mb-4">
                             Weekly Score Timeline
                           </h4>
-                          <div className="flex items-end gap-3 h-28 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                          <div className="flex items-end gap-3 h-28 bg-stone-50 p-4 rounded-lg border border-stone-200">
                             {perfData.weekly_progress.map((w) => (
                               <div key={w.week} className="flex-1 flex flex-col items-center h-full justify-end group">
-                                <span className="text-[10px] font-bold text-indigo-600 mb-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <span className="text-[10px] font-bold text-emerald-800 mb-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                   {w.average_score}%
                                 </span>
                                 <div
-                                  className="w-full bg-indigo-500 rounded-t-md transition-all group-hover:bg-indigo-600"
+                                  className="w-full bg-emerald-700 rounded-t-sm transition-all group-hover:bg-emerald-800"
                                   style={{ height: `${Math.min(100, Math.max(15, w.average_score))}%` }}
                                 />
-                                <span className="text-[10px] font-medium text-slate-500 mt-2 truncate w-full text-center">
+                                <span className="text-[10px] font-medium text-stone-500 mt-2 truncate w-full text-center">
                                   {w.week}
                                 </span>
                               </div>
@@ -1171,14 +1149,14 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName, alumniN
                       )}
 
                       {/* Log New Performance Rating Form */}
-                      <div className="bg-slate-50 rounded-2xl border border-slate-200 p-5">
+                      <div className="bg-stone-50 rounded-xl border border-stone-200 p-5">
                         <div className="flex items-center justify-between mb-3">
-                          <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                            Record New Performance Rating for {activeStudentForPerf.name}
+                          <h4 className="text-xs font-bold text-stone-900 uppercase tracking-wider">
+                            Record Evaluation for {activeStudentForPerf.name}
                           </h4>
                           {ratingSuccess && (
-                            <span className="text-xs text-emerald-600 font-bold flex items-center gap-1">
-                              <CheckCircle2 className="w-3.5 h-3.5" /> {ratingSuccess}
+                            <span className="text-xs text-emerald-800 font-semibold flex items-center gap-1">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" /> {ratingSuccess}
                             </span>
                           )}
                         </div>
@@ -1186,23 +1164,23 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName, alumniN
                         <form onSubmit={handleSubmitPerformanceLog} className="space-y-3 text-xs">
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div>
-                              <label className="block font-bold text-slate-700 mb-1">Metric</label>
+                              <label className="block font-semibold text-stone-700 mb-1">Metric</label>
                               <select
                                 value={metricName}
                                 onChange={(e) => setMetricName(e.target.value)}
-                                className="w-full p-2 bg-white border border-slate-200 rounded-xl outline-none font-medium"
+                                className="w-full p-2 bg-white border border-stone-200 rounded-lg outline-none font-medium text-stone-800"
                               >
                                 <option value="Code Quality">Code Quality</option>
-                                <option value="Task Velocity">Task Velocity</option>
-                                <option value="Collaboration">Collaboration</option>
-                                <option value="Commit Consistency">Commit Consistency</option>
-                                <option value="Problem Solving">Problem Solving</option>
+                                <option value="Development Velocity">Development Velocity</option>
+                                <option value="Collaboration & Teamwork">Collaboration & Teamwork</option>
+                                <option value="Consistency & Reliability">Consistency & Reliability</option>
+                                <option value="Documentation & Testing">Documentation & Testing</option>
                               </select>
                             </div>
 
                             <div>
-                              <label className="block font-bold text-slate-700 mb-1">
-                                Score (0 - 100): <span className="text-indigo-600 font-extrabold">{scoreVal}</span>
+                              <label className="block font-semibold text-stone-700 mb-1">
+                                Score (0 - 100): <span className="text-emerald-800 font-bold">{scoreVal}</span>
                               </label>
                               <input
                                 type="range"
@@ -1210,30 +1188,30 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName, alumniN
                                 max={100}
                                 value={scoreVal}
                                 onChange={(e) => setScoreVal(parseInt(e.target.value) || 0)}
-                                className="w-full accent-indigo-600 mt-2"
+                                className="w-full accent-emerald-800 mt-2"
                               />
                             </div>
 
                             <div>
-                              <label className="block font-bold text-slate-700 mb-1">Sprint / Week</label>
+                              <label className="block font-semibold text-stone-700 mb-1">Sprint / Period</label>
                               <input
                                 type="text"
                                 value={weekLabel}
                                 onChange={(e) => setWeekLabel(e.target.value)}
                                 placeholder="Week 1 or Sprint 2"
-                                className="w-full p-2 bg-white border border-slate-200 rounded-xl outline-none font-medium"
+                                className="w-full p-2 bg-white border border-stone-200 rounded-lg outline-none font-medium text-stone-800"
                               />
                             </div>
                           </div>
 
                           <div>
-                            <label className="block font-bold text-slate-700 mb-1">Feedback & Commentary</label>
+                            <label className="block font-semibold text-stone-700 mb-1">Feedback & Notes</label>
                             <input
                               type="text"
-                              placeholder="e.g. Excellent unit tests and addressed PR review comments promptly"
+                              placeholder="e.g. Clean async implementation and addressed code review comments promptly"
                               value={feedbackNote}
                               onChange={(e) => setFeedbackNote(e.target.value)}
-                              className="w-full p-2 bg-white border border-slate-200 rounded-xl outline-none font-medium"
+                              className="w-full p-2 bg-white border border-stone-200 rounded-lg outline-none font-medium text-stone-800"
                             />
                           </div>
 
@@ -1241,16 +1219,16 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName, alumniN
                             <button
                               type="submit"
                               disabled={submittingRating}
-                              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all disabled:opacity-50"
+                              className="px-4 py-2 bg-emerald-800 hover:bg-emerald-900 text-white rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
                             >
-                              {submittingRating ? 'Saving...' : 'Save Rating & Update Graph'}
+                              {submittingRating ? 'Saving...' : 'Save Evaluation & Update Graph'}
                             </button>
                           </div>
                         </form>
                       </div>
                     </div>
                   ) : (
-                    <div className="text-center py-10 text-slate-400 text-xs">
+                    <div className="text-center py-10 text-stone-400 text-xs">
                       Select a student above to inspect their performance graph.
                     </div>
                   )}
@@ -1294,32 +1272,58 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName, alumniN
                 };
 
                 return (
-                  <div className="flex flex-col h-[500px] border border-slate-200 rounded-2xl bg-slate-50 overflow-hidden">
-                    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                  <div className="flex flex-col h-[520px] border border-stone-200 rounded-xl bg-stone-50 overflow-hidden relative">
+                    {/* Subtle Orange Accent Top Trim */}
+                    <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-700 via-orange-500 to-amber-500" />
+
+                    {/* Quick Team Prompt Pills Deck */}
+                    <div className="px-3.5 py-2 border-b border-stone-200 bg-stone-50/80 flex items-center gap-1.5 overflow-x-auto scrollbar-none mt-1">
+                      {[
+                        { label: "Sprint Review", text: "Team, let us review milestone pull requests and review queue updates for this week." },
+                        { label: "Architecture Guidance", text: "Please share questions regarding API design, schema models, or state management." },
+                        { label: "Merge Guidelines", text: "Ensure all PRs have clean commit messages and pass automated linter requirements." },
+                        { label: "Office Hours", text: "I will be available for quick technical unblocking sessions this afternoon." }
+                      ].map((prompt, pIdx) => (
+                        <button
+                          key={pIdx}
+                          type="button"
+                          onClick={() => setNewMessage(prompt.text)}
+                          className="shrink-0 px-2.5 py-1 bg-white border border-stone-200 hover:border-orange-300 hover:bg-orange-50/40 text-[10px] font-medium text-stone-700 hover:text-orange-950 rounded-lg transition-all shadow-2xs"
+                        >
+                          {prompt.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-stone-50/40">
                       {messages.length === 0 ? (
-                        <div className="text-center py-12 text-slate-400 text-xs">
-                          No messages yet. Start the conversation with your team!
+                        <div className="text-center py-12 text-stone-400 text-xs">
+                          No messages yet. Select a prompt pill above or send a message to start collaboration!
                         </div>
                       ) : (
                         messages.map(msg => {
                           const isMe = msg.sender_type === 'alumni' && msg.sender_id === alumniId;
                           return (
                             <div key={msg.id} className={`flex flex-col group ${isMe ? 'items-end' : 'items-start'}`}>
-                              <div className="flex items-center gap-2 mb-1 ml-1 mr-1">
+                              <div className="flex items-center gap-2 mb-1 px-1">
                                 {isMe && (
                                   <button
                                     onClick={() => handleDeleteMessage(msg.id)}
-                                    className="opacity-0 group-hover:opacity-100 transition-opacity text-red-400 hover:text-red-600 p-1"
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity text-rose-500 hover:text-rose-700 p-0.5"
                                     title="Delete message"
                                   >
                                     <Trash2 className="w-3 h-3" />
                                   </button>
                                 )}
-                                <span className="text-[10px] text-slate-500 font-bold">
+                                <span className="text-[10px] text-stone-500 font-semibold">
                                   {msg.sender_name} ({msg.sender_type})
                                 </span>
                               </div>
-                              <div className={`px-4 py-2.5 rounded-2xl text-xs max-w-[80%] ${isMe ? 'bg-indigo-600 text-white rounded-br-sm prose prose-invert max-w-none' : 'bg-white border border-slate-200 text-slate-800 rounded-bl-sm prose max-w-none'}`}>
+                              <div className={`px-3.5 py-2 rounded-xl text-xs max-w-[80%] leading-relaxed ${
+                                isMe 
+                                  ? 'bg-emerald-800 text-white rounded-br-xs' 
+                                  : 'bg-white border border-stone-200 text-stone-800 rounded-bl-xs shadow-2xs border-l-[3px] border-l-orange-500'
+                              }`}>
                                 <ReactMarkdown>
                                   {msg.message}
                                 </ReactMarkdown>
@@ -1329,39 +1333,39 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName, alumniN
                         })
                       )}
                     </div>
-                    <form onSubmit={handleSendMessage} className="p-3 bg-white border-t border-slate-200 flex flex-col gap-2">
+                    <form onSubmit={handleSendMessage} className="p-3 bg-white border-t border-stone-200 flex flex-col gap-2">
                       <div className="flex gap-2">
                         <input type="file" accept="image/*" className="hidden" ref={fileInputRefTeam} onChange={handleImageUploadTeam} />
                         <button
                           type="button"
                           onClick={handleInsertLinkTeam}
-                          className="px-2 py-1.5 text-xs font-semibold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center gap-1 transition-colors"
+                          className="px-2.5 py-1.5 text-xs font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 rounded-lg flex items-center gap-1 border border-stone-200"
                         >
-                          <LinkIcon className="w-3.5 h-3.5" /> Insert Link
+                          <LinkIcon className="w-3.5 h-3.5" /> Link
                         </button>
                         <button
                           type="button"
                           onClick={() => fileInputRefTeam.current?.click()}
                           disabled={uploadingImageTeam}
-                          className="px-2 py-1.5 text-xs font-semibold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center gap-1 transition-colors disabled:opacity-50"
+                          className="px-2.5 py-1.5 text-xs font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 rounded-lg flex items-center gap-1 border border-stone-200 disabled:opacity-50"
                         >
-                          <ImageIcon className="w-3.5 h-3.5" /> {uploadingImageTeam ? 'Uploading...' : 'Post Image'}
+                          <ImageIcon className="w-3.5 h-3.5" /> {uploadingImageTeam ? 'Uploading...' : 'Image'}
                         </button>
                       </div>
                       <div className="flex gap-2">
                         <input
                           type="text"
-                          placeholder="Type a message to your team..."
+                          placeholder="Type a message or click a prompt pill above..."
                           value={newMessage}
                           onChange={e => setNewMessage(e.target.value)}
-                          className="flex-1 p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          className="flex-1 p-2.5 bg-stone-50 border border-stone-300 rounded-xl text-xs focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-400 focus:bg-white text-stone-900 transition-all"
                         />
                         <button
                           type="submit"
                           disabled={sendingMsg || !newMessage.trim()}
-                          className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center"
+                          className="px-4 py-2 bg-gradient-to-r from-emerald-800 to-emerald-900 border border-orange-400/40 text-white rounded-xl text-xs font-semibold hover:from-emerald-700 hover:to-emerald-800 transition-all disabled:opacity-50 flex items-center justify-center shadow-xs"
                         >
-                          <Send className="w-4 h-4" />
+                          <Send className="w-3.5 h-3.5 text-orange-200" />
                         </button>
                       </div>
                     </form>
@@ -1416,59 +1420,59 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName, alumniN
         };
 
         return (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200">
-            <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg h-[600px] flex flex-col overflow-hidden my-8 animate-in zoom-in-95 duration-200">
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-stone-900/50 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-200">
+            <div className="bg-white rounded-2xl shadow-xl border border-stone-200 w-full max-w-lg h-[600px] flex flex-col overflow-hidden my-8 animate-in zoom-in-95 duration-200">
               {/* Header */}
-              <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50/80">
+              <div className="flex items-center justify-between p-4 border-b border-stone-200 bg-stone-50">
                 <div>
-                  <h3 className="font-bold text-slate-800">Chat with {chatApplication.student.name}</h3>
-                  <p className="text-xs text-slate-500">Discuss hiring, referral, or project details</p>
+                  <h3 className="font-bold text-stone-900 text-sm">Dialogue with {chatApplication.student.name}</h3>
+                  <p className="text-xs text-stone-500">Applicant review and technical mentorship</p>
                 </div>
                 <button
                   onClick={() => setChatApplication(null)}
-                  className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-500"
+                  className="p-1.5 hover:bg-stone-200 rounded-lg transition-colors text-stone-500"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-4 h-4" />
                 </button>
               </div>
 
               {/* Messages */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/30">
+              <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-stone-50/50">
                 {loadingAppMsgs ? (
-                  <div className="text-center text-xs text-slate-400 py-10">Loading messages...</div>
+                  <div className="text-center text-xs text-stone-400 py-10">Loading messages...</div>
                 ) : appMessages.length === 0 ? (
-                  <div className="text-center text-xs text-slate-400 py-10">No messages yet. Start the conversation!</div>
+                  <div className="text-center text-xs text-stone-400 py-10">No messages yet. Send a note to start the conversation.</div>
                 ) : (
                   appMessages.map((msg) => {
                     const isMe = msg.sender_type === 'alumni' && msg.sender_id === alumniId;
                     return (
                       <div key={msg.id} className={`flex flex-col group ${isMe ? 'items-end' : 'items-start'}`}>
-                        <div className="flex items-center gap-2 mb-0.5 ml-1">
+                        <div className="flex items-center gap-2 mb-0.5 px-1">
                           {isMe && (
                             <button
                               onClick={() => handleDeleteAppMessage(msg.id)}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity text-red-400 hover:text-red-600 p-1"
+                              className="opacity-0 group-hover:opacity-100 transition-opacity text-rose-500 hover:text-rose-700 p-0.5"
                               title="Delete message"
                             >
                               <Trash2 className="w-3 h-3" />
                             </button>
                           )}
-                          <span className="text-[10px] text-slate-400 font-medium">
+                          <span className="text-[10px] text-stone-500 font-semibold">
                             {isMe ? 'You' : msg.sender_name || 'Student'}
                           </span>
                         </div>
                         <div
-                          className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm prose max-w-none ${
+                          className={`max-w-[85%] rounded-xl px-3.5 py-2 text-xs ${
                             isMe 
-                              ? 'bg-indigo-600 text-white rounded-tr-sm prose-invert' 
-                              : 'bg-white border border-slate-200 text-slate-700 rounded-tl-sm shadow-sm'
+                              ? 'bg-emerald-800 text-white rounded-tr-xs' 
+                              : 'bg-white border border-stone-200 text-stone-800 rounded-tl-xs shadow-xs'
                           }`}
                         >
                           <ReactMarkdown>
                             {msg.message}
                           </ReactMarkdown>
                         </div>
-                        <span className="text-[9px] text-slate-400 mt-1">
+                        <span className="text-[9px] text-stone-400 mt-1 px-1">
                           {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       </div>
@@ -1478,23 +1482,23 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName, alumniN
               </div>
 
               {/* Input Form */}
-              <form onSubmit={handleSendAppMessage} className="p-3 border-t border-slate-100 bg-white flex flex-col gap-2">
+              <form onSubmit={handleSendAppMessage} className="p-3 border-t border-stone-200 bg-white flex flex-col gap-2">
                 <div className="flex gap-2 mb-1">
                   <input type="file" accept="image/*" className="hidden" ref={fileInputRefApp} onChange={handleImageUploadApp} />
                   <button
                     type="button"
                     onClick={handleInsertLinkApp}
-                    className="px-2 py-1.5 text-xs font-semibold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center gap-1 transition-colors"
+                    className="px-2.5 py-1.5 text-xs font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 rounded-md flex items-center gap-1 border border-stone-200"
                   >
-                    <LinkIcon className="w-3.5 h-3.5" /> Insert Link
+                    <LinkIcon className="w-3.5 h-3.5" /> Link
                   </button>
                   <button
                     type="button"
                     onClick={() => fileInputRefApp.current?.click()}
                     disabled={uploadingImageApp}
-                    className="px-2 py-1.5 text-xs font-semibold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center gap-1 transition-colors disabled:opacity-50"
+                    className="px-2.5 py-1.5 text-xs font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 rounded-md flex items-center gap-1 border border-stone-200 disabled:opacity-50"
                   >
-                    <ImageIcon className="w-3.5 h-3.5" /> {uploadingImageApp ? 'Uploading...' : 'Post Image'}
+                    <ImageIcon className="w-3.5 h-3.5" /> {uploadingImageApp ? 'Uploading...' : 'Image'}
                   </button>
                 </div>
                 <div className="flex gap-2">
@@ -1503,14 +1507,14 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName, alumniN
                     placeholder={`Message ${chatApplication.student.name}...`}
                     value={appNewMessage}
                     onChange={(e) => setAppNewMessage(e.target.value)}
-                    className="flex-1 p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="flex-1 p-2 bg-stone-50 border border-stone-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-emerald-700 focus:bg-white text-stone-900"
                   />
                   <button
                     type="submit"
                     disabled={sendingAppMsg || !appNewMessage.trim()}
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center"
+                    className="px-4 py-2 bg-emerald-800 text-white rounded-lg text-xs font-semibold hover:bg-emerald-900 transition-colors disabled:opacity-50 flex items-center justify-center"
                   >
-                    <Send className="w-4 h-4" />
+                    <Send className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </form>

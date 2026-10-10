@@ -114,15 +114,15 @@ export default function ProjectVerificationPage({ params }: { params: Promise<{ 
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
-      <header className="bg-white border-b border-slate-200">
+    <div className="min-h-screen bg-stone-50 flex flex-col text-stone-900">
+      <header className="bg-white border-b border-stone-200">
         <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link href="/dashboard" className="text-slate-400 hover:text-slate-600 transition-colors">
+            <Link href="/dashboard" className="text-stone-400 hover:text-stone-600 transition-colors">
               <ArrowLeft className="w-5 h-5" />
             </Link>
-            <h1 className="font-bold text-slate-800 flex items-center gap-2">
-              <Terminal className="w-5 h-5 text-indigo-600" />
+            <h1 className="font-bold text-stone-900 flex items-center gap-2 font-serif">
+              <Terminal className="w-5 h-5 text-emerald-800" />
               Level 2 Project Verification: {skillName}
             </h1>
           </div>
@@ -130,13 +130,13 @@ export default function ProjectVerificationPage({ params }: { params: Promise<{ 
       </header>
 
       <main className="flex-1 flex items-center justify-center p-4">
-        <div className="w-full max-w-2xl bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xs border border-stone-200 overflow-hidden">
           
           {/* Progress Bar */}
           <div className="flex">
-            <div className={`h-1.5 flex-1 ${step >= 1 ? 'bg-indigo-600' : 'bg-slate-100'}`} />
-            <div className={`h-1.5 flex-1 ${step >= 2 ? 'bg-indigo-600' : 'bg-slate-100'}`} />
-            <div className={`h-1.5 flex-1 ${step >= 3 ? 'bg-emerald-500' : 'bg-slate-100'}`} />
+            <div className={`h-1.5 flex-1 ${step >= 1 ? 'bg-emerald-800' : 'bg-stone-200'}`} />
+            <div className={`h-1.5 flex-1 ${step >= 2 ? 'bg-emerald-800' : 'bg-stone-200'}`} />
+            <div className={`h-1.5 flex-1 ${step >= 3 ? 'bg-emerald-700' : 'bg-stone-200'}`} />
           </div>
 
           <div className="p-8">
@@ -167,20 +167,20 @@ export default function ProjectVerificationPage({ params }: { params: Promise<{ 
                     </button>
                   </div>
                 ) : (
-                  <div className="bg-indigo-50 border border-indigo-100 p-6 rounded-xl mb-6">
-                    <h3 className="font-bold text-indigo-900 mb-2 flex items-center gap-2">
-                      <Terminal className="w-5 h-5 text-indigo-600" />
+                  <div className="bg-stone-100 border border-stone-200 p-6 rounded-xl mb-6">
+                    <h3 className="font-bold text-stone-900 mb-2 flex items-center gap-2">
+                      <Terminal className="w-5 h-5 text-emerald-800" />
                       Your Mission
                     </h3>
-                    <p className="text-indigo-800 whitespace-pre-wrap">{projectIdea}</p>
+                    <p className="text-stone-700 whitespace-pre-wrap">{projectIdea}</p>
                   </div>
                 )}
 
-                <div className="border-t border-slate-200 pt-6 text-center">
-                  <p className="text-sm text-slate-500 mb-4">Already built this, or something similar?</p>
+                <div className="border-t border-stone-200 pt-6 text-center">
+                  <p className="text-sm text-stone-500 mb-4">Already built this, or something similar?</p>
                   <button
                     onClick={() => setStep(1)}
-                    className="w-full px-6 py-4 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors"
+                    className="w-full px-6 py-4 bg-emerald-800 text-white font-bold rounded-xl hover:bg-emerald-900 transition-colors shadow-2xs"
                   >
                     I'm Ready! Submit GitHub Repo
                   </button>
@@ -207,17 +207,17 @@ export default function ProjectVerificationPage({ params }: { params: Promise<{ 
                       </div>
                       <input 
                         type="url" required placeholder="https://github.com/username/project"
-                        className="w-full pl-10 p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                        className="w-full pl-10 p-3 border border-stone-300 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-emerald-800 text-stone-900 bg-stone-50"
                         value={githubUrl} onChange={e => setGithubUrl(e.target.value)}
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">Project Abstract / Introduction</label>
+                    <label className="block text-sm font-medium text-stone-700 mb-2">Project Abstract / Introduction</label>
                     <textarea 
                       required placeholder="Briefly describe what this project does and your architectural approach..."
-                      className="w-full p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none resize-none h-24"
+                      className="w-full p-3 border border-stone-300 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-emerald-800 text-stone-900 bg-stone-50 resize-none h-24"
                       value={projectAbstract} onChange={e => setProjectAbstract(e.target.value)}
                     />
                   </div>
@@ -226,7 +226,7 @@ export default function ProjectVerificationPage({ params }: { params: Promise<{ 
                     <button
                       type="submit"
                       disabled={loading || !githubUrl}
-                      className="w-full flex items-center justify-center px-6 py-3.5 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                      className="w-full flex items-center justify-center px-6 py-3.5 bg-emerald-800 text-white font-medium rounded-xl hover:bg-emerald-900 disabled:opacity-50 transition-colors shadow-2xs"
                     >
                       {loading ? <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Analyzing Codebase...</> : "Scan Project & Generate Interview"}
                     </button>
@@ -247,24 +247,24 @@ export default function ProjectVerificationPage({ params }: { params: Promise<{ 
                   </div>
                 </div>
                 
-                <h2 className="text-2xl font-bold text-slate-800 mb-6 flex items-center gap-2">
-                  {questions[currentQuestionIndex].type === 'coding' ? <Code2 className="w-6 h-6 text-indigo-600" /> : <Brain className="w-6 h-6 text-indigo-600" />}
+                <h2 className="text-2xl font-bold text-stone-900 mb-6 flex items-center gap-2 font-serif">
+                  {questions[currentQuestionIndex].type === 'coding' ? <Code2 className="w-6 h-6 text-emerald-800" /> : <Brain className="w-6 h-6 text-emerald-800" />}
                   {questions[currentQuestionIndex].type === 'coding' ? 'Coding Challenge' : 'Explain your code'}
                 </h2>
                 
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 mb-6">
-                  <p className="text-slate-800 font-medium leading-relaxed">
+                <div className="bg-stone-50 border border-stone-200 rounded-xl p-5 mb-6">
+                  <p className="text-stone-800 font-medium leading-relaxed">
                     {questions[currentQuestionIndex].text}
                   </p>
                 </div>
                 
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                    <label className="block text-sm font-medium text-stone-700 mb-2">
                       {questions[currentQuestionIndex].type === 'coding' ? 'Your Code Snippet' : 'Your Answer (Be specific to your codebase)'}
                     </label>
                     {questions[currentQuestionIndex].type === 'coding' ? (
-                      <div className="border border-slate-300 rounded-xl overflow-hidden h-64">
+                      <div className="border border-stone-300 rounded-xl overflow-hidden h-64">
                         <Editor
                           height="100%"
                           defaultLanguage="javascript"
@@ -282,7 +282,7 @@ export default function ProjectVerificationPage({ params }: { params: Promise<{ 
                     ) : (
                       <textarea 
                         rows={6} required placeholder="Explain your approach, the files involved, and why you made those architectural decisions..."
-                        className="w-full p-4 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
+                        className="w-full p-4 border border-stone-300 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-emerald-800 bg-stone-50 text-stone-900 resize-none"
                         value={answers[questions[currentQuestionIndex].id] || ""} 
                         onChange={e => setAnswers({...answers, [questions[currentQuestionIndex].id]: e.target.value})}
                       />
@@ -293,7 +293,7 @@ export default function ProjectVerificationPage({ params }: { params: Promise<{ 
                     <button
                       onClick={handleNextQuestion}
                       disabled={loading || !answers[questions[currentQuestionIndex].id] || answers[questions[currentQuestionIndex].id].trim().length < 10}
-                      className="w-full flex items-center justify-center px-6 py-3.5 bg-slate-900 text-white font-medium rounded-xl hover:bg-slate-800 disabled:opacity-50 transition-colors"
+                      className="w-full flex items-center justify-center px-6 py-3.5 bg-stone-800 text-white font-medium rounded-xl hover:bg-stone-900 disabled:opacity-50 transition-colors shadow-2xs"
                     >
                       {loading ? <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Evaluating...</> : (
                         currentQuestionIndex < questions.length - 1 
@@ -332,7 +332,7 @@ export default function ProjectVerificationPage({ params }: { params: Promise<{ 
                 
                 <button 
                   onClick={() => router.push('/dashboard')}
-                  className="w-full mt-8 px-6 py-3.5 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 transition-colors"
+                  className="w-full mt-8 px-6 py-3.5 bg-emerald-800 text-white font-medium rounded-xl hover:bg-emerald-900 transition-colors shadow-2xs"
                 >
                   Return to Dashboard
                 </button>

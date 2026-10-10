@@ -4,7 +4,6 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, Users, FileQuestion, Lock, LogOut, BarChart as ChartIcon, Activity, Library, GitGraph, ShieldCheck } from "lucide-react";
-import { motion } from "framer-motion";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -22,9 +21,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    // Hardcoded simple admin pin for now
     if (password === "admin123") {
-      localStorage.setItem("admin_auth", "true");
+      if (typeof window !== "undefined") {
+        localStorage.setItem("admin_auth", "true");
+      }
       setIsAuthenticated(true);
     } else {
       alert("Incorrect password");
@@ -32,44 +32,42 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   };
 
   const handleLogout = () => {
-    localStorage.removeItem("admin_auth");
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("admin_auth");
+    }
     setIsAuthenticated(false);
   };
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-slate-900 border border-slate-800 p-8 rounded-2xl w-full max-w-md"
-        >
-          <div className="flex justify-center mb-6">
-            <div className="p-4 bg-indigo-500/10 rounded-full">
-              <Lock className="w-8 h-8 text-indigo-400" />
+      <div className="min-h-screen bg-stone-50 font-sans flex items-center justify-center p-4">
+        <div className="bg-white border border-stone-200 p-8 rounded-2xl w-full max-w-md shadow-sm">
+          <div className="flex justify-center mb-5">
+            <div className="w-12 h-12 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-center text-emerald-800">
+              <Lock className="w-6 h-6" />
             </div>
           </div>
-          <h1 className="text-2xl font-bold text-white text-center mb-2">Admin Portal</h1>
-          <p className="text-slate-400 text-center mb-8">Enter the admin pin to continue.</p>
+          <h1 className="text-xl font-bold text-stone-900 text-center mb-1">Administrative Access</h1>
+          <p className="text-stone-500 text-xs text-center mb-6">Enter platform security PIN to access the audit console.</p>
           
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleLogin} className="space-y-4 text-xs">
             <div>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Enter PIN (admin123)"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                className="w-full bg-stone-50 border border-stone-300 rounded-lg p-3 text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-1 focus:ring-emerald-700 focus:bg-white transition-all text-xs"
               />
             </div>
             <button
               type="submit"
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-4 rounded-xl transition-colors"
+              className="w-full bg-emerald-800 hover:bg-emerald-900 text-white font-semibold py-3 rounded-lg transition-colors shadow-xs"
             >
-              Access Portal
+              Authenticate Portal
             </button>
           </form>
-        </motion.div>
+        </div>
       </div>
     );
   }
@@ -85,20 +83,23 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   ];
 
   return (
-    <div className="h-screen bg-slate-950 flex overflow-hidden">
-      {/* Sidebar - Locked to screen height, no scrolling */}
-      <div className="w-64 h-screen border-r border-slate-800 bg-slate-900/50 flex flex-col shrink-0">
-        <div className="p-6 border-b border-slate-800">
+    <div className="h-screen bg-stone-50 font-sans flex overflow-hidden text-stone-900">
+      {/* Sidebar */}
+      <div className="w-64 h-screen border-r border-stone-200 bg-white flex flex-col shrink-0">
+        <div className="p-5 border-b border-stone-200">
           <Link href="/admin" className="flex items-center gap-3">
-            <div className="p-2 bg-indigo-500 rounded-lg">
-              <LayoutDashboard className="w-5 h-5 text-white" />
+            <div className="w-9 h-9 bg-emerald-800 rounded-lg flex items-center justify-center text-white font-bold text-sm">
+              SG
             </div>
-            <span className="text-xl font-bold text-white">SkillGraph Admin</span>
+            <div>
+              <span className="text-sm font-bold text-stone-900 block leading-tight">SkillGraph</span>
+              <span className="text-[10px] text-stone-500 font-medium uppercase tracking-wider">Admin Console</span>
+            </div>
           </Link>
         </div>
         
-        <div className="p-4 flex-1 overflow-y-auto">
-          <nav className="space-y-2">
+        <div className="p-3 flex-1 overflow-y-auto">
+          <nav className="space-y-1">
             {navItems.map((item) => {
               const isActive = pathname === item.href;
               const Icon = item.icon;
@@ -106,13 +107,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <Link
                   key={item.name}
                   href={item.href}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                  className={`flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-xs transition-colors ${
                     isActive 
-                      ? "bg-indigo-600 text-white font-medium" 
-                      : "text-slate-400 hover:text-white hover:bg-slate-800"
+                      ? "bg-emerald-800 text-white font-semibold shadow-xs" 
+                      : "text-stone-600 hover:text-stone-900 hover:bg-stone-100 font-medium"
                   }`}
                 >
-                  <Icon className="w-5 h-5" />
+                  <Icon className="w-4 h-4" />
                   {item.name}
                 </Link>
               );
@@ -120,19 +121,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </nav>
         </div>
         
-        <div className="p-4 border-t border-slate-800">
+        <div className="p-3 border-t border-stone-200">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-all"
+            className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg text-xs text-stone-600 hover:text-rose-700 hover:bg-rose-50 transition-colors font-medium"
           >
-            <LogOut className="w-5 h-5" />
-            Logout
+            <LogOut className="w-4 h-4" />
+            Sign Out
           </button>
         </div>
       </div>
 
-      {/* Main Content - Independent scrolling and dark background to prevent bleed */}
-      <div className="flex-1 h-screen overflow-y-auto bg-slate-950 text-slate-200">
+      {/* Main Content */}
+      <div className="flex-1 h-screen overflow-y-auto bg-stone-50 text-stone-900">
         {children}
       </div>
     </div>

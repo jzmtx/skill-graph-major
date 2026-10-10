@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Briefcase, Building2, MapPin, ExternalLink, Calendar, Search, Filter, Loader2, Zap, TrendingUp, Clock, Globe } from 'lucide-react';
+import { Briefcase, Building2, MapPin, ExternalLink, Calendar, Search, Filter, Loader2, Zap, Clock, Globe } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 
@@ -27,8 +27,7 @@ export default function CareersPage() {
   const [userSkills, setUserSkills] = useState<string[]>([]);
 
   useEffect(() => {
-    // Fetch user skills from cache
-    const cached = localStorage.getItem('cached_skills');
+    const cached = typeof window !== 'undefined' ? localStorage.getItem('cached_skills') : null;
     if (cached) {
       try {
         const skillsArr = JSON.parse(cached);
@@ -54,25 +53,17 @@ export default function CareersPage() {
   }, []);
 
   const roles = ["All", ...Array.from(new Set(jobs.map(j => j.role_name))).filter(Boolean)];
-  
-  // List of major Indian cities/states/codes to fallback on.
-  // Using word boundary regex \b allows us to safely include "in" (for "KA, IN") without matching "Austin".
   const indianKeywords = ["india", "in", "mumbai", "bangalore", "bengaluru", "pune", "hyderabad", "chennai", "delhi", "gurugram", "gurgaon", "noida", "kolkata", "ahmedabad", "maharashtra", "karnataka", "telangana", "tamil nadu", "gujarat", "mh", "ka", "tn", "dl", "up", "hr", "ts"];
 
   const filteredJobs = jobs.filter(job => {
-    // Extract location from company_name format: "Company | Location"
     const hasLocation = job.company_name?.includes('|');
     const compParts = job.company_name?.split('|') || [];
     const locationStr = hasLocation && compParts.length > 1 ? compParts[1].toLowerCase().trim() : "";
     const cleanCompany = hasLocation ? compParts[0].trim() : job.company_name;
     
-    // Filter out old jobs if India Only is checked and it has no location data
     if (indiaOnly && !hasLocation) return false;
-
-    // IMPORTANT: Hide Adzuna aggregator links to ensure only genuine, direct (Indeed/LinkedIn/Glassdoor) links are shown.
     if (job.url?.toLowerCase().includes("adzuna")) return false;
     
-    // Enforce India Only using word boundary regex for accuracy
     if (indiaOnly && hasLocation) {
       const isIndia = indianKeywords.some(keyword => {
         const regex = new RegExp(`\\b${keyword}\\b`, 'i');
@@ -81,15 +72,12 @@ export default function CareersPage() {
       if (!isIndia) return false;
     }
     
-    // Search Term matches (Title, Company, or Role)
     const matchesSearch = 
       (job.job_title?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
       (cleanCompany?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
       (job.role_name?.toLowerCase().includes(searchTerm.toLowerCase()) || false);
       
     const matchesRole = selectedRole === "All" || job.role_name === selectedRole;
-    
-    // Nearest Location Search
     const matchesLocation = userLocation === "" || locationStr.includes(userLocation.toLowerCase().trim());
     
     return matchesSearch && matchesRole && matchesLocation;
@@ -98,236 +86,163 @@ export default function CareersPage() {
   const calculateMatch = (desc: string) => {
     if (!desc || userSkills.length === 0) return 0;
     const lowerDesc = desc.toLowerCase();
-    let matches = 0;
-    userSkills.forEach(skill => {
-      // Use word boundaries so "js" doesn't match "json"
-      const regex = new RegExp(`\\b${skill.toLowerCase()}\\b`);
-      if (regex.test(lowerDesc)) matches++;
-    });
-    
-    if (matches === 0) return 0;
-    
-    // Each matched skill gives ~15% base eligibility
-    let finalMatch = matches * 15;
-    if (finalMatch > 98) finalMatch = 98; // Cap at 98%
-    return finalMatch;
-  };
-
-  const timeAgo = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diff = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-    if (diff === 0) return "Today";
-    if (diff === 1) return "Yesterday";
-    if (diff < 7) return `${diff} days ago`;
-    return date.toLocaleDateString();
+    const matched = userSkills.filter(skill => lowerDesc.includes(skill));
+    return Math.min(100, Math.round((matched.length / Math.min(userSkills.length, 6)) * 100));
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-slate-200">
+    <div className="space-y-6">
       {/* Header Banner */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-indigo-900 via-purple-900 to-[#0a0a0f] border-b border-white/10">
-        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay"></div>
-        <div className="max-w-7xl mx-auto px-6 lg:px-8 py-16 relative z-10">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-          >
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-indigo-300 text-sm font-medium mb-6 backdrop-blur-md">
-              <Zap className="w-4 h-4 text-amber-400" />
-              Live Industry Feed
-            </div>
-            <h1 className="text-4xl md:text-5xl font-black text-white mb-4 tracking-tight">
-              Industry <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400">Opportunities</span>
-            </h1>
-            <p className="text-lg text-indigo-200 max-w-2xl leading-relaxed">
-              Real-time job postings scraped dynamically from top global employers. Updated weekly to keep your career roadmap perfectly aligned with market demand.
-            </p>
-          </motion.div>
+      <div className="bg-white border border-stone-200 rounded-xl p-6 md:p-8 shadow-sm">
+        <div className="max-w-3xl">
+          <span className="px-2.5 py-1 bg-stone-100 text-stone-700 text-xs font-semibold uppercase tracking-wider rounded border border-stone-200 inline-block mb-3">
+            Market Intelligence
+          </span>
+          <h1 className="text-2xl md:text-3xl font-serif font-bold text-stone-900 tracking-tight mb-2">
+            Live Industry Job Openings
+          </h1>
+          <p className="text-stone-600 text-xs md:text-sm leading-relaxed">
+            Direct job opportunities aggregated to evaluate real-time competency demand and alignment with student skill profiles.
+          </p>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 lg:px-8 py-12">
-        {/* Filters */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-10">
-          <div className="flex-1 flex flex-col md:flex-row gap-4 w-full">
-            <div className="relative w-full md:w-96">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
-              <input 
-                type="text" 
-                placeholder="Search roles, companies..." 
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full bg-white/5 border border-white/10 text-white rounded-xl pl-12 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all placeholder:text-slate-500"
-              />
-            </div>
-            
-            <div className="relative w-full md:w-64">
-              <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
-              <input 
-                type="text" 
-                placeholder="Nearest City (e.g. Mumbai)" 
-                value={userLocation}
-                onChange={(e) => setUserLocation(e.target.value)}
-                className="w-full bg-white/5 border border-white/10 text-white rounded-xl pl-12 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all placeholder:text-slate-500"
-              />
-            </div>
+      {/* Filters Toolbar */}
+      <div className="bg-white border border-stone-200 rounded-xl p-4 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div className="flex-1 flex flex-col md:flex-row gap-3 w-full">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
+            <input 
+              type="text" 
+              placeholder="Search positions or companies..." 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-stone-50 border border-stone-300 text-stone-900 rounded-lg pl-9 pr-3 py-2 text-xs focus:outline-none focus:border-emerald-800 focus:bg-white"
+            />
           </div>
           
-          <div className="flex items-center gap-6 w-full md:w-auto">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <div className={`w-10 h-5 rounded-full p-0.5 transition-colors duration-200 ease-in-out ${indiaOnly ? 'bg-indigo-500' : 'bg-slate-700'}`}>
-                <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform duration-200 ease-in-out ${indiaOnly ? 'translate-x-5' : 'translate-x-0'}`} />
-              </div>
-              <span className="text-sm font-medium text-slate-300">India Only</span>
-              <input 
-                type="checkbox" 
-                className="sr-only" 
-                checked={indiaOnly}
-                onChange={(e) => setIndiaOnly(e.target.checked)}
-              />
-            </label>
-            
-            <div className="flex items-center gap-3">
-              <Filter className="w-5 h-5 text-slate-400" />
-              <select
-                value={selectedRole}
-                onChange={(e) => setSelectedRole(e.target.value)}
-                className="w-full md:w-auto bg-white/5 border border-white/10 text-white rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer"
-              >
-                {roles.map(role => (
-                  <option key={role} value={role} className="bg-slate-900">{role}</option>
-                ))}
-              </select>
-            </div>
+          <div className="relative w-full md:w-56">
+            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
+            <input 
+              type="text" 
+              placeholder="City (e.g. Bengaluru)" 
+              value={userLocation}
+              onChange={(e) => setUserLocation(e.target.value)}
+              className="w-full bg-stone-50 border border-stone-300 text-stone-900 rounded-lg pl-9 pr-3 py-2 text-xs focus:outline-none focus:border-emerald-800 focus:bg-white"
+            />
           </div>
         </div>
-
-        {/* Job Grid */}
-        {loading ? (
-          <div className="flex flex-col items-center justify-center py-20">
-            <Loader2 className="w-12 h-12 text-indigo-500 animate-spin mb-4" />
-            <p className="text-slate-400 font-medium">Syncing with global job boards...</p>
+        
+        <div className="flex items-center gap-4 w-full md:w-auto shrink-0 justify-between md:justify-end">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <div className={`w-8 h-4 rounded-full p-0.5 transition-colors duration-200 ${indiaOnly ? 'bg-emerald-800' : 'bg-stone-300'}`}>
+              <div className={`w-3 h-3 bg-white rounded-full shadow-2xs transform transition-transform duration-200 ${indiaOnly ? 'translate-x-4' : 'translate-x-0'}`} />
+            </div>
+            <span className="text-xs font-medium text-stone-700">India Only</span>
+            <input 
+              type="checkbox" 
+              className="sr-only" 
+              checked={indiaOnly}
+              onChange={(e) => setIndiaOnly(e.target.checked)}
+            />
+          </label>
+          
+          <div className="flex items-center gap-2">
+            <Filter className="w-3.5 h-3.5 text-stone-400" />
+            <select
+              value={selectedRole}
+              onChange={(e) => setSelectedRole(e.target.value)}
+              className="bg-stone-50 border border-stone-300 text-stone-800 rounded-lg px-3 py-2 text-xs outline-none focus:border-emerald-800"
+            >
+              {roles.map(role => (
+                <option key={role} value={role}>{role}</option>
+              ))}
+            </select>
           </div>
-        ) : filteredJobs.length === 0 ? (
-          <div className="text-center py-20 bg-white/5 rounded-2xl border border-white/10">
-            <Briefcase className="w-16 h-16 text-slate-600 mx-auto mb-4 opacity-50" />
-            <h3 className="text-xl font-bold text-slate-300 mb-2">No opportunities found</h3>
-            <p className="text-slate-500">Try adjusting your search filters.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredJobs.map((job, idx) => {
-              const compParts = job.company_name?.split('|') || [];
-              const cleanCompany = compParts.length > 0 ? compParts[0].trim() : 'Confidential Enterprise';
-              const location = compParts.length > 1 ? compParts[1].trim() : 'Remote / Unspecified';
-              
-              const postedDate = new Date(job.created_at);
-              const deadlineDate = new Date(postedDate.getTime() + (30 * 24 * 60 * 60 * 1000));
-              const matchPercent = calculateMatch(job.description || "");
-              
-              // Strip markdown asterisks and hashtags for clean UI
-              const cleanDescription = (job.description || "No description provided by the employer.")
-                .replace(/[*#_`]/g, '')
-                .replace(/\s+/g, ' ');
-              
-              return (
-                <motion.div
-                  key={job.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, delay: idx * 0.05 }}
-                  className="group bg-white/5 border border-white/10 rounded-2xl p-6 hover:bg-white/[0.08] hover:border-indigo-500/50 transition-all flex flex-col h-full relative overflow-hidden"
-                >
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 blur-3xl rounded-full group-hover:bg-indigo-500/20 transition-all pointer-events-none"></div>
+        </div>
+      </div>
 
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between gap-2 mb-3">
-                        <span className="inline-block px-2.5 py-1 rounded-md bg-indigo-500/20 text-indigo-300 text-xs font-bold uppercase tracking-wider">
-                          {job.role_name}
-                        </span>
-                        {userSkills.length > 0 && matchPercent > 0 && (
-                          <span className={`inline-block px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider ${
-                            matchPercent >= 75 ? 'bg-emerald-500/20 text-emerald-300' :
-                            matchPercent >= 50 ? 'bg-amber-500/20 text-amber-300' :
-                            'bg-indigo-500/20 text-indigo-300'
-                          }`}>
-                            {matchPercent}% Match
-                          </span>
-                        )}
-                        {userSkills.length > 0 && matchPercent === 0 && (
-                          <span className="inline-block px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider bg-slate-500/20 text-slate-300">
-                            No Match
-                          </span>
-                        )}
-                      </div>
-                      <h3 className="text-xl font-bold text-white mb-2 leading-tight group-hover:text-indigo-300 transition-colors line-clamp-2">
-                        {job.job_title || job.role_name}
-                      </h3>
-                    </div>
+      {/* Job Grid */}
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-16 text-stone-500">
+          <Loader2 className="w-8 h-8 text-emerald-800 animate-spin mb-3" />
+          <p className="text-xs font-medium">Aggregating industry vacancy listings...</p>
+        </div>
+      ) : filteredJobs.length === 0 ? (
+        <div className="text-center py-16 bg-white rounded-xl border border-stone-200 p-8 shadow-2xs">
+          <Briefcase className="w-10 h-10 text-stone-300 mx-auto mb-3" />
+          <h3 className="text-sm font-bold text-stone-800 mb-1">No vacancies found</h3>
+          <p className="text-stone-500 text-xs">Adjust your search keyword or region filters.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredJobs.map((job) => {
+            const compParts = job.company_name?.split('|') || [];
+            const cleanCompany = compParts.length > 0 ? compParts[0].trim() : 'Verified Enterprise';
+            const location = compParts.length > 1 ? compParts[1].trim() : 'Location Unspecified';
+            const matchPercent = calculateMatch(job.description || "");
+            
+            const cleanDescription = (job.description || "No description specified.")
+              .replace(/[*#_`]/g, '')
+              .replace(/\s+/g, ' ');
+            
+            return (
+              <div
+                key={job.id}
+                className="bg-white border border-stone-200 rounded-xl p-5 hover:border-emerald-700 transition-all flex flex-col justify-between shadow-2xs hover:shadow-sm"
+              >
+                <div>
+                  <div className="flex justify-between items-start gap-2 mb-2">
+                    <span className="px-2 py-0.5 rounded bg-stone-100 text-stone-700 text-[10px] font-bold uppercase tracking-wider border border-stone-200">
+                      {job.role_name}
+                    </span>
+                    {matchPercent > 0 && (
+                      <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold">
+                        {matchPercent}% Match
+                      </span>
+                    )}
                   </div>
 
-                  <div className="flex items-center gap-2 text-slate-400 mb-2">
-                    <Building2 className="w-4 h-4 shrink-0" />
-                    <span className="font-medium text-slate-300 truncate">{cleanCompany}</span>
-                  </div>
+                  <h3 className="text-base font-bold text-stone-900 mb-1 line-clamp-1">
+                    {job.job_title || job.role_name}
+                  </h3>
                   
-                  <div className="flex items-center gap-2 text-slate-400 mb-4">
-                    <MapPin className="w-4 h-4 shrink-0 text-slate-500" />
-                    <span className="text-sm text-slate-400 truncate capitalize">{location}</span>
+                  <div className="flex items-center gap-1.5 text-xs text-stone-600 mb-2 font-medium">
+                    <Building2 className="w-3.5 h-3.5 text-stone-400 shrink-0" />
+                    <span className="truncate">{cleanCompany}</span>
                   </div>
 
-                  <p className="text-sm text-slate-500 mb-6 line-clamp-3 leading-relaxed flex-1">
+                  <div className="flex items-center gap-1.5 text-[11px] text-stone-500 mb-3">
+                    <MapPin className="w-3.5 h-3.5 text-stone-400 shrink-0" />
+                    <span className="truncate">{location}</span>
+                  </div>
+
+                  <p className="text-stone-600 text-xs line-clamp-3 leading-relaxed mb-4">
                     {cleanDescription}
                   </p>
+                </div>
 
-                  <div className="flex flex-col gap-3 mt-auto pt-4 border-t border-white/10">
-                    <div className="flex items-center justify-between text-xs font-medium text-slate-500">
-                      <div className="flex items-center gap-1">
-                        <Clock className="w-3.5 h-3.5 text-indigo-400" />
-                        Scraped: {postedDate.toLocaleDateString()}
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Zap className="w-3.5 h-3.5 text-emerald-400" />
-                        Status: Currently Hiring
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-3 mt-2">
-                      {job.url ? (
-                        <>
-                          <a 
-                            href={job.url.startsWith('http') ? job.url : `https://${job.url}`} 
-                            target="_blank" 
-                            rel="noreferrer"
-                            className="flex-1 text-center px-4 py-2.5 rounded-lg bg-white/10 text-white font-medium hover:bg-white/20 transition-colors"
-                          >
-                            View JD
-                          </a>
-                          <a 
-                            href={job.url.startsWith('http') ? job.url : `https://${job.url}`} 
-                            target="_blank" 
-                            rel="noreferrer"
-                            className="flex-1 text-center px-4 py-2.5 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-500/20"
-                          >
-                            Apply Now
-                          </a>
-                        </>
-                      ) : (
-                        <button disabled className="w-full text-center px-4 py-2.5 rounded-lg bg-white/5 text-slate-500 font-medium cursor-not-allowed border border-white/10">
-                          Unavailable
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </motion.div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+                <div className="pt-3 border-t border-stone-100 flex items-center justify-between">
+                  <span className="text-[11px] text-stone-400">
+                    {new Date(job.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                  </span>
+                  
+                  {job.url && (
+                    <a
+                      href={job.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-semibold rounded-lg transition-colors shadow-2xs"
+                    >
+                      View Posting <ExternalLink className="w-3 h-3" />
+                    </a>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

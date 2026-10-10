@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { roadmapsApi } from "@/lib/roadmapsApi";
-import { ArrowRight, BookOpen, PlayCircle, Target, CheckCircle2, ChevronRight, Briefcase, RefreshCw, Layers, Database, GitBranch, Cpu, Sparkles, Compass, Building2, BrainCircuit, Clock, BarChart3, Trash2, PlusCircle, Zap } from "lucide-react";
+import { ArrowRight, BookOpen, Target, CheckCircle2, ChevronRight, Briefcase, RefreshCw, Layers, Database, GitBranch, Cpu, Compass, Building2, BrainCircuit, Clock, BarChart3, Trash2, PlusCircle, Zap } from "lucide-react";
 import Link from "next/link";
 import RoadmapCanvas from "@/components/roadmap/RoadmapCanvas";
 import RoadmapAnalysis from "@/components/roadmap/RoadmapAnalysis";
@@ -15,7 +15,6 @@ export default function RoadmapsPage() {
   const [selectedEcosystem, setSelectedEcosystem] = useState<string | null>(null);
   const [roadmap, setRoadmap] = useState<any>(null);
   const [analytics, setAnalytics] = useState<any>(null);
-  const [expandedNode, setExpandedNode] = useState<string | null>(null);
   const [currentRequestId, setCurrentRequestId] = useState<string>("");
   
   const [myRoadmaps, setMyRoadmaps] = useState<any[]>([]);
@@ -24,7 +23,7 @@ export default function RoadmapsPage() {
 
   useEffect(() => {
     const fetchMyRoadmaps = async () => {
-      const studentId = localStorage.getItem("student_id");
+      const studentId = typeof window !== 'undefined' ? localStorage.getItem("student_id") : null;
       if (!studentId) {
         setStep("role");
         setLoadingList(false);
@@ -50,7 +49,7 @@ export default function RoadmapsPage() {
 
   const handleDelete = async (e: React.MouseEvent, roadmapId: string) => {
     e.stopPropagation();
-    const studentId = localStorage.getItem("student_id");
+    const studentId = typeof window !== 'undefined' ? localStorage.getItem("student_id") : null;
     if (!studentId) return;
     
     if (confirm("Are you sure you want to remove this roadmap from your profile?")) {
@@ -69,10 +68,10 @@ export default function RoadmapsPage() {
 
   const fetchRoadmapWithHours = async (role: string, ecosystem: string, weeklyHours: number = 20) => {
     try {
-      const studentId = localStorage.getItem("student_id");
+      const studentId = typeof window !== 'undefined' ? localStorage.getItem("student_id") : null;
       
       // 1. Try to fetch from cache/DB
-      const data = await roadmapsApi.getRoadmap(role, ecosystem, studentId);
+      const data = await roadmapsApi.getRoadmap(role, ecosystem, studentId || undefined);
       if (data && data.roadmap) {
         setRoadmap(data.roadmap);
         setAnalytics(data.roadmap.analytics_json);
@@ -89,14 +88,13 @@ export default function RoadmapsPage() {
       const newReqId = Date.now().toString() + Math.random().toString(36).substring(2, 9);
       setCurrentRequestId(newReqId);
       setStep("generating");
-      const genData = await roadmapsApi.generateRoadmap(role, ecosystem, studentId, newReqId, weeklyHours);
+      const genData = await roadmapsApi.generateRoadmap(role, ecosystem, studentId || undefined, newReqId, weeklyHours);
       
       if (genData?.status === "cached" && genData?.roadmap) {
           setRoadmap(genData.roadmap);
           setAnalytics(genData.roadmap.analytics_json);
           setStep("roadmap");
       }
-      // If status === "queued", the polling loop handles the rest.
       
       // Refresh the list
       if (studentId) {
@@ -116,26 +114,30 @@ export default function RoadmapsPage() {
   };
   
   if (loadingList) {
-    return <div className="min-h-[80vh] flex items-center justify-center"><div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div></div>;
+    return (
+      <div className="min-h-[80vh] flex items-center justify-center">
+        <div className="w-12 h-12 border-3 border-emerald-800 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
   }
 
   // Phase 0: Saved Roadmaps List
   if (step === "list") {
     return (
-      <div className="bg-slate-950 min-h-[80vh] rounded-3xl p-8 shadow-2xl">
-        <div className="max-w-6xl mx-auto py-8">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12 gap-6">
+      <div className="bg-stone-50 min-h-[80vh] rounded-2xl p-6 md:p-8 border border-stone-200 shadow-sm">
+        <div className="max-w-6xl mx-auto py-4">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6">
             <div>
-              <h1 className="text-4xl font-bold text-white mb-2 tracking-tight flex items-center gap-3">
-                <Compass className="w-10 h-10 text-indigo-500" /> My Career Roadmaps
+              <h1 className="text-3xl font-serif font-bold text-stone-900 mb-1 tracking-tight flex items-center gap-3">
+                <Compass className="w-8 h-8 text-emerald-800" /> Career Roadmaps
               </h1>
-              <p className="text-slate-400">Your saved, ML-optimized learning paths.</p>
+              <p className="text-stone-600 text-sm">Your verified, curriculum-aligned career paths.</p>
             </div>
             <button 
               onClick={() => setStep("role")}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-bold transition-all flex items-center gap-2 shadow-lg shadow-indigo-500/20"
+              className="bg-emerald-800 hover:bg-emerald-900 text-white px-5 py-2.5 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 shadow-sm"
             >
-              <PlusCircle className="w-5 h-5" /> Generate New Path
+              <PlusCircle className="w-4 h-4" /> Generate New Path
             </button>
           </div>
           
@@ -150,34 +152,32 @@ export default function RoadmapsPage() {
                   setAnalytics(r.analytics_json);
                   setStep("roadmap");
                 }}
-                className="group relative bg-slate-900 border border-slate-800 hover:border-indigo-500/50 p-6 rounded-2xl cursor-pointer transition-all duration-300 hover:shadow-xl hover:shadow-indigo-500/10 overflow-hidden"
+                className="group relative bg-white border border-stone-200 hover:border-emerald-700 p-6 rounded-xl cursor-pointer transition-all duration-200 hover:shadow-md"
               >
-                <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                
                 <button 
                   onClick={(e) => handleDelete(e, item.id)}
-                  className="absolute top-4 right-4 text-slate-600 hover:text-red-500 hover:bg-red-500/10 p-2 rounded-lg transition-colors z-10 opacity-0 group-hover:opacity-100"
+                  className="absolute top-4 right-4 text-stone-400 hover:text-red-700 hover:bg-stone-100 p-1.5 rounded-md transition-colors z-10 opacity-0 group-hover:opacity-100"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
                 
                 <div className="mb-4">
-                  <span className="px-3 py-1 bg-slate-800 text-indigo-400 text-xs font-bold uppercase tracking-wider rounded-md">
+                  <span className="px-2.5 py-1 bg-stone-100 text-stone-700 text-xs font-semibold uppercase tracking-wider rounded border border-stone-200">
                     {r.ecosystem}
                   </span>
                 </div>
                 
-                <h3 className="text-2xl font-bold text-white mb-2">{r.role_name}</h3>
-                <p className="text-slate-500 text-sm mb-6 line-clamp-2">
-                  {r.roadmap_json?.description || "A personalized learning roadmap."}
+                <h3 className="text-xl font-bold text-stone-900 mb-2">{r.role_name}</h3>
+                <p className="text-stone-600 text-sm mb-6 line-clamp-2">
+                  {r.roadmap_json?.description || "A structured, competency-based roadmap."}
                 </p>
                 
-                <div className="flex items-center justify-between text-sm font-medium border-t border-slate-800 pt-4">
-                  <span className="text-emerald-400 flex items-center gap-1.5">
-                    <Zap className="w-4 h-4" /> {r.roadmap_json?.estimated_months || 6} Months
+                <div className="flex items-center justify-between text-xs font-medium border-t border-stone-100 pt-4">
+                  <span className="text-stone-700 flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-stone-500" /> {r.roadmap_json?.estimated_months || 6} Months
                   </span>
-                  <span className="text-indigo-400 group-hover:translate-x-1 transition-transform flex items-center gap-1">
-                    View Path <ArrowRight className="w-4 h-4" />
+                  <span className="text-emerald-800 font-semibold group-hover:translate-x-0.5 transition-transform flex items-center gap-1">
+                    View Path <ArrowRight className="w-3.5 h-3.5" />
                   </span>
                 </div>
               </div>
@@ -191,49 +191,36 @@ export default function RoadmapsPage() {
   // Phase 1: Select Role
   if (step === "role") {
     return (
-      <div className="bg-slate-950 min-h-[80vh] rounded-3xl flex flex-col items-center justify-center p-8 overflow-hidden shadow-2xl">
-        <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} className="text-center max-w-2xl mx-auto">
-          <div className="inline-block p-4 bg-indigo-500/10 rounded-full mb-6 border border-indigo-500/20">
-            <Target className="w-8 h-8 text-indigo-400" />
+      <div className="bg-stone-50 min-h-[80vh] rounded-2xl flex flex-col items-center justify-center p-6 md:p-12 border border-stone-200 shadow-sm">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center max-w-2xl mx-auto w-full">
+          <div className="inline-block p-3 bg-stone-100 rounded-full mb-4 border border-stone-200">
+            <Target className="w-6 h-6 text-emerald-800" />
           </div>
-          <h1 className="text-5xl font-bold text-white mb-6 tracking-tight">Choose Your Destiny.</h1>
-          <p className="text-xl text-slate-400 mb-12 leading-relaxed">
-            Select a target career. We will instantly analyze current market job descriptions to build your optimized path.
+          <h1 className="text-3xl md:text-4xl font-serif font-bold text-stone-900 mb-3 tracking-tight">Select Career Objective</h1>
+          <p className="text-base text-stone-600 mb-8 leading-relaxed">
+            Select a target career track. Real-time industry competencies and market hiring standards will shape your curriculum.
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <button
-              onClick={() => { setSelectedRole("Full Stack Developer"); setStep("ecosystem"); }}
-              className="group bg-slate-900 border border-slate-800 hover:border-indigo-500 hover:bg-slate-800 p-8 rounded-2xl text-left transition-all duration-300"
-            >
-              <h2 className="text-2xl font-bold text-white mb-2 group-hover:text-indigo-400 transition-colors">Full Stack Developer</h2>
-              <p className="text-slate-500 text-sm">Frontend + Backend mastery. (Choose Stack)</p>
-            </button>
-            <button
-              onClick={() => { setSelectedRole("Data Scientist"); setStep("ecosystem"); }}
-              className="group bg-slate-900 border border-slate-800 hover:border-indigo-500 hover:bg-slate-800 p-8 rounded-2xl text-left transition-all duration-300"
-            >
-              <h2 className="text-2xl font-bold text-white mb-2 group-hover:text-indigo-400 transition-colors">Data Scientist</h2>
-              <p className="text-slate-500 text-sm">Python, ML, and Analytics.</p>
-            </button>
-            <button
-              onClick={() => { setSelectedRole("Cloud Architect"); setStep("ecosystem"); }}
-              className="group bg-slate-900 border border-slate-800 hover:border-indigo-500 hover:bg-slate-800 p-8 rounded-2xl text-left transition-all duration-300"
-            >
-              <h2 className="text-2xl font-bold text-white mb-2 group-hover:text-indigo-400 transition-colors">Cloud Architect</h2>
-              <p className="text-slate-500 text-sm">AWS, Azure, and infrastructure.</p>
-            </button>
-            <button
-              onClick={() => { setSelectedRole("Cybersecurity Analyst"); setStep("ecosystem"); }}
-              className="group bg-slate-900 border border-slate-800 hover:border-indigo-500 hover:bg-slate-800 p-8 rounded-2xl text-left transition-all duration-300"
-            >
-              <h2 className="text-2xl font-bold text-white mb-2 group-hover:text-indigo-400 transition-colors">Cybersecurity Analyst</h2>
-              <p className="text-slate-500 text-sm">Blue team, Red team, InfoSec.</p>
-            </button>
+            {[
+              { title: "Full Stack Developer", desc: "Client-side and server-side engineering." },
+              { title: "Data Scientist", desc: "Statistical modeling, Python, and data analytics." },
+              { title: "Cloud Architect", desc: "Infrastructure, reliability, and security." },
+              { title: "Cybersecurity Analyst", desc: "Information security, compliance, and systems defense." }
+            ].map((roleItem) => (
+              <button
+                key={roleItem.title}
+                onClick={() => { setSelectedRole(roleItem.title); setStep("ecosystem"); }}
+                className="group bg-white border border-stone-200 hover:border-emerald-700 hover:bg-stone-50/50 p-6 rounded-xl text-left transition-all duration-200 shadow-sm"
+              >
+                <h2 className="text-lg font-bold text-stone-900 mb-1 group-hover:text-emerald-800 transition-colors">{roleItem.title}</h2>
+                <p className="text-stone-500 text-xs">{roleItem.desc}</p>
+              </button>
+            ))}
           </div>
           
-          <div className="mt-8">
-            <p className="text-slate-400 mb-4 font-medium">Or enter a custom career path:</p>
+          <div className="mt-8 pt-8 border-t border-stone-200">
+            <p className="text-stone-600 mb-3 text-sm font-medium">Or enter a custom career track:</p>
             <form onSubmit={(e) => {
               e.preventDefault();
               const val = (e.currentTarget.elements.namedItem('customRole') as HTMLInputElement).value;
@@ -241,14 +228,14 @@ export default function RoadmapsPage() {
                 setSelectedRole(val.trim());
                 setStep("ecosystem");
               }
-            }} className="flex max-w-md mx-auto gap-3">
+            }} className="flex max-w-md mx-auto gap-2">
               <input 
                 name="customRole"
-                placeholder="e.g. AI Engineer, Mobile Developer..." 
-                className="flex-1 bg-slate-900 border border-slate-700 text-white p-4 rounded-xl focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+                placeholder="e.g. Systems Engineer, Mobile Developer..." 
+                className="flex-1 bg-white border border-stone-300 text-stone-900 p-3 rounded-lg text-sm focus:border-emerald-800 focus:ring-1 focus:ring-emerald-800 outline-none"
               />
-              <button type="submit" className="bg-slate-800 hover:bg-indigo-600 text-white px-6 py-4 rounded-xl font-bold transition-colors">
-                Next
+              <button type="submit" className="bg-emerald-800 hover:bg-emerald-900 text-white px-5 py-3 rounded-lg text-sm font-semibold transition-colors">
+                Continue
               </button>
             </form>
           </div>
@@ -260,11 +247,11 @@ export default function RoadmapsPage() {
   // Phase 2: Select Ecosystem
   if (step === "ecosystem") {
     return (
-      <div className="bg-slate-950 min-h-[80vh] rounded-3xl flex flex-col items-center justify-center p-8 overflow-hidden shadow-2xl">
-        <motion.div initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} className="text-center max-w-2xl mx-auto w-full">
-          <h1 className="text-4xl font-bold text-white mb-6">Define Your Tech Stack & Commitment</h1>
-          <p className="text-lg text-slate-400 mb-12">
-            Customize your learning speed and tech ecosystem to build a mentor-tailored path.
+      <div className="bg-stone-50 min-h-[80vh] rounded-2xl flex flex-col items-center justify-center p-6 md:p-12 border border-stone-200 shadow-sm">
+        <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="text-center max-w-xl mx-auto w-full">
+          <h1 className="text-3xl font-serif font-bold text-stone-900 mb-2">Technical Focus & Pace</h1>
+          <p className="text-sm text-stone-600 mb-8">
+            Tailor the technology stack and weekly commitment to configure an optimal milestone plan.
           </p>
 
           <form onSubmit={(e) => {
@@ -272,43 +259,51 @@ export default function RoadmapsPage() {
               const val = (e.currentTarget.elements.namedItem('customEco') as HTMLInputElement).value;
               const eco = val.trim() || "General";
               handleEcosystemSelect(eco, weeklyHours);
-            }} className="flex flex-col max-w-xl mx-auto gap-4">
+            }} className="flex flex-col gap-4">
               
               <div className="flex flex-col text-left gap-1.5">
-                <label className="text-sm font-semibold text-slate-300">Weekly Commitment Hours</label>
+                <label className="text-xs font-semibold text-stone-700 uppercase tracking-wider">Weekly Commitment</label>
                 <select 
                   value={weeklyHours}
                   onChange={(e) => setWeeklyHours(parseInt(e.target.value))}
-                  className="bg-slate-900 border border-slate-700 text-white p-4 rounded-xl outline-none focus:border-indigo-500"
+                  className="bg-white border border-stone-300 text-stone-900 p-3 rounded-lg text-sm outline-none focus:border-emerald-800"
                 >
-                  <option value={10}>10 Hours / Week (Part-Time / Light)</option>
-                  <option value={20}>20 Hours / Week (Moderate / Standard)</option>
-                  <option value={40}>40 Hours / Week (Full-Time / Intensive)</option>
+                  <option value={10}>10 Hours / Week (Part-Time / Standard)</option>
+                  <option value={20}>20 Hours / Week (Moderate Academic)</option>
+                  <option value={40}>40 Hours / Week (Intensive Immersion)</option>
                 </select>
               </div>
 
               <div className="flex flex-col text-left gap-1.5 mb-2">
-                <label className="text-sm font-semibold text-slate-300">Target Tech Stack (Optional)</label>
+                <label className="text-xs font-semibold text-stone-700 uppercase tracking-wider">Target Stack / Ecosystem (Optional)</label>
                 <input 
                   name="customEco"
-                  placeholder="e.g. Python/Django, .NET, MERN, Ruby on Rails..." 
-                  className="bg-slate-900 border border-slate-700 text-white p-4 rounded-xl focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+                  placeholder="e.g. Python, Java/Spring, TypeScript/Node, .NET..." 
+                  className="bg-white border border-stone-300 text-stone-900 p-3 rounded-lg text-sm focus:border-emerald-800 focus:ring-1 focus:ring-emerald-800 outline-none"
                 />
               </div>
 
-              <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-4 rounded-xl font-bold transition-all shadow-lg shadow-indigo-500/20">
-                Generate Path
+              <button type="submit" className="w-full bg-emerald-800 hover:bg-emerald-900 text-white py-3 rounded-lg text-sm font-semibold transition-all shadow-sm">
+                Generate Roadmap
               </button>
           </form>
             
-          <div className="mt-10 flex flex-wrap justify-center gap-3">
-              <span className="text-slate-500 text-sm py-2">Quick picks:</span>
-              <button onClick={() => handleEcosystemSelect("MERN", weeklyHours)} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm transition-colors">MERN</button>
-              <button onClick={() => handleEcosystemSelect("Java/Spring", weeklyHours)} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm transition-colors">Java</button>
-              <button onClick={() => handleEcosystemSelect(".NET/C#", weeklyHours)} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm transition-colors">.NET</button>
-              <button onClick={() => handleEcosystemSelect("Python/Django", weeklyHours)} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm transition-colors">Python</button>
-              <button onClick={() => handleEcosystemSelect("General", weeklyHours)} className="px-4 py-2 border border-slate-700 hover:border-slate-500 text-slate-400 rounded-lg text-sm transition-colors ml-4">
-                Skip / Let AI Discover
+          <div className="mt-8 flex flex-wrap justify-center items-center gap-2">
+              <span className="text-stone-500 text-xs">Suggested:</span>
+              {["TypeScript", "Java/Spring", "Python", ".NET"].map((eco) => (
+                <button 
+                  key={eco}
+                  onClick={() => handleEcosystemSelect(eco, weeklyHours)} 
+                  className="px-3 py-1.5 bg-white border border-stone-200 hover:border-emerald-700 text-stone-700 rounded-md text-xs font-medium transition-colors"
+                >
+                  {eco}
+                </button>
+              ))}
+              <button 
+                onClick={() => handleEcosystemSelect("General", weeklyHours)} 
+                className="px-3 py-1.5 text-stone-500 hover:text-stone-800 text-xs underline ml-2"
+              >
+                Comprehensive
               </button>
           </div>
         </motion.div>
@@ -338,151 +333,110 @@ export default function RoadmapsPage() {
   // Phase 4: The Roadmap
   if (!roadmap) return null;
 
-  const nodes = roadmap.roadmap_json?.nodes || [];
-
   return (
-    <div className="bg-slate-950 min-h-[80vh] rounded-3xl p-8 overflow-hidden shadow-2xl relative">
-      {myRoadmaps.length > 0 && (
+    <div className="bg-stone-50 min-h-[80vh] rounded-2xl p-6 md:p-8 border border-stone-200 shadow-sm relative">
+      <div className="flex items-center justify-between mb-8 pb-4 border-b border-stone-200 print-hide">
+        {myRoadmaps.length > 0 ? (
+          <button 
+            onClick={() => setStep("list")}
+            className="text-stone-600 hover:text-stone-900 text-sm font-medium flex items-center gap-1.5 transition-colors"
+          >
+            <ChevronRight className="w-4 h-4 rotate-180" /> Back to My Roadmaps
+          </button>
+        ) : <div />}
         <button 
-          onClick={() => setStep("list")}
-          className="absolute top-8 left-8 text-slate-400 hover:text-white flex items-center gap-2 transition-colors z-20 print-hide"
+          onClick={() => window.print()}
+          className="text-stone-700 hover:text-stone-900 flex items-center gap-2 transition-colors bg-white border border-stone-300 px-4 py-2 rounded-lg text-xs font-semibold hover:bg-stone-100 shadow-sm"
         >
-          <ChevronRight className="w-5 h-5 rotate-180" /> Back to My Roadmaps
+          <BookOpen className="w-3.5 h-3.5 text-emerald-800" /> Export PDF / Print
         </button>
-      )}
-      <button 
-        onClick={() => window.print()}
-        className="absolute top-8 right-8 text-slate-400 hover:text-white flex items-center gap-2 transition-colors z-20 bg-slate-900/60 border border-slate-700/50 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-slate-800 print-hide"
-      >
-        <BookOpen className="w-4 h-4 text-indigo-400" /> Export PDF / Print
-      </button>
-      <div className="max-w-6xl mx-auto py-12">
-        
-        {/* Professional Compact Hero Section */}
-        <motion.div 
-          initial={{ opacity: 0, y: -20 }} 
-          animate={{ opacity: 1, y: 0 }} 
-          className="relative rounded-[2rem] bg-slate-900/60 border border-slate-700/50 backdrop-blur-2xl p-6 md:p-8 mb-10 shadow-xl"
-        >
-          <div className="text-center mb-8">
-            <h1 className="text-2xl md:text-3xl font-black text-white tracking-tight mb-3 drop-shadow-sm">
-              {roadmap.roadmap_json.title}
+      </div>
+
+      <div className="max-w-5xl mx-auto">
+        {/* Academic / Executive Hero */}
+        <div className="bg-white rounded-xl border border-stone-200 p-6 md:p-8 mb-8 shadow-sm">
+          <div className="mb-6">
+            <span className="px-2.5 py-1 bg-stone-100 text-stone-700 text-xs font-semibold uppercase tracking-wider rounded border border-stone-200 inline-block mb-3">
+              {roadmap.ecosystem || "Professional Path"}
+            </span>
+            <h1 className="text-2xl md:text-3xl font-serif font-bold text-stone-900 tracking-tight mb-2">
+              {roadmap.roadmap_json?.title || roadmap.role_name}
             </h1>
-            
-            <p className="text-base text-slate-300 max-w-3xl mx-auto leading-relaxed font-medium">
-              {roadmap.roadmap_json.description}
+            <p className="text-stone-600 text-sm max-w-3xl leading-relaxed">
+              {roadmap.roadmap_json?.description}
             </p>
           </div>
           
-          {/* Analytics & Meta Cards */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            
-            {/* Time Card */}
-            <motion.div 
-              initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-              className="bg-slate-800/40 rounded-2xl p-4 border border-slate-700/50 flex items-center gap-4 group hover:bg-slate-800/60 transition-colors"
-            >
-              <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-                <Clock className="w-5 h-5 text-amber-400" />
+          {/* Metadata Tiles */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-stone-50 rounded-lg p-4 border border-stone-200 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-md bg-stone-200/70 flex items-center justify-center shrink-0">
+                <Clock className="w-4 h-4 text-stone-700" />
               </div>
-              <div className="text-left">
-                <h3 className="text-slate-400 text-xs font-bold tracking-widest uppercase mb-0.5">Time to Master</h3>
-                <div className="text-xl font-black text-white">{roadmap.roadmap_json?.estimated_months || 6} <span className="text-sm text-amber-400 font-bold">Months</span></div>
+              <div>
+                <div className="text-stone-500 text-[10px] font-bold uppercase tracking-wider">Estimated Timeline</div>
+                <div className="text-base font-bold text-stone-900">{roadmap.roadmap_json?.estimated_months || 6} Months</div>
               </div>
-            </motion.div>
+            </div>
 
-            {/* Top MNCs Card */}
-            <motion.div 
-              initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
-              className="bg-slate-800/40 rounded-2xl p-4 border border-slate-700/50 group hover:bg-slate-800/60 transition-colors"
-            >
-              <div className="flex items-center gap-2 mb-3">
-                <div className="p-2 rounded-lg bg-blue-500/20">
-                  <Building2 className="w-4 h-4 text-blue-400" />
-                </div>
-                <h3 className="text-blue-400 font-bold tracking-widest text-xs uppercase">Top MNCs Hiring</h3>
+            <div className="bg-stone-50 rounded-lg p-4 border border-stone-200">
+              <div className="flex items-center gap-1.5 text-stone-700 font-bold text-xs uppercase tracking-wider mb-2">
+                <Building2 className="w-3.5 h-3.5 text-emerald-800" /> Key Hiring Organizations
               </div>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap gap-1">
                 {analytics?.mncs_found?.length > 0 
-                  ? analytics.mncs_found.map((c: string) => (
-                      <span key={c} className="px-3 py-1.5 bg-blue-500/10 border border-blue-500/20 rounded-lg text-blue-100 text-sm font-semibold capitalize shadow-sm">
+                  ? analytics.mncs_found.slice(0, 4).map((c: string) => (
+                      <span key={c} className="px-2 py-0.5 bg-white border border-stone-200 rounded text-stone-700 text-xs font-medium">
                         {c}
                       </span>
                     ))
-                  : <span className="text-slate-500 text-xs font-medium italic">General industry data applied.</span>
+                  : <span className="text-stone-500 text-xs italic">National industry standards</span>
                 }
               </div>
-            </motion.div>
+            </div>
 
-            {/* Core Skills Card */}
-            <motion.div 
-              initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
-              className="bg-slate-800/40 rounded-2xl p-4 border border-slate-700/50 group hover:bg-slate-800/60 transition-colors"
-            >
-              <div className="flex items-center gap-2 mb-3">
-                <div className="p-2 rounded-lg bg-rose-500/20">
-                  <BrainCircuit className="w-4 h-4 text-rose-400" />
-                </div>
-                <h3 className="text-rose-400 font-bold tracking-widest text-xs uppercase">Core Skills (High Demand)</h3>
+            <div className="bg-stone-50 rounded-lg p-4 border border-stone-200">
+              <div className="flex items-center gap-1.5 text-stone-700 font-bold text-xs uppercase tracking-wider mb-2">
+                <BrainCircuit className="w-3.5 h-3.5 text-emerald-800" /> High-Priority Competencies
               </div>
-              <div className="flex flex-wrap gap-1.5">
-                {roadmap.core_skills?.slice(0, 6).map((s: any) => (
-                  <span key={s.skill} className="px-2 py-1 bg-rose-500/10 border border-rose-500/20 rounded-md text-rose-100 text-xs font-semibold shadow-sm flex items-center gap-1.5">
+              <div className="flex flex-wrap gap-1">
+                {roadmap.core_skills?.slice(0, 4).map((s: any) => (
+                  <span key={s.skill} className="px-2 py-0.5 bg-emerald-50 border border-emerald-200 rounded text-emerald-900 text-xs font-semibold">
                     {s.skill}
-                    <span className="text-rose-400/80 text-[10px] font-black">{s.percentage}%</span>
                   </span>
                 ))}
               </div>
-            </motion.div>
-
+            </div>
           </div>
-        </motion.div>
+        </div>
 
-        {/* Ingestion Methodology Card */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-          className="relative rounded-[1.5rem] bg-slate-900/40 border border-slate-800/80 p-5 mb-8 text-left backdrop-blur-md flex flex-col md:flex-row items-start md:items-center justify-between gap-6 group hover:bg-slate-900/60 transition-colors"
-        >
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center shrink-0">
-              <CheckCircle2 className="w-6 h-6 text-indigo-400" />
+        {/* Industry Verification Notice */}
+        <div className="rounded-xl bg-white border border-stone-200 p-5 mb-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-md bg-emerald-50 border border-emerald-200 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="w-4 h-4 text-emerald-800" />
             </div>
             <div>
-              <h3 className="text-white font-bold text-base mb-0.5">Scraped Industry Verification</h3>
-              <p className="text-xs text-slate-400 max-w-xl">
-                We crawl real-time market data across primary job portals (LinkedIn, Glassdoor, Indeed, Naukri) to verify skill frequencies and composite recommendation demand metrics.
+              <h3 className="text-stone-900 font-bold text-sm">Empirical Industry Benchmarking</h3>
+              <p className="text-xs text-stone-500">
+                Skills frequency and sequencing mapped directly against current hiring specifications.
               </p>
             </div>
           </div>
-          <div className="flex flex-wrap gap-4 shrink-0 font-mono text-[11px] font-bold text-slate-400 bg-slate-950/80 px-4 py-3 rounded-xl border border-slate-800/60 shadow-inner">
-            <div className="flex flex-col">
-              <span className="text-slate-500 uppercase tracking-widest text-[9px] mb-0.5">Data Sources</span>
-              <span className="text-indigo-400">LinkedIn, Indeed, Glassdoor</span>
-            </div>
-            <div className="w-px h-6 bg-slate-800 self-center hidden md:block"></div>
-            <div className="flex flex-col">
-              <span className="text-slate-500 uppercase tracking-widest text-[9px] mb-0.5">JDs Scraped</span>
-              <span className="text-emerald-400">{roadmap.analytics_json?.total_jds || 76} Job Posts</span>
-            </div>
-            <div className="w-px h-6 bg-slate-800 self-center hidden md:block"></div>
-            <div className="flex flex-col">
-              <span className="text-slate-500 uppercase tracking-widest text-[9px] mb-0.5">Last Updated</span>
-              <span className="text-amber-400">
-                {roadmap.last_updated_at ? new Date(roadmap.last_updated_at).toLocaleDateString(undefined, {month: 'short', year: 'numeric'}) : "Aug 2026"}
-              </span>
-            </div>
+          <div className="flex gap-4 font-mono text-xs text-stone-600 bg-stone-50 px-3 py-2 rounded-lg border border-stone-200">
+            <div><span className="text-stone-400">Postings Analyzed:</span> <strong className="text-stone-800">{roadmap.analytics_json?.total_jds || 76}</strong></div>
+            <div className="w-px h-4 bg-stone-200 self-center"></div>
+            <div><span className="text-stone-400">Taxonomy:</span> <strong className="text-stone-800">Verified</strong></div>
           </div>
-        </motion.div>
+        </div>
 
-        {/* 3D Interactive Canvas */}
-        <div className="mt-8">
+        {/* Roadmap Canvas */}
+        <div className="mt-6">
           <RoadmapCanvas roadmapData={roadmap.roadmap_json} />
         </div>
 
-        {/* AI Market Analysis & Chat */}
-        <div className="print-hide">
+        {/* Curriculum Analysis Report */}
+        <div className="mt-8 print-hide">
           <RoadmapAnalysis roadmap={roadmap} />
         </div>
       </div>

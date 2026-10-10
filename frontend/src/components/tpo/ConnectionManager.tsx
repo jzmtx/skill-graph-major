@@ -27,7 +27,7 @@ export default function ConnectionManager({ authId }: { authId: string }) {
     setMessage('');
     try {
       await inviteStudent(authId, email);
-      setMessage('Invitation sent successfully!');
+      setMessage('Invitation dispatched successfully.');
       setEmail('');
       fetchRequests();
     } catch (e: any) {
@@ -40,22 +40,21 @@ export default function ConnectionManager({ authId }: { authId: string }) {
     try {
       await approveRequest(authId, linkId);
       fetchRequests();
-      // Ideally we would trigger a refresh of the main student list here too
     } catch (e) {
       console.error('Failed to approve request');
     }
   };
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-5 mb-6">
-      <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
-        <UserPlus className="w-4 h-4" /> Manage Students
+    <div className="bg-white rounded-xl border border-stone-200 p-5 shadow-2xs">
+      <h3 className="text-xs font-bold uppercase tracking-wider text-stone-700 mb-4 flex items-center gap-1.5">
+        <UserPlus className="w-4 h-4 text-emerald-800" /> Student Verification & Invitations
       </h3>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Invite Form */}
         <div>
-          <h4 className="text-xs font-medium text-slate-500 mb-2 uppercase">Invite Student by Email</h4>
+          <h4 className="text-[10px] font-bold text-stone-500 mb-1.5 uppercase tracking-wider">Invite Student by Academic Email</h4>
           <form onSubmit={handleInvite} className="flex gap-2">
             <input 
               type="email" 
@@ -63,38 +62,38 @@ export default function ConnectionManager({ authId }: { authId: string }) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="student@college.edu" 
-              className="flex-1 text-sm border border-slate-300 rounded-md px-3 py-2 outline-none focus:border-indigo-500"
+              className="flex-1 text-xs border border-stone-300 rounded-lg px-3 py-2 bg-stone-50 outline-none focus:border-emerald-800 focus:bg-white"
             />
             <button 
               disabled={loading}
               type="submit" 
-              className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 disabled:opacity-50"
+              className="px-4 py-2 bg-emerald-800 text-white text-xs font-semibold rounded-lg hover:bg-emerald-900 disabled:opacity-50 transition-colors shadow-2xs"
             >
               {loading ? 'Sending...' : 'Invite'}
             </button>
           </form>
-          {message && <p className="text-xs mt-2 text-indigo-600">{message}</p>}
+          {message && <p className="text-xs mt-2 text-emerald-800 font-medium">{message}</p>}
         </div>
 
         {/* Pending Requests */}
         <div>
-          <h4 className="text-xs font-medium text-slate-500 mb-2 uppercase flex items-center gap-1">
+          <h4 className="text-[10px] font-bold text-stone-500 mb-1.5 uppercase tracking-wider flex items-center gap-1">
             <Clock className="w-3 h-3" /> Pending Approvals ({requests.length})
           </h4>
           {requests.length === 0 ? (
-            <p className="text-sm text-slate-400 italic">No pending requests at the moment.</p>
+            <p className="text-xs text-stone-400 italic pt-2">No pending verification requests.</p>
           ) : (
-            <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
+            <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
               {requests.map(req => (
-                <div key={req.id} className="flex items-center justify-between bg-slate-50 p-2 rounded-md border border-slate-100">
+                <div key={req.id} className="flex items-center justify-between bg-stone-50 p-2 rounded-lg border border-stone-200">
                   <div className="text-xs">
-                    <p className="font-medium text-slate-700">{req.students?.name}</p>
-                    <p className="text-slate-500">{req.students?.email}</p>
+                    <p className="font-semibold text-stone-800">{req.students?.name}</p>
+                    <p className="text-stone-500 text-[11px]">{req.students?.email}</p>
                   </div>
                   <button 
                     onClick={() => handleApprove(req.id)}
-                    className="p-1 text-green-600 hover:bg-green-100 rounded"
-                    title="Approve Request"
+                    className="p-1.5 text-emerald-800 hover:bg-emerald-50 rounded-md transition-colors"
+                    title="Approve Affiliation"
                   >
                     <CheckCircle className="w-4 h-4" />
                   </button>

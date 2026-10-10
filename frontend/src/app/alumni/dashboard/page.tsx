@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   getAlumniProfile,
   getMyOpportunities,
@@ -14,11 +14,31 @@ import {
   deleteAlumniMessage
 } from '@/lib/alumniApi';
 import { useRouter } from 'next/navigation';
-import { Users, Plus, X, UserCheck, Briefcase, GraduationCap, ChevronDown, ChevronUp, Eye, Sparkles, GitBranch, Mail, Send, MessageSquare, CheckCircle2, Link as LinkIcon, Image as ImageIcon, Trash2 } from 'lucide-react';
+import {
+  Users,
+  Plus,
+  X,
+  UserCheck,
+  Briefcase,
+  GraduationCap,
+  ChevronDown,
+  ChevronUp,
+  Eye,
+  Sparkles,
+  GitBranch,
+  Send,
+  MessageSquare,
+  CheckCircle2,
+  Link as LinkIcon,
+  Image as ImageIcon,
+  Trash2,
+  Building2,
+  Check
+} from 'lucide-react';
 import StudentProfileModal, { StudentProfileData } from '@/components/dashboard/StudentProfileModal';
 import AlumniOpenSourceManager from '@/components/alumni/AlumniOpenSourceManager';
 import ReactMarkdown from 'react-markdown';
-import { useRef } from 'react';
+import CreativeChatConsole from '@/components/chat/CreativeChatConsole';
 
 interface Opportunity {
   id: string;
@@ -96,7 +116,7 @@ export default function AlumniDashboardPage() {
 
   useEffect(() => {
     const load = async () => {
-      const authId = localStorage.getItem('alumni_auth_id');
+      const authId = typeof window !== 'undefined' ? localStorage.getItem('alumni_auth_id') : null;
       if (!authId) {
         router.push('/login');
         return;
@@ -277,46 +297,78 @@ export default function AlumniDashboardPage() {
   };
 
   if (loading) {
-    return <div className="min-h-screen bg-slate-50 flex items-center justify-center text-slate-500">Loading dashboard...</div>;
+    return (
+      <div className="min-h-screen bg-stone-50 flex items-center justify-center text-stone-500 font-sans">
+        <div className="flex items-center gap-3">
+          <div className="w-5 h-5 border-2 border-emerald-800 border-t-transparent rounded-full animate-spin" />
+          <span className="text-sm font-medium text-stone-600">Loading alumni portal...</span>
+        </div>
+      </div>
+    );
   }
 
   if (error) {
-    return <div className="min-h-screen bg-slate-50 flex items-center justify-center text-red-600">{error}</div>;
+    return (
+      <div className="min-h-screen bg-stone-50 flex items-center justify-center p-6 font-sans">
+        <div className="bg-white border border-rose-200 text-rose-800 rounded-xl p-6 max-w-md text-center shadow-xs">
+          <p className="text-sm font-semibold">{error}</p>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6 md:p-10">
-      <div className="max-w-5xl mx-auto">
+    <div className="min-h-screen bg-stone-50 font-sans text-stone-900 pb-16">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-8">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <Users className="w-8 h-8 text-indigo-700" />
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 bg-white border border-stone-200 rounded-2xl p-6 shadow-xs">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-800 shrink-0">
+              <Users className="w-6 h-6" />
+            </div>
             <div>
-              <h1 className="text-2xl font-bold text-slate-800">Welcome back, {alumni?.name}</h1>
-              <p className="text-sm text-slate-500">{college?.name}</p>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl font-bold text-stone-900 tracking-tight">Welcome back, {alumni?.name}</h1>
+                {alumni && !alumni.is_verified && (
+                  <span className="px-2.5 py-0.5 bg-amber-50 text-amber-800 text-[11px] font-semibold rounded-full border border-amber-200">
+                    Pending Verification
+                  </span>
+                )}
+                {alumni && alumni.is_verified && (
+                  <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-800 text-[11px] font-semibold rounded-full border border-emerald-200 flex items-center gap-1">
+                    <Check className="w-3 h-3" /> Verified Alumni
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-stone-500 mt-0.5 flex items-center gap-1.5">
+                <Building2 className="w-3.5 h-3.5 text-stone-400" />
+                {college?.name || 'Institution Partner'}
+              </p>
             </div>
           </div>
-          {alumni && !alumni.is_verified && (
-            <span className="px-3 py-1.5 bg-amber-50 text-amber-700 text-xs font-medium rounded-full border border-amber-200">
-              Pending Verification
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold px-3 py-1.5 bg-stone-100 text-stone-700 rounded-lg border border-stone-200">
+              Alumni Network
             </span>
-          )}
+          </div>
         </div>
 
         {alumni && !alumni.is_verified ? (
-          <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm p-4 rounded-lg">
-            Your alumni account is awaiting admin approval. You&apos;ll be able to post opportunities once verified.
+          <div className="bg-amber-50 border border-amber-200 text-amber-900 text-xs p-5 rounded-xl mb-6">
+            <p className="font-semibold mb-1">Account Awaiting Institutional Approval</p>
+            <p className="text-amber-800">Your alumni credentials are currently being reviewed by your college administrator. Once verified, you will be able to post referral positions, mentor projects, and form open source teams.</p>
           </div>
         ) : (
           <>
             {/* Tab Navigation */}
-            <div className="flex gap-2 border-b border-slate-200 mb-6 pb-0 overflow-x-auto">
+            <div className="flex gap-2 border-b border-stone-200 mb-6 pb-0 overflow-x-auto">
               <button
                 onClick={() => setDashboardTab('opensource')}
                 className={`px-4 py-2.5 font-bold text-xs rounded-t-xl transition-all flex items-center gap-2 border-b-2 ${
                   dashboardTab === 'opensource'
-                    ? 'border-indigo-600 text-indigo-700 bg-white shadow-xs'
-                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                    ? 'border-emerald-800 text-emerald-800 bg-white shadow-xs'
+                    : 'border-transparent text-stone-500 hover:text-stone-800'
                 }`}
               >
                 <GitBranch className="w-4 h-4" />
@@ -326,8 +378,8 @@ export default function AlumniDashboardPage() {
                 onClick={() => setDashboardTab('opportunities')}
                 className={`px-4 py-2.5 font-bold text-xs rounded-t-xl transition-all flex items-center gap-2 border-b-2 ${
                   dashboardTab === 'opportunities'
-                    ? 'border-indigo-600 text-indigo-700 bg-white shadow-xs'
-                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                    ? 'border-emerald-800 text-emerald-800 bg-white shadow-xs'
+                    : 'border-transparent text-stone-500 hover:text-stone-800'
                 }`}
               >
                 <Briefcase className="w-4 h-4" />
@@ -340,8 +392,8 @@ export default function AlumniDashboardPage() {
                 }}
                 className={`px-4 py-2.5 font-bold text-xs rounded-t-xl transition-all flex items-center gap-2 border-b-2 ${
                   dashboardTab === 'students'
-                    ? 'border-indigo-600 text-indigo-700 bg-white shadow-xs'
-                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                    ? 'border-emerald-800 text-emerald-800 bg-white shadow-xs'
+                    : 'border-transparent text-stone-500 hover:text-stone-800'
                 }`}
               >
                 <GraduationCap className="w-4 h-4" />
@@ -358,247 +410,248 @@ export default function AlumniDashboardPage() {
             {dashboardTab === 'opportunities' && (
               <>
                 <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
-                    <Briefcase className="w-5 h-5" /> Your Opportunities
+                  <h2 className="text-base font-bold text-stone-900 flex items-center gap-2">
+                    <Briefcase className="w-4 h-4 text-emerald-800" /> Mentorship & Referrals
                   </h2>
                   <button
                     onClick={() => setShowForm(!showForm)}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700"
+                    className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-800 text-white text-xs font-semibold rounded-lg hover:bg-emerald-900 transition-colors shadow-xs"
                   >
-                    {showForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                    {showForm ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
                     {showForm ? 'Cancel' : 'Post Opportunity'}
                   </button>
                 </div>
 
-            {/* New Opportunity Form */}
-            {showForm && (
-              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
-                {formError && (
-                  <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm mb-4">{formError}</div>
-                )}
-                <form onSubmit={handleCreateOpportunity} className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Title</label>
-                    <input
-                      type="text" required
-                      className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                      value={title} onChange={e => setTitle(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
-                    <textarea
-                      rows={3}
-                      className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                      value={description} onChange={e => setDescription(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Type</label>
-                    <select
-                      className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                      value={type} onChange={e => setType(e.target.value)}
-                    >
-                      <option value="referral">Referral</option>
-                      <option value="internship">Internship</option>
-                      <option value="mentorship">Mentorship</option>
-                      <option value="job">Job</option>
-                      <option value="opensource">Open Source</option>
-                    </select>
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={formLoading}
-                    className="px-6 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50"
-                  >
-                    {formLoading ? 'Posting...' : 'Post Opportunity'}
-                  </button>
-                </form>
-              </div>
-            )}
-
-            {/* Opportunity List */}
-            {opportunities.length === 0 ? (
-              <div className="bg-white rounded-xl border border-slate-200 p-10 text-center text-slate-400">
-                No opportunities posted yet. Click &quot;Post Opportunity&quot; to get started.
-              </div>
-            ) : (
-              <div className="space-y-3 mb-10">
-                {opportunities.map(opp => (
-                  <div key={opp.id} className="bg-white rounded-xl border border-slate-200 p-5">
-                    <div className="flex items-start justify-between">
+                {/* New Opportunity Form */}
+                {showForm && (
+                  <div className="bg-white rounded-xl shadow-xs border border-stone-200 p-6 mb-6">
+                    <h3 className="text-sm font-bold text-stone-900 mb-4">Create New Opportunity</h3>
+                    {formError && (
+                      <div className="bg-rose-50 border border-rose-200 text-rose-800 p-3 rounded-lg text-xs mb-4">{formError}</div>
+                    )}
+                    <form onSubmit={handleCreateOpportunity} className="space-y-4 text-xs">
                       <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-semibold text-slate-800">{opp.title}</h3>
-                          <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 text-xs rounded-full capitalize">{opp.type}</span>
-                          {!opp.is_active && (
-                            <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-xs rounded-full">Closed</span>
-                          )}
-                        </div>
-                        {opp.description && <p className="text-sm text-slate-500 mt-1">{opp.description}</p>}
+                        <label className="block font-semibold text-stone-700 mb-1">Title</label>
+                        <input
+                          type="text" required
+                          placeholder="e.g. SDE-1 Referral at Stripe"
+                          className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-lg focus:ring-1 focus:ring-emerald-700 focus:bg-white outline-none text-stone-900 text-xs"
+                          value={title} onChange={e => setTitle(e.target.value)}
+                        />
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <button
-                          onClick={() => toggleInterested(opp.id)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-700 text-xs font-medium rounded-lg hover:bg-slate-200"
+                      <div>
+                        <label className="block font-semibold text-stone-700 mb-1">Description</label>
+                        <textarea
+                          rows={3}
+                          placeholder="Provide criteria, prerequisites, team context, and expectations..."
+                          className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-lg focus:ring-1 focus:ring-emerald-700 focus:bg-white outline-none text-stone-900 text-xs"
+                          value={description} onChange={e => setDescription(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-semibold text-stone-700 mb-1">Type</label>
+                        <select
+                          className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-lg focus:ring-1 focus:ring-emerald-700 focus:bg-white outline-none text-stone-900 text-xs"
+                          value={type} onChange={e => setType(e.target.value)}
                         >
-                          <UserCheck className="w-3.5 h-3.5" /> {opp.interested_count} Interested
-                        </button>
-                        {opp.is_active && (
-                          <button
-                            onClick={() => handleDeactivate(opp.id)}
-                            className="px-3 py-1.5 bg-red-50 text-red-600 text-xs font-medium rounded-lg hover:bg-red-100"
-                          >
-                            Close
-                          </button>
-                        )}
+                          <option value="referral">Company Referral</option>
+                          <option value="internship">Internship Opportunity</option>
+                          <option value="mentorship">Career Mentorship</option>
+                          <option value="job">Direct Full-Time Job</option>
+                          <option value="opensource">Open Source Initiative</option>
+                        </select>
                       </div>
-                    </div>
+                      <button
+                        type="submit"
+                        disabled={formLoading}
+                        className="px-5 py-2.5 bg-emerald-800 text-white text-xs font-semibold rounded-lg hover:bg-emerald-900 disabled:opacity-50 transition-colors"
+                      >
+                        {formLoading ? 'Publishing...' : 'Publish Opportunity'}
+                      </button>
+                    </form>
+                  </div>
+                )}
 
-                    {expandedOppId === opp.id && (
-                      <div className="mt-4 pt-4 border-t border-slate-100">
-                        {interestedLoading ? (
-                          <p className="text-sm text-slate-400">Loading interested students...</p>
-                        ) : interestedStudents.length === 0 ? (
-                          <p className="text-sm text-slate-400">No students have expressed interest yet.</p>
-                        ) : (
-                          <div className="space-y-2">
-                            {interestedStudents.map((s, i) => (
-                              <div key={i} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 border border-slate-200/80 rounded-xl p-3.5 hover:bg-slate-100/70 transition-colors">
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-2">
-                                    <p className="text-sm font-bold text-slate-800">{s.student.name}</p>
-                                    {s.hireability && (
-                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-100 text-indigo-800 text-[11px] font-extrabold rounded-md">
-                                        <Sparkles className="w-3 h-3 text-indigo-600" /> Score: {s.hireability.score}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <p className="text-xs text-slate-500 mt-0.5">
-                                    {s.student.email} {s.student.branch ? `· ${s.student.branch}` : ''} {s.student.year ? `· Year ${s.student.year}` : ''}
-                                  </p>
-                                </div>
+                {/* Opportunity List */}
+                {opportunities.length === 0 ? (
+                  <div className="bg-white rounded-xl border border-stone-200 p-12 text-center text-stone-500 text-xs">
+                    No opportunities posted yet. Click &quot;Post Opportunity&quot; to invite candidate inquiries.
+                  </div>
+                ) : (
+                  <div className="space-y-3 mb-10">
+                    {opportunities.map(opp => (
+                      <div key={opp.id} className="bg-white rounded-xl border border-stone-200 p-5 shadow-xs">
+                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-bold text-stone-900 text-sm">{opp.title}</h3>
+                              <span className="px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-semibold rounded-md capitalize">{opp.type}</span>
+                              {!opp.is_active && (
+                                <span className="px-2 py-0.5 bg-stone-100 text-stone-500 border border-stone-200 text-[10px] font-medium rounded-md">Closed</span>
+                              )}
+                            </div>
+                            {opp.description && <p className="text-xs text-stone-600 mt-1.5 leading-relaxed">{opp.description}</p>}
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              onClick={() => toggleInterested(opp.id)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-stone-100 text-stone-700 text-xs font-semibold rounded-lg hover:bg-stone-200 border border-stone-200 transition-colors"
+                            >
+                              <UserCheck className="w-3.5 h-3.5" /> {opp.interested_count} Interested
+                            </button>
+                            {opp.is_active && (
+                              <button
+                                onClick={() => handleDeactivate(opp.id)}
+                                className="px-3 py-1.5 bg-rose-50 text-rose-700 text-xs font-semibold rounded-lg hover:bg-rose-100 border border-rose-200 transition-colors"
+                              >
+                                Close
+                              </button>
+                            )}
+                          </div>
+                        </div>
 
-                                <div className="flex items-center gap-3 self-end sm:self-auto">
-                                  <div className="flex flex-wrap gap-1 justify-end max-w-xs">
-                                    {s.skills.slice(0, 3).map((sk, j) => (
-                                      <span key={j} className="px-2 py-0.5 bg-white text-slate-600 text-xs rounded border border-slate-200">
-                                        {sk.skill_name}{sk.verification_level >= 1 ? ' ✓' : ''}
-                                      </span>
-                                    ))}
-                                    {s.skills.length > 3 && (
-                                      <span className="text-[11px] text-slate-400 self-center">+{s.skills.length - 3}</span>
-                                    )}
-                                  </div>
+                        {expandedOppId === opp.id && (
+                          <div className="mt-4 pt-4 border-t border-stone-200">
+                            {interestedLoading ? (
+                              <p className="text-xs text-stone-500">Loading candidate interests...</p>
+                            ) : interestedStudents.length === 0 ? (
+                              <p className="text-xs text-stone-500">No students have applied to this opportunity yet.</p>
+                            ) : (
+                              <div className="space-y-2">
+                                {interestedStudents.map((s, i) => (
+                                  <div key={i} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-stone-50 border border-stone-200 rounded-xl p-3.5">
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-2">
+                                        <p className="text-xs font-bold text-stone-900">{s.student.name}</p>
+                                        {s.hireability && (
+                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold rounded-md">
+                                            Score: {s.hireability.score}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <p className="text-[11px] text-stone-500 mt-0.5">
+                                        {s.student.email} {s.student.branch ? `· ${s.student.branch}` : ''} {s.student.year ? `· Year ${s.student.year}` : ''}
+                                      </p>
+                                    </div>
 
-                                  <button
-                                    onClick={() => setSelectedStudentProfile({
-                                      student: s.student,
-                                      college_name: s.college_name || college?.name,
-                                      skills: s.skills,
-                                      hireability: s.hireability,
-                                      extraDetails: {
-                                        expressed_at: s.expressed_at,
-                                        opportunity_title: opp.title,
-                                        opportunity_type: opp.type
-                                      }
-                                    })}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg transition-colors shadow-xs"
-                                  >
-                                    <Eye className="w-3.5 h-3.5" /> View Profile
-                                  </button>
+                                    <div className="flex items-center gap-2 self-end sm:self-auto flex-wrap">
+                                      <div className="flex flex-wrap gap-1 justify-end max-w-xs">
+                                        {s.skills.slice(0, 3).map((sk, j) => (
+                                          <span key={j} className="px-1.5 py-0.5 bg-white text-stone-700 text-[10px] font-medium rounded border border-stone-200">
+                                            {sk.skill_name}{sk.verification_level >= 1 ? ' ✓' : ''}
+                                          </span>
+                                        ))}
+                                      </div>
 
-                                  <div className="flex items-center gap-2">
-                                    {s.status === 'hired' ? (
-                                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 text-emerald-800 text-xs font-bold rounded-lg border border-emerald-200 cursor-default">
-                                        <CheckCircle2 className="w-3.5 h-3.5" /> Hired
-                                      </span>
-                                    ) : s.status === 'rejected' ? (
-                                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-100 text-rose-800 text-xs font-bold rounded-lg border border-rose-200 cursor-default">
-                                        <X className="w-3.5 h-3.5" /> Rejected
-                                      </span>
-                                    ) : (
-                                      <>
-                                        {s.status === 'shortlisted' ? (
-                                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 text-amber-800 text-xs font-bold rounded-lg border border-amber-200 cursor-default">
-                                            <Sparkles className="w-3.5 h-3.5" /> Shortlisted
+                                      <button
+                                        onClick={() => setSelectedStudentProfile({
+                                          student: s.student,
+                                          college_name: s.college_name || college?.name,
+                                          skills: s.skills,
+                                          hireability: s.hireability,
+                                          extraDetails: {
+                                            expressed_at: s.expressed_at,
+                                            opportunity_title: opp.title,
+                                            opportunity_type: opp.type
+                                          }
+                                        })}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white hover:bg-stone-100 text-stone-800 text-xs font-semibold rounded-lg transition-colors border border-stone-300"
+                                      >
+                                        <Eye className="w-3.5 h-3.5" /> View
+                                      </button>
+
+                                      <div className="flex items-center gap-1.5">
+                                        {s.status === 'hired' ? (
+                                          <span className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-50 text-emerald-800 text-xs font-bold rounded-lg border border-emerald-200">
+                                            <CheckCircle2 className="w-3.5 h-3.5" /> Hired
+                                          </span>
+                                        ) : s.status === 'rejected' ? (
+                                          <span className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-rose-50 text-rose-800 text-xs font-bold rounded-lg border border-rose-200">
+                                            <X className="w-3.5 h-3.5" /> Rejected
                                           </span>
                                         ) : (
-                                          <button
-                                            onClick={() => handleStatusChange(opp.id, s.student.id, 'shortlisted')}
-                                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-bold rounded-lg transition-colors border border-amber-200"
-                                          >
-                                            Shortlist
-                                          </button>
+                                          <>
+                                            {s.status === 'shortlisted' ? (
+                                              <span className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-amber-50 text-amber-800 text-xs font-bold rounded-lg border border-amber-200">
+                                                Shortlisted
+                                              </span>
+                                            ) : (
+                                              <button
+                                                onClick={() => handleStatusChange(opp.id, s.student.id, 'shortlisted')}
+                                                className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-semibold rounded-lg border border-amber-200 transition-colors"
+                                              >
+                                                Shortlist
+                                              </button>
+                                            )}
+                                            <button
+                                              onClick={() => handleStatusChange(opp.id, s.student.id, 'hired')}
+                                              className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-semibold rounded-lg border border-emerald-200 transition-colors"
+                                            >
+                                              Hire
+                                            </button>
+                                            <button
+                                              onClick={() => handleStatusChange(opp.id, s.student.id, 'rejected')}
+                                              className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-800 text-xs font-semibold rounded-lg border border-rose-200 transition-colors"
+                                            >
+                                              Reject
+                                            </button>
+                                          </>
                                         )}
-                                        <button
-                                          onClick={() => handleStatusChange(opp.id, s.student.id, 'hired')}
-                                          className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-bold rounded-lg transition-colors border border-emerald-200"
-                                        >
-                                          Hire
-                                        </button>
-                                        <button
-                                          onClick={() => handleStatusChange(opp.id, s.student.id, 'rejected')}
-                                          className="inline-flex items-center gap-1 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold rounded-lg transition-colors border border-rose-200"
-                                        >
-                                          Reject
-                                        </button>
-                                      </>
-                                    )}
 
-                                    <button
-                                      onClick={() => handleOpenChat(opp.id, opp.title, s.student.id, s.student.name)}
-                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-colors border border-slate-200"
-                                    >
-                                      <MessageSquare className="w-3.5 h-3.5" /> Chat
-                                    </button>
+                                        <button
+                                          onClick={() => handleOpenChat(opp.id, opp.title, s.student.id, s.student.name)}
+                                          className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-semibold rounded-lg transition-colors"
+                                        >
+                                          <MessageSquare className="w-3.5 h-3.5" /> Chat
+                                        </button>
+                                      </div>
+                                    </div>
                                   </div>
-                                </div>
+                                ))}
                               </div>
-                            ))}
+                            )}
                           </div>
                         )}
                       </div>
-                    )}
+                    ))}
                   </div>
-                ))}
-              </div>
+                )}
+              </>
             )}
-          </>
-        )}
 
-        {/* TAB: COLLEGE STUDENTS */}
-        {dashboardTab === 'students' && (
-          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
-                <GraduationCap className="w-5 h-5" /> Students at {college?.name}
-              </h2>
-              <button
-                onClick={toggleCollegeStudents}
-                className="flex items-center gap-1.5 px-4 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-200"
-              >
-                {collegeStudentsLoading ? 'Refreshing...' : 'Refresh List'}
-              </button>
-            </div>
+            {/* TAB: COLLEGE STUDENTS */}
+            {dashboardTab === 'students' && (
+              <div className="bg-white rounded-xl border border-stone-200 p-6 shadow-xs">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-base font-bold text-stone-900 flex items-center gap-2">
+                    <GraduationCap className="w-4 h-4 text-emerald-800" /> Students at {college?.name}
+                  </h2>
+                  <button
+                    onClick={toggleCollegeStudents}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-stone-100 text-stone-700 text-xs font-semibold rounded-lg hover:bg-stone-200 border border-stone-200"
+                  >
+                    {collegeStudentsLoading ? 'Refreshing...' : 'Refresh List'}
+                  </button>
+                </div>
+
                 {collegeStudentsLoading ? (
-                  <p className="text-sm text-slate-400">Loading students...</p>
+                  <p className="text-xs text-stone-500">Loading student directory...</p>
                 ) : collegeStudents.length === 0 ? (
-                  <p className="text-sm text-slate-400">No students found from your college yet.</p>
+                  <p className="text-xs text-stone-500">No students found from your college directory yet.</p>
                 ) : (
                   <div className="space-y-2">
                     {collegeStudents.map((s, i) => (
-                      <div key={i} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 border border-slate-200/80 rounded-xl p-3.5 hover:bg-slate-100/70 transition-colors">
+                      <div key={i} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-stone-50 border border-stone-200 rounded-xl p-3.5">
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
-                            <p className="text-sm font-bold text-slate-800">{s.student.name}</p>
+                            <p className="text-xs font-bold text-stone-900">{s.student.name}</p>
                             {s.hireability && (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-100 text-indigo-800 text-[11px] font-extrabold rounded-md">
-                                <Sparkles className="w-3 h-3 text-indigo-600" /> Score: {s.hireability.score}
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-800 text-[10px] font-bold rounded-md border border-emerald-200">
+                                Score: {s.hireability.score}
                               </span>
                             )}
                           </div>
-                          <p className="text-xs text-slate-500 mt-0.5">
+                          <p className="text-[11px] text-stone-500 mt-0.5">
                             {s.student.email}
                             {s.student.branch ? ` · ${s.student.branch}` : ''}
                             {s.student.year ? ` · Year ${s.student.year}` : ''}
@@ -608,10 +661,10 @@ export default function AlumniDashboardPage() {
                         <div className="flex items-center gap-3 self-end sm:self-auto">
                           <div className="flex flex-wrap gap-1 justify-end max-w-xs">
                             {s.skills.length === 0 ? (
-                              <span className="text-xs text-slate-400">No skills yet</span>
+                              <span className="text-[10px] text-stone-400">No skills declared</span>
                             ) : (
                               s.skills.slice(0, 3).map((sk, j) => (
-                                <span key={j} className="px-2 py-0.5 bg-white text-slate-600 text-xs rounded border border-slate-200">
+                                <span key={j} className="px-1.5 py-0.5 bg-white text-stone-700 text-[10px] font-medium rounded border border-stone-200">
                                   {sk.skill_name}{sk.verification_level >= 1 ? ' ✓' : ''}
                                 </span>
                               ))
@@ -625,7 +678,7 @@ export default function AlumniDashboardPage() {
                               skills: s.skills,
                               hireability: s.hireability
                             })}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg transition-colors shadow-xs"
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white hover:bg-stone-100 text-stone-800 text-xs font-semibold rounded-lg transition-colors border border-stone-300"
                           >
                             <Eye className="w-3.5 h-3.5" /> View Profile
                           </button>
@@ -646,104 +699,61 @@ export default function AlumniDashboardPage() {
         onClose={() => setSelectedStudentProfile(null)}
       />
 
-      {/* CHAT MODAL */}
-      {chatStudent && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 md:p-8 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200 h-[80vh] flex flex-col">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4 shrink-0">
-              <div>
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-bold uppercase tracking-wider mb-1">
-                  <MessageSquare className="w-3 h-3" />
-                  Alumni Chat
-                </div>
-                <h3 className="text-xl font-bold text-slate-900">
-                  {chatStudent.student_name} <span className="text-slate-400 font-normal text-sm">({chatStudent.opp_title})</span>
-                </h3>
-              </div>
-              <button
-                onClick={() => setChatStudent(null)}
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 rounded-2xl border border-slate-200 mb-4">
-              {loadingMsgs ? (
-                <div className="text-center py-12 text-slate-400 text-xs">Loading messages...</div>
-              ) : messages.length === 0 ? (
-                <div className="text-center py-12 text-slate-400 text-xs">
-                  No messages yet. Start the conversation!
-                </div>
-              ) : (
-                messages.map(msg => {
-                  const isMe = msg.sender_type === 'alumni';
-                  return (
-                    <div key={msg.id} className={`flex flex-col group ${isMe ? 'items-end' : 'items-start'}`}>
-                      <div className="flex items-center gap-2 mb-1 ml-1 mr-1">
-                        {isMe && (
-                          <button
-                            onClick={() => handleDeleteMessage(msg.id)}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity text-red-400 hover:text-red-600 p-1"
-                            title="Delete message"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        )}
-                        <span className="text-[10px] text-slate-500 font-bold">
-                          {msg.sender_name} ({msg.sender_type})
-                        </span>
-                      </div>
-                      <div className={`px-4 py-2.5 rounded-2xl text-xs max-w-[80%] ${isMe ? 'bg-indigo-600 text-white rounded-br-sm prose prose-invert max-w-none' : 'bg-white border border-slate-200 text-slate-800 rounded-bl-sm prose max-w-none'}`}>
-                        <ReactMarkdown>
-                          {msg.message}
-                        </ReactMarkdown>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-
-            <div className="flex gap-2 mb-2">
-              <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleImageUpload} />
-              <button
-                type="button"
-                onClick={handleInsertLink}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-colors border border-slate-200"
-              >
-                <LinkIcon className="w-3.5 h-3.5" />
-                Insert Link
-              </button>
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploadingImage}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-colors border border-slate-200 disabled:opacity-50"
-              >
-                <ImageIcon className="w-3.5 h-3.5" />
-                {uploadingImage ? 'Uploading...' : 'Post Image'}
-              </button>
-            </div>
-            <form onSubmit={handleSendMessage} className="shrink-0 flex gap-2">
-              <input
-                type="text"
-                placeholder="Type your message..."
-                value={newMessage}
-                onChange={e => setNewMessage(e.target.value)}
-                className="flex-1 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-              <button
-                type="submit"
-                disabled={sendingMsg || !newMessage.trim()}
-                className="px-5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center"
-              >
-                <Send className="w-4 h-4" />
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Creative Alumni Mentorship Dialogue Console */}
+      <CreativeChatConsole
+        isOpen={Boolean(chatStudent)}
+        onClose={() => setChatStudent(null)}
+        title={`Advising: ${chatStudent?.student_name || 'Student'}`}
+        subtitle={`Opportunity: ${chatStudent?.opp_title || 'Alumni Mentorship'}`}
+        recipientRole="Candidate Student"
+        contextTag="Alumni Advisory Stream"
+        messages={messages}
+        currentUserId={alumni?.id}
+        currentUserType="alumni"
+        loading={loadingMsgs}
+        sending={sendingMsg}
+        customPrompts={[
+          {
+            label: "Review Code & Architecture",
+            category: "technical",
+            text: "Could you share the repository link for your most recent capstone project? I would like to review your component architecture."
+          },
+          {
+            label: "Schedule Mock Interview",
+            category: "schedule",
+            text: "I have availability for a 30-minute mock technical interview this week. What days/times work best for your schedule?"
+          },
+          {
+            label: "Referral Assessment Note",
+            category: "inquiry",
+            text: "I reviewed your SkillGraph verified scores. Your backend competencies look strong, and I am preparing your referral endorsement."
+          },
+          {
+            label: "Resume & Portfolio Feedback",
+            category: "milestone",
+            text: "Ensure your resume explicitly highlights the verified project milestones and production deployment metrics."
+          }
+        ]}
+        onSendMessage={async (msg) => {
+          if (!chatStudent) return;
+          setSendingMsg(true);
+          try {
+            await sendAlumniMessage(chatStudent.opp_id, chatStudent.student_id, {
+              sender_id: alumni?.id,
+              sender_name: alumni?.name || 'Alumni Mentor',
+              sender_type: 'alumni',
+              message: msg
+            });
+            const msgs = await getAlumniMessages(chatStudent.opp_id, chatStudent.student_id);
+            setMessages(msgs || []);
+          } catch (e) {
+            console.error(e);
+          } finally {
+            setSendingMsg(false);
+          }
+        }}
+        onDeleteMessage={(id) => handleDeleteMessage(String(id))}
+      />
     </div>
   );
 }

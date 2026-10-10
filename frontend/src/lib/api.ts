@@ -54,6 +54,11 @@ export const getHireabilityScore = async (student_id: string) => {
   return response.data;
 };
 
+export const getStudentProfile = async (student_id: string) => {
+  const response = await api.get(`/api/auth/me/${student_id}`);
+  return response.data;
+};
+
 // --- Assessment APIs ---
 export const getAdaptiveQuestion = async (data: Record<string, unknown>) => {
   const response = await api.post('/api/assessment/get-question', data);

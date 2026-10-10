@@ -34,6 +34,7 @@ import {
   Image as ImageIcon,
   Trash2
 } from 'lucide-react';
+import CreativeChatConsole from '@/components/chat/CreativeChatConsole';
 
 const GithubIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
   <svg className={className} fill="currentColor" viewBox="0 0 24 24">
@@ -74,7 +75,7 @@ export default function StudentOpenSourcePage() {
   const [studentId, setStudentId] = useState<string | null>(null);
 
   useEffect(() => {
-    const sId = localStorage.getItem('student_id');
+    const sId = typeof window !== 'undefined' ? localStorage.getItem('student_id') : null;
     setStudentId(sId);
     loadData(sId);
   }, []);
@@ -83,11 +84,11 @@ export default function StudentOpenSourcePage() {
     setLoading(true);
     try {
       const allProjects = await listOpenSourceProjects();
-      setProjects(allProjects);
+      setProjects(allProjects || []);
 
       if (sId) {
         const apps = await getStudentApplications(sId);
-        setMyApplications(apps);
+        setMyApplications(apps || []);
       }
     } catch (err) {
       console.error('Error fetching open source projects:', err);
@@ -98,7 +99,6 @@ export default function StudentOpenSourcePage() {
 
   const appliedProjectIds = new Set(myApplications.map((app) => app.project?.id || app.project_id));
 
-  // Collect unique tech stack tags
   const allTags = Array.from(
     new Set(projects.flatMap((p) => p.tech_stack || []).filter(Boolean))
   );
@@ -138,9 +138,8 @@ export default function StudentOpenSourcePage() {
       });
 
       setApplySuccess('Application submitted successfully!');
-      // refresh applications
       const updatedApps = await getStudentApplications(studentId);
-      setMyApplications(updatedApps);
+      setMyApplications(updatedApps || []);
       setTimeout(() => {
         setApplyingProject(null);
         setApplySuccess('');
@@ -171,7 +170,7 @@ export default function StudentOpenSourcePage() {
     setLoadingMsgs(true);
     try {
       const msgs = await getProjectMessages(proj.id);
-      setMessages(msgs);
+      setMessages(msgs || []);
     } catch (err) {
       console.error('Failed to load messages:', err);
     } finally {
@@ -184,7 +183,7 @@ export default function StudentOpenSourcePage() {
     if (!chatProject || !studentId || !newMessage.trim()) return;
     setSendingMsg(true);
     try {
-      const sName = localStorage.getItem('student_name') || 'Student Contributor';
+      const sName = typeof window !== 'undefined' ? localStorage.getItem('student_name') || 'Student Contributor' : 'Student Contributor';
       await sendProjectMessage(chatProject.id, {
         sender_type: 'student',
         sender_id: studentId,
@@ -193,7 +192,7 @@ export default function StudentOpenSourcePage() {
       });
       setNewMessage('');
       const msgs = await getProjectMessages(chatProject.id);
-      setMessages(msgs);
+      setMessages(msgs || []);
     } catch (err) {
       console.error('Failed to send message:', err);
     } finally {
@@ -206,93 +205,125 @@ export default function StudentOpenSourcePage() {
       await deleteOpenSourceProjectMessage(msgId);
       if (chatProject) {
         const msgs = await getProjectMessages(chatProject.id);
-        setMessages(msgs);
+        setMessages(msgs || []);
       }
     } catch (e) {
       console.error(e);
     }
   };
 
+  const handleInsertLink = () => {
+    const url = prompt("Enter the link URL (e.g. https://github.com/...)");
+    if (!url) return;
+    const text = prompt("Enter the text to display for the link", "Click here") || "Link";
+    setNewMessage(prev => prev + (prev.endsWith(' ') ? '' : ' ') + `[${text}](${url}) `);
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingImage(true);
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await fetch("http://localhost:8000/api/upload/file", {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) throw new Error("Upload failed");
+      const data = await res.json();
+      if (data.url) {
+        setNewMessage(prev => prev + (prev.endsWith(' ') ? '' : ' ') + `![Image](${data.url}) `);
+      }
+    } catch (error) {
+      console.error("Image upload failed:", error);
+      alert("Failed to upload image. Please try again.");
+    } finally {
+      setUploadingImage(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   return (
-    <div className="space-y-8 animate-in fade-in duration-300">
-      {/* Top Hero Section */}
-      <div className="bg-gradient-to-r from-indigo-900 via-indigo-800 to-slate-900 rounded-3xl p-6 md:p-8 text-white relative overflow-hidden shadow-xl">
-        <div className="absolute right-0 top-0 translate-x-10 -translate-y-10 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="relative z-10 max-w-3xl">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 text-xs font-semibold uppercase tracking-wider mb-4 border border-indigo-400/20 backdrop-blur-md">
-            <GitBranch className="w-3.5 h-3.5 text-indigo-400" />
-            Alumni Open Source Hub
-          </div>
-          <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight mb-3">
-            Build Real Open Source with Alumni Mentors
+    <div className="space-y-6">
+      {/* Top Banner */}
+      <div className="bg-white border border-stone-200 rounded-xl p-6 md:p-8 shadow-sm">
+        <div className="max-w-3xl">
+          <span className="px-2.5 py-1 bg-stone-100 text-stone-700 text-xs font-semibold uppercase tracking-wider rounded border border-stone-200 inline-block mb-3">
+            Alumni Open Source Lab
+          </span>
+          <h1 className="text-2xl md:text-3xl font-serif font-bold text-stone-900 tracking-tight mb-2">
+            Collaborative Open Source Development
           </h1>
-          <p className="text-indigo-200 text-base md:text-lg leading-relaxed">
-            Collaborate directly on production-grade repositories created and mentored by verified alumni. Form specialized teams, ship pull requests, and build an audited portfolio of real-world contributions.
+          <p className="text-stone-600 text-xs md:text-sm leading-relaxed">
+            Collaborate on production repositories overseen by verified alumni practitioners. Contribute code, execute pull requests, and assemble an audited portfolio of real-world deliverables.
           </p>
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex gap-2 mt-8 border-b border-indigo-700/50 pb-0">
+        <div className="flex gap-2 mt-6 border-b border-stone-200 pb-0">
           <button
             onClick={() => setActiveTab('explore')}
-            className={`px-5 py-3 font-semibold text-sm rounded-t-xl transition-all flex items-center gap-2 border-b-2 ${
+            className={`px-4 py-2 font-semibold text-xs rounded-t-lg transition-all flex items-center gap-1.5 border-b-2 ${
               activeTab === 'explore'
-                ? 'bg-white/10 text-white border-indigo-400 backdrop-blur-md shadow-sm'
-                : 'text-indigo-300 hover:text-white border-transparent hover:bg-white/5'
+                ? 'bg-stone-50 text-stone-900 border-emerald-800'
+                : 'text-stone-500 hover:text-stone-800 border-transparent'
             }`}
           >
-            <Search className="w-4 h-4" />
-            Explore Projects ({projects.length})
+            <Search className="w-3.5 h-3.5" />
+            Explore Repositories ({projects.length})
           </button>
           <button
             onClick={() => setActiveTab('my_teams')}
-            className={`px-5 py-3 font-semibold text-sm rounded-t-xl transition-all flex items-center gap-2 border-b-2 ${
+            className={`px-4 py-2 font-semibold text-xs rounded-t-lg transition-all flex items-center gap-1.5 border-b-2 ${
               activeTab === 'my_teams'
-                ? 'bg-white/10 text-white border-indigo-400 backdrop-blur-md shadow-sm'
-                : 'text-indigo-300 hover:text-white border-transparent hover:bg-white/5'
+                ? 'bg-stone-50 text-stone-900 border-emerald-800'
+                : 'text-stone-500 hover:text-stone-800 border-transparent'
             }`}
           >
-            <Users className="w-4 h-4" />
-            My Applications & Teams ({myApplications.length})
+            <Users className="w-3.5 h-3.5" />
+            My Team Assignments ({myApplications.length})
           </button>
         </div>
       </div>
 
       {/* TAB 1: EXPLORE PROJECTS */}
       {activeTab === 'explore' && (
-        <div className="space-y-6">
-          {/* Search & Tag Filter Bar */}
-          <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+        <div className="space-y-4">
+          {/* Search Bar & Tag Filter */}
+          <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between bg-white p-3.5 rounded-xl border border-stone-200 shadow-2xs">
             <div className="relative flex-1">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Search projects by name, description, or alumni mentor..."
+                placeholder="Search projects by title, description, or mentor..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                className="w-full pl-9 pr-3 py-2 text-xs bg-stone-50 border border-stone-300 rounded-lg text-stone-900 focus:outline-none focus:border-emerald-800 focus:bg-white"
               />
             </div>
             {allTags.length > 0 && (
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
                 <button
                   onClick={() => setSelectedTag(null)}
-                  className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-all ${
+                  className={`text-xs px-2.5 py-1 rounded-md font-medium transition-all ${
                     selectedTag === null
-                      ? 'bg-indigo-600 text-white shadow-sm'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      ? 'bg-emerald-800 text-white shadow-2xs'
+                      : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
                   }`}
                 >
-                  All Tech
+                  All Stacks
                 </button>
                 {allTags.map((tag) => (
                   <button
                     key={tag}
                     onClick={() => setSelectedTag(tag === selectedTag ? null : tag)}
-                    className={`text-xs px-3 py-1.5 rounded-lg font-medium whitespace-nowrap transition-all ${
+                    className={`text-xs px-2.5 py-1 rounded-md font-medium whitespace-nowrap transition-all ${
                       selectedTag === tag
-                        ? 'bg-indigo-600 text-white shadow-sm'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        ? 'bg-emerald-800 text-white shadow-2xs'
+                        : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
                     }`}
                   >
                     {tag}
@@ -304,50 +335,47 @@ export default function StudentOpenSourcePage() {
 
           {/* Projects Grid */}
           {loading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {[1, 2, 3].map((i) => (
-                <div key={i} className="h-64 bg-slate-100 rounded-2xl animate-pulse" />
+                <div key={i} className="h-48 bg-stone-100 rounded-xl animate-pulse" />
               ))}
             </div>
           ) : filteredProjects.length === 0 ? (
-            <div className="text-center py-16 bg-white rounded-3xl border border-slate-200 p-8 shadow-sm">
-              <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                <GitBranch className="w-8 h-8" />
-              </div>
-              <h3 className="text-lg font-bold text-slate-900 mb-1">No open source projects found</h3>
-              <p className="text-slate-500 text-sm max-w-md mx-auto">
+            <div className="text-center py-12 bg-white rounded-xl border border-stone-200 p-8 shadow-2xs">
+              <GitBranch className="w-8 h-8 text-stone-300 mx-auto mb-2" />
+              <h3 className="text-sm font-bold text-stone-800 mb-1">No open source projects found</h3>
+              <p className="text-stone-500 text-xs max-w-md mx-auto">
                 {searchTerm || selectedTag
-                  ? 'Try adjusting your search filters to find matching alumni projects.'
-                  : 'Verified alumni haven\'t posted any open source projects yet. Check back soon!'}
+                  ? 'Try adjusting your search criteria.'
+                  : 'Verified alumni have not published any projects at this time.'}
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredProjects.map((project) => {
                 const isApplied = appliedProjectIds.has(project.id);
 
                 return (
                   <div
                     key={project.id}
-                    className="bg-white rounded-2xl border border-slate-200 p-6 flex flex-col justify-between hover:shadow-lg hover:border-indigo-300 transition-all group"
+                    className="bg-white rounded-xl border border-stone-200 p-5 flex flex-col justify-between hover:border-emerald-700 transition-all shadow-2xs hover:shadow-sm"
                   >
                     <div>
-                      {/* Top Header */}
-                      <div className="flex items-start justify-between gap-3 mb-3">
-                        <div className="flex items-center gap-2">
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-1.5">
                           <span
-                            className={`text-[10px] uppercase font-bold tracking-wider px-2.5 py-0.5 rounded-full ${
+                            className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded border ${
                               project.status === 'open'
-                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                                 : project.status === 'in_progress'
-                                ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                                : 'bg-slate-100 text-slate-600'
+                                ? 'bg-amber-50 text-amber-800 border-amber-200'
+                                : 'bg-stone-100 text-stone-600 border-stone-200'
                             }`}
                           >
                             {project.status.replace('_', ' ')}
                           </span>
                           {project.group_count ? (
-                            <span className="text-[10px] font-semibold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full border border-indigo-200 flex items-center gap-1">
+                            <span className="text-[10px] font-semibold bg-stone-100 text-stone-700 px-2 py-0.5 rounded border border-stone-200 flex items-center gap-1">
                               <Layers className="w-3 h-3" />
                               {project.group_count} Teams
                             </span>
@@ -359,83 +387,67 @@ export default function StudentOpenSourcePage() {
                             href={project.repo_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-slate-400 hover:text-slate-900 transition-colors p-1"
-                            title="View GitHub Repository"
+                            className="text-stone-400 hover:text-stone-800 transition-colors p-1"
+                            title="GitHub Repo"
                           >
                             <GithubIcon className="w-4 h-4" />
                           </a>
                         )}
                       </div>
 
-                      {/* Title & Description */}
-                      <h3 className="text-lg font-bold text-slate-900 group-hover:text-indigo-600 transition-colors line-clamp-1 mb-2">
+                      <h3 className="text-base font-bold text-stone-900 line-clamp-1 mb-1">
                         {project.title}
                       </h3>
-                      <p className="text-slate-600 text-sm line-clamp-3 mb-4 leading-relaxed">
-                        {project.description || 'No description provided for this project.'}
+                      <p className="text-stone-600 text-xs line-clamp-3 mb-3 leading-relaxed">
+                        {project.description || 'No description provided.'}
                       </p>
 
-                      {/* Tech Stack Chips */}
                       {project.tech_stack && project.tech_stack.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 mb-4">
+                        <div className="flex flex-wrap gap-1 mb-3">
                           {project.tech_stack.map((tech) => (
                             <span
                               key={tech}
-                              className="text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-medium"
+                              className="text-[11px] bg-stone-100 text-stone-700 px-2 py-0.5 rounded border border-stone-200 font-medium"
                             >
                               {tech}
                             </span>
                           ))}
                         </div>
                       )}
-
-                      {/* Guidelines / Tasks Snippet */}
-                      {project.guidelines && (
-                        <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 mb-4 text-xs text-slate-600">
-                          <span className="font-semibold text-slate-800">Guidelines: </span>
-                          <span className="line-clamp-2">{project.guidelines}</span>
-                        </div>
-                      )}
                     </div>
 
-                    {/* Footer Info & Action */}
-                    <div className="border-t border-slate-100 pt-4 mt-2">
-                      <div className="flex items-center justify-between text-xs text-slate-500 mb-4">
+                    <div className="border-t border-stone-100 pt-3 mt-1">
+                      <div className="flex items-center justify-between text-xs text-stone-500 mb-3">
                         <div className="flex items-center gap-1.5">
-                          <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-[10px]">
+                          <div className="w-5 h-5 rounded-full bg-stone-200 text-stone-700 font-bold flex items-center justify-center text-[10px]">
                             {project.posted_by?.name?.charAt(0) || 'A'}
                           </div>
                           <div>
-                            <p className="font-semibold text-slate-800 line-clamp-1">
+                            <p className="font-semibold text-stone-800 text-xs line-clamp-1">
                               {project.posted_by?.name || 'Alumni Mentor'}
-                            </p>
-                            <p className="text-[10px] text-slate-400">
-                              {project.posted_by?.current_company || 'Industry Alumni'}
                             </p>
                           </div>
                         </div>
 
-                        <div className="text-right">
-                          <span className="text-[10px] text-slate-400 block">Applicants</span>
-                          <span className="font-bold text-slate-700">
+                        <div className="text-right text-[11px]">
+                          <span className="font-bold text-stone-700">
                             {project.applicant_count || 0} / {project.max_contributors}
                           </span>
                         </div>
                       </div>
 
-                      {/* Apply Button */}
                       {isApplied ? (
                         <button
                           disabled
-                          className="w-full py-2.5 px-4 rounded-xl text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center gap-1.5 cursor-default"
+                          className="w-full py-2 px-3 rounded-lg text-xs font-semibold bg-stone-100 text-stone-600 border border-stone-200 flex items-center justify-center gap-1.5 cursor-default"
                         >
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-800" />
                           Application Submitted
                         </button>
                       ) : (
                         <button
                           onClick={() => handleOpenApply(project)}
-                          className="w-full py-2.5 px-4 rounded-xl text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 shadow-sm shadow-indigo-600/20"
+                          className="w-full py-2 px-3 rounded-lg text-xs font-semibold bg-emerald-800 text-white hover:bg-emerald-900 transition-colors flex items-center justify-center gap-1.5 shadow-2xs"
                         >
                           <Send className="w-3.5 h-3.5" />
                           Apply as Contributor
@@ -452,168 +464,63 @@ export default function StudentOpenSourcePage() {
 
       {/* TAB 2: MY APPLICATIONS & TEAMS */}
       {activeTab === 'my_teams' && (
-        <div className="space-y-6">
-          {loading ? (
-            <div className="h-64 bg-slate-100 rounded-2xl animate-pulse" />
-          ) : myApplications.length === 0 ? (
-            <div className="text-center py-16 bg-white rounded-3xl border border-slate-200 p-8 shadow-sm">
-              <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                <GitBranch className="w-8 h-8" />
-              </div>
-              <h3 className="text-lg font-bold text-slate-900 mb-1">No applications yet</h3>
-              <p className="text-slate-500 text-sm max-w-md mx-auto mb-6">
-                You haven&apos;t applied to any alumni open source projects. Browse the explore tab and send your application!
+        <div className="space-y-4">
+          {myApplications.length === 0 ? (
+            <div className="bg-white rounded-xl border border-stone-200 p-12 text-center shadow-2xs">
+              <Users className="w-8 h-8 text-stone-300 mx-auto mb-2" />
+              <h3 className="text-sm font-bold text-stone-800 mb-1">No Active Project Teams</h3>
+              <p className="text-stone-500 text-xs">
+                Explore the open repositories tab to apply for team slots.
               </p>
-              <button
-                onClick={() => setActiveTab('explore')}
-                className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-semibold hover:bg-indigo-700 shadow-md transition-all"
-              >
-                Browse Projects
-              </button>
             </div>
           ) : (
-            <div className="space-y-6">
+            <div className="space-y-3">
               {myApplications.map((app) => {
-                const proj = app.project || {};
-                const isSelected = app.status === 'hired' || app.status === 'selected' || !!app.assigned_group;
-                const isShortlisted = app.status === 'shortlisted';
-
+                const project = app.project || {};
                 return (
                   <div
-                    key={app.application_id}
-                    className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition-all"
+                    key={app.application_id || app.id}
+                    className="bg-white rounded-xl border border-stone-200 p-5 shadow-2xs"
                   >
-                    <div className="p-6 md:p-8">
-                      {/* Top Bar */}
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-5 mb-6">
-                        <div>
-                          <div className="flex items-center gap-2 mb-2">
-                            <span
-                              className={`text-[11px] font-bold uppercase tracking-wider px-3 py-1 rounded-full ${
-                                isSelected
-                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                  : isShortlisted
-                                  ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                                  : app.status === 'rejected'
-                                  ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                                  : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
-                              }`}
-                            >
-                              {isSelected ? 'Accepted & In Team' : isShortlisted ? 'Shortlisted' : app.status}
-                            </span>
-                            <span className="text-xs text-slate-400">
-                              Applied on {new Date(app.applied_at).toLocaleDateString()}
-                            </span>
-                          </div>
-                          <h2 className="text-xl md:text-2xl font-bold text-slate-900">
-                            {proj.title || 'Open Source Project'}
-                          </h2>
-                          <p className="text-sm text-slate-500 mt-1">
-                            Mentored by{' '}
-                            <span className="font-semibold text-slate-700">
-                              {proj.posted_by?.name || 'Alumni Mentor'}
-                            </span>{' '}
-                            ({proj.posted_by?.current_company || 'Industry Partner'})
-                          </p>
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-3">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${
+                            app.status === 'accepted' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
+                            app.status === 'rejected' ? 'bg-stone-100 text-stone-600 border-stone-200' :
+                            'bg-amber-50 text-amber-800 border-amber-200'
+                          }`}>
+                            {app.status}
+                          </span>
                         </div>
-
-                        {/* Action buttons */}
-                        <div className="flex items-center gap-3">
-                          {proj.repo_url && (
-                            <a
-                              href={proj.repo_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all"
-                            >
-                              <GithubIcon className="w-4 h-4" />
-                              GitHub Repo
-                              <ExternalLink className="w-3 h-3 text-slate-400" />
-                            </a>
-                          )}
-                          {isSelected && (
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() => handleViewPerformance(proj.id, proj.title)}
-                                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm shadow-indigo-600/20"
-                              >
-                                <TrendingUp className="w-4 h-4" />
-                                My Performance Graph
-                              </button>
-                              <button
-                                onClick={() => handleOpenChat(proj)}
-                                className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all"
-                              >
-                                <MessageSquare className="w-4 h-4" />
-                                Team Chat
-                              </button>
-                            </div>
-                          )}
-                        </div>
+                        <h3 className="text-base font-bold text-stone-900">{project.title || 'Untitled Project'}</h3>
                       </div>
 
-                      {/* Team / Group Section if selected */}
-                      {app.assigned_group ? (
-                        <div className="bg-indigo-50/70 border border-indigo-100 rounded-2xl p-5 mb-6">
-                          <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center gap-2">
-                              <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-sm">
-                                <Users className="w-4 h-4" />
-                              </div>
-                              <div>
-                                <h4 className="font-bold text-slate-900 text-sm">
-                                  Assigned Group: {app.assigned_group.name}
-                                </h4>
-                                <p className="text-xs text-indigo-700">
-                                  Your Role: <span className="font-semibold uppercase tracking-wider">{app.assigned_group.role || 'Contributor'}</span>
-                                </p>
-                              </div>
-                            </div>
-                            <span className="text-xs bg-indigo-100 text-indigo-800 font-semibold px-2.5 py-1 rounded-full">
-                              Active Team
-                            </span>
-                          </div>
-
-                          {/* Teammates */}
-                          {app.group_members && app.group_members.length > 0 && (
-                            <div>
-                              <p className="text-xs font-semibold text-slate-700 mb-2">Team Members ({app.group_members.length}):</p>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
-                                {app.group_members.map((member: any) => (
-                                  <div
-                                    key={member.id}
-                                    className="bg-white p-3 rounded-xl border border-indigo-100/80 flex items-center gap-2.5"
-                                  >
-                                    <div className="w-7 h-7 rounded-full bg-slate-100 text-slate-700 font-bold text-xs flex items-center justify-center">
-                                      {member.name?.charAt(0) || 'S'}
-                                    </div>
-                                    <div className="overflow-hidden">
-                                      <p className="text-xs font-bold text-slate-900 truncate">{member.name}</p>
-                                      <p className="text-[10px] text-slate-500 truncate">{member.branch || 'Student'}</p>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 mb-6 flex items-center gap-3">
-                          <Clock className="w-5 h-5 text-amber-500 flex-shrink-0" />
-                          <p className="text-xs text-slate-600">
-                            Your application is currently under review by the alumni mentor. Once selected, your team assignments and performance tracking will appear here.
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Submitted Pitch */}
-                      {app.pitch && (
-                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-xs text-slate-600">
-                          <span className="font-semibold text-slate-800 block mb-1">Your Application Note:</span>
-                          <p className="italic leading-relaxed">{app.pitch}</p>
-                        </div>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {app.status === 'accepted' && (
+                          <>
+                            <button
+                              onClick={() => handleViewPerformance(project.id, project.title)}
+                              className="px-3 py-1.5 bg-white border border-stone-300 hover:bg-stone-50 text-stone-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs"
+                            >
+                              <TrendingUp className="w-3.5 h-3.5 text-emerald-800" /> Metrics
+                            </button>
+                            <button
+                              onClick={() => handleOpenChat(project)}
+                              className="px-3 py-1.5 bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs"
+                            >
+                              <MessageSquare className="w-3.5 h-3.5" /> Team Chat
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
+
+                    {app.pitch && (
+                      <p className="text-xs text-stone-600 bg-stone-50 p-3 rounded-lg border border-stone-100 italic">
+                        &quot;{app.pitch}&quot;
+                      </p>
+                    )}
                   </div>
                 );
               })}
@@ -624,69 +531,62 @@ export default function StudentOpenSourcePage() {
 
       {/* APPLY MODAL */}
       {applyingProject && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 md:p-8 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-6">
+        <div className="fixed inset-0 z-50 bg-stone-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-lg w-full p-6 shadow-xl border border-stone-200 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-stone-200 mb-4">
               <div>
-                <h3 className="text-lg font-bold text-slate-900">Apply as Contributor</h3>
-                <p className="text-xs text-slate-500">{applyingProject.title}</p>
+                <h3 className="text-sm font-bold text-stone-900">Apply as Contributor</h3>
+                <p className="text-xs text-stone-500">{applyingProject.title}</p>
               </div>
               <button
                 onClick={() => setApplyingProject(null)}
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500"
+                className="p-1 text-stone-400 hover:text-stone-600 rounded-md"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {applyError && (
-              <div className="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700 flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <div className="mb-3 p-2.5 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700">
                 {applyError}
               </div>
             )}
 
             {applySuccess && (
-              <div className="mb-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-700 flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+              <div className="mb-3 p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-700">
                 {applySuccess}
               </div>
             )}
 
-            <form onSubmit={handleSubmitApplication} className="space-y-4">
+            <form onSubmit={handleSubmitApplication} className="space-y-3">
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                  Why do you want to contribute to this project?
+                <label className="block text-xs font-semibold text-stone-700 uppercase tracking-wider mb-1">
+                  Candidate Note / Qualifications
                 </label>
                 <textarea
                   rows={4}
                   required
-                  placeholder="Mention your relevant skills, past projects, GitHub experience, or why you are excited to work on this repository..."
+                  placeholder="Detail your relevant language, framework, or architecture experience..."
                   value={pitch}
                   onChange={(e) => setPitch(e.target.value)}
-                  className="w-full text-xs p-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all leading-relaxed"
+                  className="w-full text-xs p-3 bg-stone-50 border border-stone-300 rounded-lg text-stone-900 focus:outline-none focus:border-emerald-800 focus:bg-white"
                 />
               </div>
 
-              <div className="p-3 bg-indigo-50 rounded-xl border border-indigo-100 text-[11px] text-indigo-700 flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-indigo-600 flex-shrink-0" />
-                Your verified SkillGraph Hireability score & skills will automatically be shared with the alumni mentor.
-              </div>
-
-              <div className="flex gap-3 pt-4">
+              <div className="flex gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setApplyingProject(null)}
-                  className="flex-1 py-2.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"
+                  className="flex-1 py-2 text-xs font-semibold text-stone-600 bg-stone-100 hover:bg-stone-200 rounded-lg"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={applyingLoading || !!applySuccess}
-                  className="flex-1 py-2.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  className="flex-1 py-2 text-xs font-semibold text-white bg-emerald-800 hover:bg-emerald-900 rounded-lg disabled:opacity-50 shadow-2xs"
                 >
-                  {applyingLoading ? 'Submitting...' : 'Submit Application'}
+                  {applyingLoading ? 'Submitting...' : 'Submit Note'}
                 </button>
               </div>
             </form>
@@ -696,279 +596,99 @@ export default function StudentOpenSourcePage() {
 
       {/* PERFORMANCE GRAPH MODAL */}
       {(selectedPerfData || perfLoading) && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 md:p-8 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-6">
+        <div className="fixed inset-0 z-50 bg-stone-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-xl w-full p-6 shadow-xl border border-stone-200 animate-in zoom-in-95 duration-150 max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-stone-200 mb-4">
               <div>
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-bold uppercase tracking-wider mb-1">
-                  <TrendingUp className="w-3 h-3" />
-                  Performance Analytics
-                </div>
-                <h3 className="text-xl font-bold text-slate-900">
-                  {perfProjectTitle || 'Project Contribution Graph'}
+                <h3 className="text-sm font-bold text-stone-900">
+                  {perfProjectTitle || 'Project Contribution Analytics'}
                 </h3>
               </div>
               <button
                 onClick={() => setSelectedPerfData(null)}
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500"
+                className="p-1 text-stone-400 hover:text-stone-600 rounded-md"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {perfLoading ? (
-              <div className="h-64 bg-slate-100 rounded-2xl animate-pulse" />
+              <div className="h-48 bg-stone-100 rounded-lg animate-pulse" />
             ) : selectedPerfData ? (
-              <div className="space-y-6">
-                {/* Overall Score Badge */}
-                <div className="bg-gradient-to-br from-indigo-900 to-indigo-800 rounded-2xl p-6 text-white flex items-center justify-between shadow-lg">
+              <div className="space-y-4">
+                <div className="bg-stone-50 border border-stone-200 rounded-xl p-4 flex items-center justify-between">
                   <div>
-                    <span className="text-xs uppercase tracking-wider text-indigo-300 font-semibold block mb-1">
-                      Overall Contribution Rating
-                    </span>
-                    <h4 className="text-3xl font-extrabold">
-                      {selectedPerfData.logs.length === 0 ? (
-                        <span className="text-2xl text-slate-300">Not Evaluated Yet</span>
-                      ) : (
-                        <>
-                          {selectedPerfData.overall_performance_score} <span className="text-lg text-indigo-300">/ 100</span>
-                        </>
-                      )}
+                    <span className="text-[10px] uppercase font-bold text-stone-500 block mb-0.5">Overall Rating</span>
+                    <h4 className="text-2xl font-bold text-stone-900">
+                      {selectedPerfData.overall_performance_score} <span className="text-xs text-stone-500 font-normal">/ 100</span>
                     </h4>
-                    <p className="text-xs text-indigo-200 mt-1">
-                      {selectedPerfData.logs.length === 0
-                        ? "No evaluations recorded yet for this project."
-                        : "Evaluated across code quality, task velocity & team collaboration"}
-                    </p>
                   </div>
-                  <div className="w-16 h-16 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20">
-                    <Award className="w-8 h-8 text-amber-400" />
-                  </div>
+                  <Award className="w-6 h-6 text-emerald-800" />
                 </div>
 
-                {/* Metric Breakdown Bars (Visual Performance Chart) */}
-                <div>
-                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3">
-                    Skill & Contribution Metrics
-                  </h4>
-                  {selectedPerfData.metric_breakdown.length === 0 ? (
-                    <div className="text-center py-6 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                      <p className="text-xs text-slate-500 font-medium">
-                        No performance evaluations recorded yet.
-                      </p>
-                      <p className="text-[11px] text-slate-400 mt-1">
-                        Your alumni mentor will evaluate your contributions as you start working on project milestones.
-                      </p>
+                <div className="space-y-2">
+                  {selectedPerfData.metric_breakdown.map((item) => (
+                    <div key={item.metric} className="p-2.5 bg-stone-50 border border-stone-200 rounded-lg">
+                      <div className="flex justify-between text-xs font-semibold text-stone-800 mb-1">
+                        <span>{item.metric}</span>
+                        <span>{item.score}%</span>
+                      </div>
+                      <div className="w-full bg-stone-200 h-1.5 rounded-full overflow-hidden">
+                        <div className="bg-emerald-800 h-full rounded-full" style={{ width: `${item.score}%` }} />
+                      </div>
                     </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {selectedPerfData.metric_breakdown.map((item) => (
-                        <div key={item.metric} className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
-                          <div className="flex justify-between items-center text-xs font-semibold text-slate-800 mb-1.5">
-                            <span>{item.metric}</span>
-                            <span className="text-indigo-600 font-bold">{item.score}%</span>
-                          </div>
-                          <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
-                            <div
-                              className="bg-indigo-600 h-2 rounded-full transition-all duration-700"
-                              style={{ width: `${Math.min(100, Math.max(5, item.score))}%` }}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  ))}
                 </div>
-
-                {/* Weekly Progression Timeline */}
-                {selectedPerfData.weekly_progress.length > 0 && (
-                  <div>
-                    <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3">
-                      Weekly Score Progression
-                    </h4>
-                    <div className="flex items-end gap-3 h-32 bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                      {selectedPerfData.weekly_progress.map((w) => (
-                        <div key={w.week} className="flex-1 flex flex-col items-center h-full justify-end group">
-                          <span className="text-[10px] font-bold text-indigo-600 mb-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            {w.average_score}%
-                          </span>
-                          <div
-                            className="w-full bg-indigo-500 rounded-t-lg transition-all group-hover:bg-indigo-600"
-                            style={{ height: `${Math.min(100, Math.max(15, w.average_score))}%` }}
-                          />
-                          <span className="text-[10px] font-medium text-slate-500 mt-2 truncate w-full text-center">
-                            {w.week}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Detailed Feedback Logs */}
-                {selectedPerfData.logs && selectedPerfData.logs.length > 0 && (
-                  <div>
-                    <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3">
-                      Mentor Feedback & Milestone Notes
-                    </h4>
-                    <div className="space-y-2.5 max-h-48 overflow-y-auto pr-1">
-                      {selectedPerfData.logs.map((log) => (
-                        <div key={log.id} className="p-3 rounded-xl bg-slate-50 border border-slate-100 text-xs">
-                          <div className="flex justify-between items-center mb-1">
-                            <span className="font-semibold text-slate-800">{log.metric_name}</span>
-                            <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100/60 px-2 py-0.5 rounded-full">
-                              Score: {log.score}
-                            </span>
-                          </div>
-                          <p className="text-slate-600">{log.feedback || 'Good contribution and clean code standards.'}</p>
-                          <span className="text-[10px] text-slate-400 mt-1 block">
-                            Logged for {log.week_label || 'Sprint'}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
             ) : null}
           </div>
         </div>
       )}
 
-      {/* TEAM CHAT MODAL */}
-      {chatProject && (() => {
-        const handleInsertLink = () => {
-          const url = prompt("Enter the link URL (e.g. https://github.com/...)");
-          if (!url) return;
-          const text = prompt("Enter the text to display for the link", "Click here") || "Link";
-          setNewMessage(prev => prev + (prev.endsWith(' ') ? '' : ' ') + `[${text}](${url}) `);
-        };
-
-        const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-          const file = e.target.files?.[0];
-          if (!file) return;
-
-          setUploadingImage(true);
-          const formData = new FormData();
-          formData.append("file", file);
-
+      {/* CREATIVE TEAM CHAT CONSOLE */}
+      <CreativeChatConsole
+        isOpen={Boolean(chatProject)}
+        onClose={() => setChatProject(null)}
+        title={`${chatProject?.title || 'Open Source'} Team Channel`}
+        subtitle="Collaborative Engineering & Architecture Dispatch"
+        recipientRole="Project Maintainers & Contributors"
+        contextTag="OpenSource Stream"
+        messages={messages}
+        currentUserId={studentId}
+        currentUserType="student"
+        loading={loadingMsgs}
+        sending={sendingMsg}
+        onSendMessage={async (msg) => {
+          if (!chatProject || !studentId) return;
+          const sName = typeof window !== 'undefined' ? localStorage.getItem('student_name') || 'Student' : 'Student';
+          setSendingMsg(true);
           try {
-            const res = await fetch("http://localhost:8000/api/upload/file", {
-              method: "POST",
-              body: formData,
+            await sendProjectMessage(chatProject.id, {
+              sender_id: studentId,
+              sender_name: sName,
+              sender_type: 'student',
+              message: msg
             });
-            if (!res.ok) throw new Error("Upload failed");
-            const data = await res.json();
-            if (data.url) {
-              setNewMessage(prev => prev + (prev.endsWith(' ') ? '' : ' ') + `![Image](${data.url}) `);
-            }
-          } catch (error) {
-            console.error("Image upload failed:", error);
-            alert("Failed to upload image. Please try again.");
+            const msgs = await getProjectMessages(chatProject.id);
+            setMessages(msgs || []);
+          } catch (e) {
+            console.error(e);
           } finally {
-            setUploadingImage(false);
-            if (fileInputRef.current) fileInputRef.current.value = "";
+            setSendingMsg(false);
           }
-        };
-
-        return (
-          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl max-w-2xl w-full p-6 md:p-8 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200 h-[80vh] flex flex-col">
-              <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4 shrink-0">
-                <div>
-                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-bold uppercase tracking-wider mb-1">
-                    <MessageSquare className="w-3 h-3" />
-                    Team Chat
-                  </div>
-                  <h3 className="text-xl font-bold text-slate-900">
-                    {chatProject.title}
-                  </h3>
-                </div>
-                <button
-                  onClick={() => setChatProject(null)}
-                  className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 rounded-2xl border border-slate-200 mb-4">
-                {loadingMsgs ? (
-                  <div className="text-center py-12 text-slate-400 text-xs">Loading messages...</div>
-                ) : messages.length === 0 ? (
-                  <div className="text-center py-12 text-slate-400 text-xs">
-                    No messages yet. Start the conversation with your team!
-                  </div>
-                ) : (
-                  messages.map(msg => {
-                    const isMe = msg.sender_type === 'student' && msg.sender_id === studentId;
-                    return (
-                      <div key={msg.id} className={`flex flex-col group ${isMe ? 'items-end' : 'items-start'}`}>
-                        <div className="flex items-center gap-2 mb-1 ml-1 mr-1">
-                          {isMe && (
-                            <button
-                              onClick={() => handleDeleteMessage(msg.id)}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity text-red-400 hover:text-red-600 p-1"
-                              title="Delete message"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          )}
-                          <span className="text-[10px] text-slate-500 font-bold">
-                            {msg.sender_name} ({msg.sender_type})
-                          </span>
-                        </div>
-                        <div className={`px-4 py-2.5 rounded-2xl text-xs max-w-[80%] ${isMe ? 'bg-indigo-600 text-white rounded-br-sm prose prose-invert max-w-none' : 'bg-white border border-slate-200 text-slate-800 rounded-bl-sm prose max-w-none'}`}>
-                          <ReactMarkdown>
-                            {msg.message}
-                          </ReactMarkdown>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-
-              <form onSubmit={handleSendMessage} className="shrink-0 flex flex-col gap-2">
-                <div className="flex gap-2">
-                  <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleImageUpload} />
-                  <button
-                    type="button"
-                    onClick={handleInsertLink}
-                    className="px-2 py-1.5 text-xs font-semibold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center gap-1 transition-colors"
-                  >
-                    <LinkIcon className="w-3.5 h-3.5" /> Insert Link
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={uploadingImage}
-                    className="px-2 py-1.5 text-xs font-semibold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center gap-1 transition-colors disabled:opacity-50"
-                  >
-                    <ImageIcon className="w-3.5 h-3.5" /> {uploadingImage ? 'Uploading...' : 'Post Image'}
-                  </button>
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="Type a message..."
-                    value={newMessage}
-                    onChange={e => setNewMessage(e.target.value)}
-                    className="flex-1 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                  <button
-                    type="submit"
-                    disabled={sendingMsg || !newMessage.trim()}
-                    className="px-5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center"
-                  >
-                    <Send className="w-4 h-4" />
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        );
-      })()}
+        }}
+        onDeleteMessage={async (msgId) => {
+          try {
+            await deleteOpenSourceProjectMessage(String(msgId));
+            if (chatProject) {
+              const msgs = await getProjectMessages(chatProject.id);
+              setMessages(msgs || []);
+            }
+          } catch (e) {
+            console.error(e);
+          }
+        }}
+      />
     </div>
   );
 }

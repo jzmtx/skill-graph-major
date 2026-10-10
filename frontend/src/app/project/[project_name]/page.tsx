@@ -20,7 +20,7 @@ export default function ProjectSubmissionPage({ params }: { params: Promise<{ pr
 
   const decodedName = decodeURIComponent(project_name);
   const isCapstone = decodedName.toLowerCase() === "capstone";
-  const displayTitle = isCapstone ? "Industry Capstone Project" : `${decodedName} Verification`;
+  const displayTitle = isCapstone ? "Industry Capstone Milestone" : `${decodedName} Project Verification`;
 
   useEffect(() => {
     async function fetchIdea() {
@@ -35,7 +35,7 @@ export default function ProjectSubmissionPage({ params }: { params: Promise<{ pr
         setProjectIdea(data.idea);
       } catch (e) {
         console.error("Failed to fetch project idea", e);
-        setProjectIdea("Build a comprehensive, full-stack application that includes authentication, a database, and a complex domain logic feature.");
+        setProjectIdea("Implement an end-to-end production architecture with modular components, data persistence, and verified testing suites.");
       } finally {
         setIsLoadingIdea(false);
       }
@@ -48,36 +48,32 @@ export default function ProjectSubmissionPage({ params }: { params: Promise<{ pr
     if (!repoUrl) return;
     
     setIsSubmitting(true);
-    
-    // Simulate backend processing for the presentation
     setTimeout(() => {
       setIsSubmitting(false);
       setSubmitted(true);
-    }, 2000);
+    }, 1500);
   };
 
   if (submitted) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
+      <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center p-4">
         <motion.div 
-          initial={{ scale: 0.9, opacity: 0 }}
+          initial={{ scale: 0.95, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          className="max-w-md w-full bg-slate-900 border border-emerald-500/30 rounded-2xl p-8 text-center relative overflow-hidden"
+          className="max-w-md w-full bg-white border border-stone-200 rounded-xl p-8 text-center shadow-sm"
         >
-          <div className="absolute inset-0 bg-emerald-500/5 pointer-events-none" />
-          
-          <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-emerald-500/20">
-            <CheckCircle2 className="w-10 h-10 text-emerald-400" />
+          <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-emerald-200">
+            <CheckCircle2 className="w-8 h-8 text-emerald-800" />
           </div>
           
-          <h2 className="text-2xl font-black text-white mb-2">Project Submitted!</h2>
-          <p className="text-slate-400 mb-8">
-            Your codebase is now being analyzed by our automated engineering agents. You will receive your architectural review and certification shortly.
+          <h2 className="text-xl font-serif font-bold text-stone-900 mb-2">Project Repository Registered</h2>
+          <p className="text-stone-600 text-xs leading-relaxed mb-6">
+            Your codebase has been queued for automated architecture verification and code quality inspection.
           </p>
           
           <button 
             onClick={() => router.push("/dashboard/roadmap")}
-            className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 px-4 rounded-xl transition-colors border border-slate-700"
+            className="w-full bg-emerald-800 hover:bg-emerald-900 text-white font-semibold py-2.5 px-4 rounded-lg text-xs transition-colors shadow-2xs"
           >
             Return to Roadmap
           </button>
@@ -87,124 +83,83 @@ export default function ProjectSubmissionPage({ params }: { params: Promise<{ pr
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200 p-4 md:p-8">
-      <div className="max-w-3xl mx-auto mt-12">
-        <Link href="/dashboard/roadmap" className="inline-flex items-center gap-2 text-slate-500 hover:text-slate-300 font-medium mb-8 transition-colors">
+    <div className="min-h-screen bg-stone-50 text-stone-900 p-4 md:p-8">
+      <div className="max-w-3xl mx-auto mt-6">
+        <Link href="/dashboard/roadmap" className="inline-flex items-center gap-1.5 text-stone-500 hover:text-stone-800 text-xs font-medium mb-6 transition-colors">
           <ChevronLeft className="w-4 h-4" /> Back to Roadmap
         </Link>
         
-        <div className="mb-10">
-          <div className="flex items-center gap-3 mb-4">
-            <div className={`p-3 rounded-xl shadow-lg ${isCapstone ? 'bg-emerald-500/10 text-emerald-400' : 'bg-indigo-500/10 text-indigo-400'}`}>
-              <UploadCloud className="w-6 h-6" />
+        <div className="mb-6">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800">
+              <UploadCloud className="w-5 h-5" />
             </div>
-            <h1 className="text-3xl md:text-4xl font-black text-white">{displayTitle}</h1>
+            <h1 className="text-2xl font-serif font-bold text-stone-900">{displayTitle}</h1>
           </div>
-          <p className="text-slate-400 text-lg">
-            Submit your repository for automated AI code review and verification.
+          <p className="text-stone-600 text-xs">
+            Submit your GitHub repository for automated architectural review and Level 2 skill certification.
           </p>
         </div>
 
-        {/* Dynamic Project Requirements Section */}
-        <div className="mb-8 bg-slate-900 border border-indigo-500/30 rounded-2xl p-6 md:p-8 relative overflow-hidden group">
-          <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500" />
-          <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-            <TerminalSquare className="w-5 h-5 text-indigo-400" /> Your Assigned Project
+        {/* Assigned Project Requirements Section */}
+        <div className="mb-6 bg-white border border-stone-200 rounded-xl p-5 shadow-sm">
+          <h2 className="text-xs font-bold text-stone-800 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+            <TerminalSquare className="w-4 h-4 text-emerald-800" /> Assigned Deliverable Specifications
           </h2>
           
           {isLoadingIdea ? (
-            <div className="flex items-center gap-3 text-slate-400">
-              <Loader2 className="w-5 h-5 animate-spin" /> Generating custom requirements...
+            <div className="flex items-center gap-2 text-stone-500 text-xs py-2">
+              <Loader2 className="w-4 h-4 animate-spin text-emerald-800" /> Formulating project criteria...
             </div>
           ) : (
-            <div className="text-slate-300 leading-relaxed text-sm md:text-base">
+            <div className="text-stone-700 leading-relaxed text-xs">
               {projectIdea}
             </div>
           )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          <div className="md:col-span-2 space-y-6">
-            <form onSubmit={handleSubmit} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 md:p-8 shadow-xl">
-              <div className="space-y-6">
-                <div>
-                  <label className="block text-sm font-bold text-slate-300 mb-2 flex items-center gap-2">
-                    <GitBranch className="w-4 h-4" /> GitHub Repository URL *
-                  </label>
-                  <input 
-                    type="url" 
-                    required
-                    value={repoUrl}
-                    onChange={(e) => setRepoUrl(e.target.value)}
-                    placeholder="https://github.com/username/project"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-slate-200 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all placeholder:text-slate-600"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-bold text-slate-300 mb-2 flex items-center gap-2">
-                    <Globe className="w-4 h-4" /> Live Deployment URL (Optional)
-                  </label>
-                  <input 
-                    type="url" 
-                    value={liveUrl}
-                    onChange={(e) => setLiveUrl(e.target.value)}
-                    placeholder="https://my-project.vercel.app"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-slate-200 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all placeholder:text-slate-600"
-                  />
-                </div>
-              </div>
-              
-              <div className="mt-8 pt-6 border-t border-slate-800">
-                <button 
-                  type="submit"
-                  disabled={isSubmitting || !repoUrl}
-                  className={`w-full flex items-center justify-center gap-2 font-black py-4 rounded-xl transition-all ${
-                    isSubmitting || !repoUrl 
-                      ? 'bg-slate-800 text-slate-500 cursor-not-allowed' 
-                      : isCapstone
-                        ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:-translate-y-0.5'
-                        : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-[0_0_20px_rgba(99,102,241,0.2)] hover:-translate-y-0.5'
-                  }`}
-                >
-                  {isSubmitting ? (
-                    <motion.div 
-                      animate={{ rotate: 360 }}
-                      transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                      className="w-5 h-5 border-2 border-slate-400 border-t-transparent rounded-full"
-                    />
-                  ) : (
-                    <>Submit for Review <UploadCloud className="w-5 h-5" /></>
-                  )}
-                </button>
-              </div>
-            </form>
+        <form onSubmit={handleSubmit} className="bg-white border border-stone-200 rounded-xl p-6 shadow-sm space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-stone-700 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+              <GitBranch className="w-3.5 h-3.5 text-stone-500" /> GitHub Repository URL *
+            </label>
+            <input 
+              type="url" 
+              required
+              value={repoUrl}
+              onChange={(e) => setRepoUrl(e.target.value)}
+              placeholder="https://github.com/username/project"
+              className="w-full bg-stone-50 border border-stone-300 rounded-lg px-3 py-2 text-xs text-stone-900 focus:outline-none focus:border-emerald-800 focus:bg-white transition-all placeholder:text-stone-400"
+            />
           </div>
           
-          <div className="space-y-4">
-            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5">
-              <h3 className="font-bold text-white flex items-center gap-2 mb-4">
-                <ShieldCheck className="w-4 h-4 text-emerald-400" /> Evaluation Criteria
-              </h3>
-              <ul className="space-y-4">
-                <li className="flex items-start gap-3">
-                  <Code2 className="w-4 h-4 text-indigo-400 mt-0.5 shrink-0" />
-                  <div>
-                    <p className="text-sm font-bold text-slate-200">Code Quality</p>
-                    <p className="text-xs text-slate-500 mt-0.5">Clean architecture, DRY principles, and proper error handling.</p>
-                  </div>
-                </li>
-                <li className="flex items-start gap-3">
-                  <GitBranch className="w-4 h-4 text-blue-400 mt-0.5 shrink-0" />
-                  <div>
-                    <p className="text-sm font-bold text-slate-200">Best Practices</p>
-                    <p className="text-xs text-slate-500 mt-0.5">Correct usage of framework paradigms and security patterns.</p>
-                  </div>
-                </li>
-              </ul>
-            </div>
+          <div>
+            <label className="block text-xs font-semibold text-stone-700 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+              <Globe className="w-3.5 h-3.5 text-stone-500" /> Live Deployment URL (Optional)
+            </label>
+            <input 
+              type="url" 
+              value={liveUrl}
+              onChange={(e) => setLiveUrl(e.target.value)}
+              placeholder="https://your-deployment.domain.com"
+              className="w-full bg-stone-50 border border-stone-300 rounded-lg px-3 py-2 text-xs text-stone-900 focus:outline-none focus:border-emerald-800 focus:bg-white transition-all placeholder:text-stone-400"
+            />
           </div>
-        </div>
+          
+          <div className="pt-2 border-t border-stone-100">
+            <button 
+              type="submit"
+              disabled={isSubmitting || !repoUrl}
+              className="w-full flex items-center justify-center gap-2 font-semibold py-2.5 rounded-lg text-xs transition-all bg-emerald-800 hover:bg-emerald-900 text-white shadow-2xs disabled:opacity-50"
+            >
+              {isSubmitting ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <>Submit Repository for Review <UploadCloud className="w-4 h-4" /></>
+              )}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );

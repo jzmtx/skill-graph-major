@@ -132,8 +132,8 @@
 
 @media print {
   body {
-    background: #020617 !important;
-    color: white !important;
+    background: #ffffff !important;
+    color: #1c1917 !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }

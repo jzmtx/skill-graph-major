@@ -103,7 +103,7 @@ def calculate_hireability_index(skills: list[dict]) -> dict:
         events = [
             {
                 "type": "skill_assessed",
-                "icon": "🎯",
+                "icon": "target",
                 "label": f"{name} — {level_label}",
                 "detail": f"Score: {score} × {weight}x weight = {round(base_skill_pts)} base pts",
                 "pts": round(decayed_skill_pts),
@@ -118,7 +118,7 @@ def calculate_hireability_index(skills: list[dict]) -> dict:
             velocity_bonus += (score * 0.15)
             events.append({
                 "type": "velocity_bonus",
-                "icon": "⚡",
+                "icon": "zap",
                 "label": f"{name} — 30-Day Velocity Bonus",
                 "detail": f"Verified within 30 days: +{v_bonus} pts",
                 "pts": v_bonus,
@@ -131,7 +131,7 @@ def calculate_hireability_index(skills: list[dict]) -> dict:
             project_bonus += 50
             events.append({
                 "type": "project_bonus",
-                "icon": "🏆",
+                "icon": "award",
                 "label": f"{name} — Project Submission Bonus",
                 "detail": "Level 2 project verified: +50 pts",
                 "pts": 50,

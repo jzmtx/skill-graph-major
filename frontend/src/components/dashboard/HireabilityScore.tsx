@@ -3,11 +3,22 @@
 import { useEffect, useState, useRef } from "react";
 import { motion, useMotionValue, useTransform, animate, useSpring } from "framer-motion";
 import { getHireabilityScore } from "@/lib/api";
-import { ShieldCheck, TrendingUp, Layers, Code, Zap, Flame, CalendarClock } from "lucide-react";
+import { 
+  ShieldCheck, 
+  TrendingUp, 
+  Layers, 
+  Zap, 
+  Award, 
+  Clock, 
+  ChevronDown, 
+  GitBranch, 
+  CheckCircle2,
+  Target
+} from "lucide-react";
 
 interface PointEvent {
   type: string;
-  icon: string;
+  icon?: string;
   label: string;
   detail: string;
   pts: number | string;
@@ -34,22 +45,20 @@ export default function HireabilityScore({ studentIdProp }: { studentIdProp?: st
   const [loading, setLoading] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
 
-  // 3D Tilt Effect State (Fluid Springs)
+  // Subtle interactive hover state
   const cardRef = useRef<HTMLDivElement>(null);
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
   
-  // Spring configuration for buttery smooth movement
-  const springConfig = { damping: 25, stiffness: 120, mass: 0.5 };
+  const springConfig = { damping: 30, stiffness: 140, mass: 0.6 };
   const x = useSpring(mouseX, springConfig);
   const y = useSpring(mouseY, springConfig);
   
-  // Magic numbers for rotation intensity (reduced for subtlety)
-  const rotateX = useTransform(y, [-300, 300], [4, -4]);
-  const rotateY = useTransform(x, [-300, 300], [-4, 4]);
+  const rotateX = useTransform(y, [-200, 200], [1.5, -1.5]);
+  const rotateY = useTransform(x, [-200, 200], [-1.5, 1.5]);
 
-  // Animated Counter State
-  const count = useMotionValue(0);
+  // Animated Counter
+  const count = useMotionValue(300);
   const rounded = useTransform(count, Math.round);
 
   useEffect(() => {
@@ -59,11 +68,10 @@ export default function HireabilityScore({ studentIdProp }: { studentIdProp?: st
         if (studentId) {
           const res = await getHireabilityScore(studentId);
           setData(res);
-          // Animate the counter on load
-          animate(count, res.score, { duration: 2, ease: "easeOut" });
+          animate(count, res.score || 300, { duration: 1.6, ease: "easeOut" });
         }
       } catch (e) {
-        console.error("Failed to load score", e);
+        console.error("Failed to load hireability score", e);
       } finally {
         setLoading(false);
       }
@@ -86,255 +94,284 @@ export default function HireabilityScore({ studentIdProp }: { studentIdProp?: st
     mouseY.set(0);
   };
 
-  if (loading) return (
-    <div className="w-full h-64 bg-slate-900 animate-pulse rounded-3xl border border-slate-800"></div>
-  );
+  if (loading) {
+    return (
+      <div className="w-full h-80 bg-white rounded-2xl border border-stone-200 shadow-2xs animate-pulse p-8">
+        <div className="h-6 w-48 bg-stone-200 rounded mb-4"></div>
+        <div className="h-4 w-96 bg-stone-100 rounded mb-8"></div>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="h-28 bg-stone-100 rounded-xl"></div>
+          <div className="h-28 bg-stone-100 rounded-xl"></div>
+          <div className="h-28 bg-stone-100 rounded-xl"></div>
+          <div className="h-28 bg-stone-100 rounded-xl"></div>
+        </div>
+      </div>
+    );
+  }
 
   if (!data) return null;
 
-  // Calculate SVG Circle Dasharray for the gauge (Circumference = 2 * PI * r)
-  // R = 120 -> Circ = 753.98
-  const circumference = 2 * Math.PI * 120;
-  // Normalize score (300 to 850) -> 0 to 1
-  const normalizedScore = Math.max(0, Math.min(1, (data.score - 300) / 550));
-  const strokeDashoffset = circumference - normalizedScore * circumference;
+  const score = data.score || 300;
+  const normalized = Math.max(0, Math.min(1, (score - 300) / 550));
+  const circumference = 2 * Math.PI * 92;
+  const strokeDashoffset = circumference - normalized * circumference;
+
+  const getTierInfo = (s: number) => {
+    if (s >= 750) return { label: "Top-Tier Candidate", color: "text-emerald-800 bg-emerald-50 border-emerald-300", stroke: "#166534" };
+    if (s >= 650) return { label: "Industry Ready", color: "text-emerald-800 bg-stone-100 border-stone-300", stroke: "#15803D" };
+    if (s >= 520) return { label: "Competitive", color: "text-stone-800 bg-amber-50 border-amber-300", stroke: "#B45309" };
+    if (s >= 400) return { label: "Developing", color: "text-stone-700 bg-stone-100 border-stone-200", stroke: "#78716C" };
+    return { label: "Foundational Baseline", color: "text-stone-600 bg-stone-100 border-stone-200", stroke: "#A8A29E" };
+  };
+
+  const tier = getTierInfo(score);
+  const decayAmount = Math.max(0, Math.round(data.breakdown.base_depth - data.breakdown.decayed_depth));
+
+  const renderEventIcon = (type: string) => {
+    switch (type) {
+      case "project_bonus":
+        return <Award className="w-4 h-4 text-emerald-800" />;
+      case "velocity_bonus":
+        return <Zap className="w-4 h-4 text-amber-700" />;
+      case "skill_assessed":
+      case "base_skill":
+        return <Target className="w-4 h-4 text-stone-700" />;
+      default:
+        return <CheckCircle2 className="w-4 h-4 text-stone-600" />;
+    }
+  };
 
   return (
-    <div 
-      className="relative w-full max-w-5xl mx-auto my-8 [perspective:1000px]"
-    >
+    <div className="w-full [perspective:1000px]">
       <motion.div
         ref={cardRef}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
         style={{ rotateX, rotateY }}
-        className="w-full rounded-3xl bg-slate-950 border border-slate-800 shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden relative"
+        className="w-full rounded-2xl bg-white border border-stone-200 shadow-2xs hover:shadow-xs transition-shadow relative overflow-hidden"
       >
-        {/* Deep Glow Background */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-blue-500/20 blur-[100px] rounded-full pointer-events-none"></div>
+        {/* Classical Top Trim */}
+        <div className="h-1.5 w-full bg-stone-200" />
 
-        <div className="flex flex-col lg:flex-row items-center justify-between p-8 md:p-12 gap-12 relative z-10">
+        <div className="p-6 md:p-8">
           
-          {/* Left Side: The 3D Gauge */}
-          <div className="relative flex items-center justify-center">
-            {/* Outer SVG Gauge with continuous floating animation */}
-            <motion.svg 
-              width="300" 
-              height="300" 
-              viewBox="0 0 300 300" 
-              className="transform -rotate-90 drop-shadow-2xl"
-              animate={{
-                y: [0, -8, 0],
-              }}
-              transition={{
-                duration: 4,
-                ease: "easeInOut",
-                repeat: Infinity,
-              }}
-            >
-              {/* Background Track */}
-              <circle
-                cx="150"
-                cy="150"
-                r="120"
-                fill="none"
-                stroke="#1e293b"
-                strokeWidth="20"
-                strokeLinecap="round"
-              />
-              {/* Animated Progress Ring */}
-              <motion.circle
-                cx="150"
-                cy="150"
-                r="120"
-                fill="none"
-                stroke="url(#gradient)"
-                strokeWidth="20"
-                strokeLinecap="round"
-                strokeDasharray={circumference}
-                initial={{ strokeDashoffset: circumference }}
-                animate={{ strokeDashoffset }}
-                transition={{ duration: 2.5, ease: [0.16, 1, 0.3, 1], delay: 0.2 }} // custom bouncy ease
-                style={{ filter: "drop-shadow(0 0 10px rgba(56,189,248,0.5))" }}
-              />
-              <defs>
-                <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#38bdf8" /> {/* Tailwind sky-400 */}
-                  <stop offset="100%" stopColor="#34d399" /> {/* Tailwind emerald-400 */}
-                </linearGradient>
-              </defs>
-            </motion.svg>
-
-            {/* Inner Content (The Score) */}
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-              <span className="text-slate-400 text-sm font-semibold tracking-widest uppercase mb-1">Index Score</span>
-              <motion.span className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-br from-sky-300 to-emerald-300 tracking-tighter">
-                {rounded}
-              </motion.span>
-              <span className="text-slate-500 text-xs mt-2 font-medium">Range: 300 - 850</span>
-            </div>
-          </div>
-
-          {/* Right Side: The Breakdown */}
-          <div className="flex-1 w-full space-y-6">
+          {/* Header Row */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-6 border-b border-stone-200 gap-4">
             <div>
-              <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                <ShieldCheck className="text-emerald-400" />
-                Employability Metrics
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-stone-500">Global Learner Index</span>
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${tier.color}`}>
+                  {tier.label}
+                </span>
+              </div>
+              <h2 className="text-xl md:text-2xl font-bold text-stone-900 mt-1 font-serif">
+                Hireability Index Rating
               </h2>
-              <p className="text-slate-400 text-sm mt-1">
-                Your Hireability Index is dynamically calculated based on depth, synergy, and activity.
+              <p className="text-sm text-stone-600 mt-0.5">
+                Standardized employability rating computed from verified code depth, cross-stack synergy, and consistency.
               </p>
             </div>
+            
+            <div className="flex items-center gap-2 self-start sm:self-auto text-xs text-stone-600 bg-stone-50 border border-stone-200 px-3 py-1.5 rounded-lg">
+              <ShieldCheck className="w-4 h-4 text-emerald-800" />
+              <span>Institutional Model · 300 to 850</span>
+            </div>
+          </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              
-              {/* Metric Card 1 */}
-              <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 flex items-start gap-3 backdrop-blur-sm">
-                <div className="p-2 bg-blue-500/10 rounded-lg">
-                  <Code className="w-5 h-5 text-blue-400" />
-                </div>
-                <div>
-                  <p className="text-xs text-slate-400 font-medium uppercase tracking-wider">Base Depth</p>
-                  <p className="text-xl font-bold text-white mt-0.5">{data.breakdown.base_depth}</p>
-                  <p className="text-xs text-slate-500 mt-1">Level 2 projects count 3x more.</p>
+          {/* Main Visual & Breakdown Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 py-6 items-center">
+            
+            {/* Left Gauge */}
+            <div className="lg:col-span-4 flex flex-col items-center justify-center p-4">
+              <div className="relative w-56 h-56 flex items-center justify-center">
+                <svg width="220" height="220" viewBox="0 0 220 220" className="transform -rotate-90">
+                  {/* Track */}
+                  <circle
+                    cx="110"
+                    cy="110"
+                    r="92"
+                    fill="none"
+                    stroke="#F5F5F4"
+                    strokeWidth="16"
+                    strokeLinecap="round"
+                  />
+                  {/* Progress Indicator */}
+                  <motion.circle
+                    cx="110"
+                    cy="110"
+                    r="92"
+                    fill="none"
+                    stroke={tier.stroke}
+                    strokeWidth="16"
+                    strokeLinecap="round"
+                    strokeDasharray={circumference}
+                    initial={{ strokeDashoffset: circumference }}
+                    animate={{ strokeDashoffset }}
+                    transition={{ duration: 1.8, ease: [0.16, 1, 0.3, 1] }}
+                  />
+                </svg>
+
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-center select-none">
+                  <span className="text-[11px] font-semibold text-stone-500 uppercase tracking-widest">Index Score</span>
+                  <motion.span className="text-5xl font-black text-stone-900 tracking-tight my-0.5 font-serif">
+                    {rounded}
+                  </motion.span>
+                  <span className="text-xs font-semibold text-stone-500">Scale 300 – 850</span>
                 </div>
               </div>
 
-              {/* Metric Card 2 */}
-              <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 flex items-start gap-3 backdrop-blur-sm">
-                <div className="p-2 bg-indigo-500/10 rounded-lg">
-                  <Layers className="w-5 h-5 text-indigo-400" />
-                </div>
-                <div>
-                  <p className="text-xs text-slate-400 font-medium uppercase tracking-wider">Stack Synergy</p>
-                  <p className="text-xl font-bold text-white mt-0.5">{data.breakdown.synergy_multiplier.toFixed(2)}x</p>
-                  <p className="text-xs text-slate-500 mt-1">Multiplier for connecting tech stacks.</p>
-                </div>
+              <div className="flex items-center gap-4 mt-2 text-xs text-stone-500">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-stone-300"></span> 300 Base
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-800"></span> 850 Benchmark
+                </span>
               </div>
-
-              {/* Metric Card 3 */}
-              <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 flex items-start gap-3 backdrop-blur-sm">
-                <div className="p-2 bg-emerald-500/10 rounded-lg">
-                  <TrendingUp className="w-5 h-5 text-emerald-400" />
-                </div>
-                <div>
-                  <p className="text-xs text-slate-400 font-medium uppercase tracking-wider">Consistency</p>
-                  <p className="text-xl font-bold text-white mt-0.5">{data.breakdown.consistency_multiplier.toFixed(2)}x</p>
-                  <p className="text-xs text-slate-500 mt-1">Bonus for learning consistently over time.</p>
-                </div>
-              </div>
-
-              {/* Metric Card 4 */}
-              <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 flex items-start gap-3 backdrop-blur-sm">
-                <div className="p-2 bg-rose-500/10 rounded-lg">
-                  <CalendarClock className="w-5 h-5 text-rose-400" />
-                </div>
-                <div>
-                  <p className="text-xs text-slate-400 font-medium uppercase tracking-wider">Skill Decay</p>
-                  <p className="text-xl font-bold text-white mt-0.5">
-                    -{Math.round(data.breakdown.base_depth - data.breakdown.decayed_depth)} pts
-                  </p>
-                  <p className="text-xs text-slate-500 mt-1">Lost points due to inactive skills.</p>
-                </div>
-              </div>
-
             </div>
 
-            {/* Bonuses */}
-            {(data.breakdown.project_bonus > 0 || data.breakdown.velocity_bonus > 0) && (
-              <div className="mt-4 pt-4 border-t border-slate-800 flex gap-4">
-                {data.breakdown.project_bonus > 0 && (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-semibold border border-emerald-500/20">
-                    <Zap className="w-3.5 h-3.5" /> +{data.breakdown.project_bonus} Project Bonus
-                  </span>
-                )}
-                {data.breakdown.velocity_bonus > 0 && (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-500/10 text-orange-400 text-xs font-semibold border border-orange-500/20">
-                    <Flame className="w-3.5 h-3.5" /> +{data.breakdown.velocity_bonus} 30-Day Velocity
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
+            {/* Right Side: Key Factor Cards */}
+            <div className="lg:col-span-8 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                
+                {/* Metric 1: Base Depth */}
+                <div className="p-4 rounded-xl border border-stone-200 bg-stone-50/70 flex items-start gap-3.5">
+                  <div className="p-2.5 rounded-lg bg-white border border-stone-200 text-stone-800 shrink-0">
+                    <Layers className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">Skill Base Depth</div>
+                    <div className="text-xl font-bold text-stone-900 mt-0.5">
+                      {Math.round(data.breakdown.base_depth)} <span className="text-xs font-normal text-stone-500">pts</span>
+                    </div>
+                    <p className="text-xs text-stone-600 mt-0.5">Level 2 projects count 3× more than L1 assessments.</p>
+                  </div>
+                </div>
 
-        {/* Points History — Collapsible */}
-        {data.points_history && data.points_history.length > 0 && (
-          <div className="px-8 md:px-12 pb-8 relative z-10">
-            <div className="border-t border-slate-800 pt-5">
-              {/* Toggle Button */}
+                {/* Metric 2: Stack Synergy */}
+                <div className="p-4 rounded-xl border border-stone-200 bg-stone-50/70 flex items-start gap-3.5">
+                  <div className="p-2.5 rounded-lg bg-white border border-stone-200 text-stone-800 shrink-0">
+                    <GitBranch className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">Stack Synergy</div>
+                    <div className="text-xl font-bold text-stone-900 mt-0.5">
+                      {data.breakdown.synergy_multiplier.toFixed(2)}×
+                    </div>
+                    <p className="text-xs text-stone-600 mt-0.5">Reward multiplier for connecting complementary domains.</p>
+                  </div>
+                </div>
+
+                {/* Metric 3: Consistency Factor */}
+                <div className="p-4 rounded-xl border border-stone-200 bg-stone-50/70 flex items-start gap-3.5">
+                  <div className="p-2.5 rounded-lg bg-white border border-stone-200 text-stone-800 shrink-0">
+                    <TrendingUp className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">Consistency Factor</div>
+                    <div className="text-xl font-bold text-stone-900 mt-0.5">
+                      {data.breakdown.consistency_multiplier.toFixed(2)}×
+                    </div>
+                    <p className="text-xs text-stone-600 mt-0.5">Stability multiplier for continuous learning and tests.</p>
+                  </div>
+                </div>
+
+                {/* Metric 4: Recency Decay */}
+                <div className="p-4 rounded-xl border border-stone-200 bg-stone-50/70 flex items-start gap-3.5">
+                  <div className="p-2.5 rounded-lg bg-white border border-stone-200 text-stone-800 shrink-0">
+                    <Clock className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">Recency Decay</div>
+                    <div className="text-xl font-bold text-stone-900 mt-0.5">
+                      {decayAmount > 0 ? `-${decayAmount} pts` : `0 pts`}
+                    </div>
+                    <p className="text-xs text-stone-600 mt-0.5">Simulates tech stack half-life for unmaintained skills.</p>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Verified Modifiers Bar */}
+              {(data.breakdown.project_bonus > 0 || data.breakdown.velocity_bonus > 0) && (
+                <div className="flex flex-wrap items-center gap-2 pt-2">
+                  <span className="text-xs font-semibold text-stone-600 mr-1">Earned Modifiers:</span>
+                  {data.breakdown.project_bonus > 0 && (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-emerald-50 text-emerald-800 text-xs font-semibold border border-emerald-200">
+                      <Award className="w-3.5 h-3.5" /> +{data.breakdown.project_bonus} Project Milestone
+                    </span>
+                  )}
+                  {data.breakdown.velocity_bonus > 0 && (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-amber-50 text-amber-800 text-xs font-semibold border border-amber-200">
+                      <Zap className="w-3.5 h-3.5" /> +{data.breakdown.velocity_bonus} 30-Day Activity Velocity
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+
+          </div>
+
+          {/* Points Audit Trail (Collapsible) */}
+          {data.points_history && data.points_history.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-stone-200">
               <button
                 onClick={() => setShowHistory(v => !v)}
-                className="w-full flex items-center justify-between text-sm font-semibold text-slate-400 hover:text-slate-200 transition-colors group"
+                className="w-full flex items-center justify-between text-xs font-bold text-stone-600 hover:text-stone-900 transition-colors py-1 group"
               >
-                <span className="flex items-center gap-2 uppercase tracking-widest text-xs">
-                  <CalendarClock className="w-4 h-4" />
-                  Points History — How this score was earned
-                  <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-500 text-[10px] font-bold">
-                    {data.points_history.length} events
+                <span className="flex items-center gap-2 uppercase tracking-wider">
+                  <Clock className="w-3.5 h-3.5 text-stone-500" />
+                  Points Ledger & Audit History
+                  <span className="px-2 py-0.5 rounded-full bg-stone-100 text-stone-700 font-semibold text-[10px]">
+                    {data.points_history.length} logged events
                   </span>
                 </span>
-                <span className={`transition-transform duration-300 ${showHistory ? 'rotate-180' : 'rotate-0'}`}>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
+                <span className={`p-1 rounded transition-transform duration-200 ${showHistory ? 'rotate-180' : 'rotate-0'}`}>
+                  <ChevronDown className="w-4 h-4 text-stone-400 group-hover:text-stone-600" />
                 </span>
               </button>
 
-              {/* Collapsible Content */}
               <motion.div
                 initial={false}
                 animate={{ height: showHistory ? 'auto' : 0, opacity: showHistory ? 1 : 0 }}
-                transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+                transition={{ duration: 0.25, ease: "easeInOut" }}
                 className="overflow-hidden"
               >
-                <div className="relative pt-5">
-                  <div className="absolute left-5 top-5 bottom-0 w-px bg-slate-800" />
-                  <div className="space-y-4">
-                    {data.points_history.map((event, i) => {
-                      const colorMap: Record<string, { bg: string; ring: string; text: string }> = {
-                        indigo: { bg: 'bg-indigo-500/10', ring: 'ring-indigo-500/30', text: 'text-indigo-400' },
-                        orange: { bg: 'bg-orange-500/10', ring: 'ring-orange-500/30', text: 'text-orange-400' },
-                        emerald: { bg: 'bg-emerald-500/10', ring: 'ring-emerald-500/30', text: 'text-emerald-400' },
-                        blue: { bg: 'bg-blue-500/10', ring: 'ring-blue-500/30', text: 'text-blue-400' },
-                        purple: { bg: 'bg-purple-500/10', ring: 'ring-purple-500/30', text: 'text-purple-400' },
-                      };
-                      const colors = colorMap[event.color] || colorMap.indigo;
-                      const dateStr = event.date
-                        ? new Date(event.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-                        : 'Applied to total';
+                <div className="pt-4 space-y-2.5">
+                  {data.points_history.map((event, idx) => {
+                    const dateFormatted = event.date 
+                      ? new Date(event.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
+                      : "Applied to baseline";
+                    
+                    return (
+                      <div 
+                        key={idx}
+                        className="p-3 rounded-lg border border-stone-200 bg-stone-50 hover:bg-stone-100/80 transition-colors flex items-center justify-between gap-4"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-8 h-8 rounded-lg bg-white border border-stone-200 flex items-center justify-center shrink-0 shadow-2xs">
+                            {renderEventIcon(event.type)}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-stone-800 truncate">{event.label}</p>
+                            <p className="text-xs text-stone-500 truncate">{event.detail} · <span className="text-stone-400">{dateFormatted}</span></p>
+                          </div>
+                        </div>
 
-                      return (
-                        <motion.div
-                          key={i}
-                          initial={{ opacity: 0, x: -10 }}
-                          animate={{ opacity: showHistory ? 1 : 0, x: showHistory ? 0 : -10 }}
-                          transition={{ delay: showHistory ? i * 0.04 : 0, duration: 0.25 }}
-                          className="relative pl-14 flex items-start gap-4"
-                        >
-                          <div className={`absolute left-0 w-10 h-10 rounded-full ${colors.bg} ring-1 ${colors.ring} flex items-center justify-center text-lg`}>
-                            {event.icon}
-                          </div>
-                          <div className="flex-1 bg-slate-900/40 rounded-xl border border-slate-800 p-3 flex items-center justify-between gap-4">
-                            <div>
-                              <p className="text-sm font-semibold text-slate-200">{event.label}</p>
-                              <p className="text-xs text-slate-500 mt-0.5">{event.detail}</p>
-                              <p className="text-[11px] text-slate-600 mt-1">{dateStr}</p>
-                            </div>
-                            <div className={`text-right shrink-0 font-black text-lg ${colors.text}`}>
-                              {typeof event.pts === 'number' ? `+${event.pts}` : event.pts}
-                            </div>
-                          </div>
-                        </motion.div>
-                      );
-                    })}
-                  </div>
+                        <div className="text-right shrink-0">
+                          <span className="text-sm font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-md font-mono">
+                            {typeof event.pts === "number" ? `+${event.pts}` : event.pts}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </motion.div>
             </div>
-          </div>
-        )}
+          )}
+
+        </div>
       </motion.div>
     </div>
   );

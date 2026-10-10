@@ -87,63 +87,63 @@ export default function AdminUsersPage() {
   const typeBadgeColor = (type: string) => {
     switch (type) {
       case "Student":
-        return "bg-indigo-500/10 text-indigo-400 border-indigo-500/20";
+        return "bg-stone-100 text-stone-800 border-stone-200";
       case "Company":
-        return "bg-amber-500/10 text-amber-400 border-amber-500/20";
+        return "bg-emerald-50 text-emerald-800 border-emerald-200";
       case "TPO":
-        return "bg-sky-500/10 text-sky-400 border-sky-500/20";
+        return "bg-amber-50 text-amber-800 border-amber-200";
       case "Alumni":
-        return "bg-pink-500/10 text-pink-400 border-pink-500/20";
+        return "bg-stone-200 text-stone-800 border-stone-300";
       default:
-        return "bg-slate-800 text-slate-400 border-slate-700";
+        return "bg-stone-100 text-stone-600 border-stone-200";
     }
   };
 
   return (
-    <div className="p-8">
+    <div className="p-8 max-w-7xl mx-auto font-sans">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2">Users Management</h1>
-        <p className="text-slate-400">View and manage all registered students, companies, TPOs, and alumni.</p>
+        <h1 className="text-2xl font-bold text-stone-900 mb-1 tracking-tight">User Directory & Permissions</h1>
+        <p className="text-stone-500 text-xs">Audit and monitor all registered students, corporate recruiters, placement officers, and alumni.</p>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl">
-          <div className="text-slate-400 text-sm font-medium mb-1">Total Users</div>
-          <div className="text-3xl font-bold text-white">{users.length}</div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
+        <div className="bg-white border border-stone-200 p-5 rounded-xl shadow-xs">
+          <div className="text-stone-500 text-xs font-semibold uppercase tracking-wider mb-1">Total Registered Entities</div>
+          <div className="text-2xl font-bold text-stone-900">{users.length}</div>
         </div>
-        <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl">
-          <div className="text-slate-400 text-sm font-medium mb-1">Verified Users</div>
-          <div className="text-3xl font-bold text-emerald-400">
+        <div className="bg-white border border-stone-200 p-5 rounded-xl shadow-xs">
+          <div className="text-stone-500 text-xs font-semibold uppercase tracking-wider mb-1">Verified Users</div>
+          <div className="text-2xl font-bold text-emerald-800">
             {users.filter((u) => u.verified).length}
           </div>
         </div>
-        <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl">
-          <div className="text-slate-400 text-sm font-medium mb-1">Total Skills Verified</div>
-          <div className="text-3xl font-bold text-indigo-400">
+        <div className="bg-white border border-stone-200 p-5 rounded-xl shadow-xs">
+          <div className="text-stone-500 text-xs font-semibold uppercase tracking-wider mb-1">Total Skills Verified</div>
+          <div className="text-2xl font-bold text-stone-800">
             {users.reduce((acc, user) => acc + (user.skills?.length || 0), 0)}
           </div>
         </div>
       </div>
 
       {/* Search + Type Filter */}
-      <div className="mb-6 flex flex-col md:flex-row gap-4">
+      <div className="mb-6 flex flex-col md:flex-row gap-3">
         <div className="relative flex-1">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 w-5 h-5" />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400 w-4 h-4" />
           <input
             type="text"
-            placeholder="Search users by name or email..."
+            placeholder="Search records by name or email..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-12 pr-4 py-4 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+            className="w-full bg-white border border-stone-300 rounded-lg pl-10 pr-4 py-2.5 text-xs text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-1 focus:ring-emerald-700 shadow-xs"
           />
         </div>
         <select
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value)}
-          className="bg-slate-900 border border-slate-800 rounded-xl px-4 py-4 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="bg-white border border-stone-300 rounded-lg px-4 py-2.5 text-xs text-stone-800 font-medium focus:outline-none focus:ring-1 focus:ring-emerald-700 shadow-xs"
         >
-          <option value="All">All Types</option>
+          <option value="All">All User Types</option>
           <option value="Student">Students</option>
           <option value="Company">Companies</option>
           <option value="TPO">TPOs</option>
@@ -152,70 +152,70 @@ export default function AdminUsersPage() {
       </div>
 
       {/* Users Table */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+      <div className="bg-white border border-stone-200 rounded-xl overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead className="bg-slate-900 border-b border-slate-800 text-slate-400 text-sm">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-stone-50 border-b border-stone-200 text-stone-600 font-semibold uppercase tracking-wider text-[11px]">
               <tr>
-                <th className="p-4 font-medium">User</th>
-                <th className="p-4 font-medium">Type</th>
-                <th className="p-4 font-medium">Contact</th>
-                <th className="p-4 font-medium">Location / Org</th>
-                <th className="p-4 font-medium">Verified Status</th>
-                <th className="p-4 font-medium">Verified Skills</th>
+                <th className="p-4">User</th>
+                <th className="p-4">Type</th>
+                <th className="p-4">Contact</th>
+                <th className="p-4">Location / Org</th>
+                <th className="p-4">Status</th>
+                <th className="p-4">Verified Skills</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800">
+            <tbody className="divide-y divide-stone-200">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-slate-500">Loading users...</td>
+                  <td colSpan={6} className="p-8 text-center text-stone-400">Loading user directory...</td>
                 </tr>
               ) : filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-slate-500">No users found.</td>
+                  <td colSpan={6} className="p-8 text-center text-stone-400">No matching user records located.</td>
                 </tr>
               ) : (
                 filteredUsers.map((user) => (
-                  <tr key={`${user.user_type}-${user.id}`} className="hover:bg-slate-800/50 transition-colors">
+                  <tr key={`${user.user_type}-${user.id}`} className="hover:bg-stone-50/80 transition-colors">
                     <td className="p-4">
-                      <div className="font-medium text-white">{user.name}</div>
-                      <div className="text-xs text-slate-500">ID: {user.id?.slice(0, 8)}...</div>
+                      <div className="font-semibold text-stone-900">{user.name}</div>
+                      <div className="text-[10px] text-stone-400">ID: {user.id?.slice(0, 8)}...</div>
                     </td>
                     <td className="p-4">
-                      <span className={`inline-flex py-1.5 px-3 rounded-full text-xs font-medium border ${typeBadgeColor(user.user_type)}`}>
+                      <span className={`inline-flex py-1 px-2.5 rounded-full text-[10px] font-semibold border ${typeBadgeColor(user.user_type)}`}>
                         {user.user_type}
                       </span>
                     </td>
                     <td className="p-4">
-                      <div className="flex items-center gap-2 text-sm text-slate-300">
-                        <Mail className="w-4 h-4 text-slate-500" />
+                      <div className="flex items-center gap-1.5 text-stone-700">
+                        <Mail className="w-3.5 h-3.5 text-stone-400 shrink-0" />
                         {user.email}
                       </div>
                     </td>
                     <td className="p-4">
                       {user.location && (
-                        <div className="flex items-center gap-2 text-sm text-slate-400">
-                          <MapPin className="w-3 h-3" /> {user.location}
+                        <div className="flex items-center gap-1.5 text-stone-600">
+                          <MapPin className="w-3.5 h-3.5 text-stone-400 shrink-0" /> {user.location}
                         </div>
                       )}
                     </td>
                     <td className="p-4">
                       {user.verified ? (
-                        <span className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                          <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span className="inline-flex items-center gap-1 py-0.5 px-2.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                          <CheckCircle2 className="w-3 h-3" />
                           Verified
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-full text-xs font-medium bg-slate-800 text-slate-400 border border-slate-700">
-                          <XCircle className="w-3.5 h-3.5" />
+                        <span className="inline-flex items-center gap-1 py-0.5 px-2.5 rounded-full text-[10px] font-semibold bg-stone-100 text-stone-500 border border-stone-200">
+                          <XCircle className="w-3 h-3" />
                           Pending
                         </span>
                       )}
                     </td>
                     <td className="p-4">
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-wrap gap-1">
                         {user.skills?.map((skill: any, i: number) => (
-                          <span key={i} className="inline-flex px-2 py-1 bg-indigo-500/10 text-indigo-400 text-xs rounded border border-indigo-500/20">
+                          <span key={i} className="inline-flex px-1.5 py-0.5 bg-stone-100 text-stone-700 text-[10px] font-medium rounded border border-stone-200">
                             {skill.skill_name} (L{skill.verification_level})
                           </span>
                         ))}

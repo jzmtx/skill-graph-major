@@ -5,54 +5,69 @@ import { GraduationCap, Building2, Users, LogIn } from 'lucide-react';
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-stone-50 flex items-center justify-center p-4 text-stone-900">
       <div className="w-full max-w-3xl text-center">
-        <h1 className="text-4xl font-bold text-slate-800 tracking-tight mb-3">SkillGraph</h1>
-        <p className="text-slate-500 mb-10">
-          Live-market-driven roadmaps, verified skills, and a connected career ecosystem.
+        
+        {/* Brand Monogram */}
+        <div className="w-12 h-12 rounded-xl bg-emerald-800 text-white flex items-center justify-center mx-auto mb-4 font-serif font-bold text-xl shadow-2xs">
+          S
+        </div>
+
+        <h1 className="text-4xl font-extrabold text-stone-900 tracking-tight mb-2 font-serif">SkillGraph</h1>
+        <p className="text-stone-600 text-sm max-w-lg mx-auto mb-10 leading-relaxed">
+          Standardized competency benchmarking, live market roadmaps, and an integrated campus placement network.
         </p>
 
-        <p className="text-sm font-medium text-slate-600 mb-4">I am a...</p>
+        <p className="text-xs font-bold uppercase tracking-wider text-stone-500 mb-4">Select Portal Role</p>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-10">
           <Link
             href="/register"
-            className="flex flex-col items-center gap-3 bg-white border border-slate-200 rounded-2xl p-6 hover:border-indigo-400 hover:shadow-md transition-all"
+            className="flex flex-col items-center gap-3 bg-white border border-stone-200 rounded-xl p-6 hover:border-emerald-800 hover:shadow-2xs transition-all group"
           >
-            <GraduationCap className="w-8 h-8 text-indigo-600" />
-            <span className="font-medium text-slate-800">Student</span>
+            <div className="w-12 h-12 rounded-lg bg-stone-100 group-hover:bg-emerald-50 flex items-center justify-center transition-colors">
+              <GraduationCap className="w-6 h-6 text-stone-700 group-hover:text-emerald-800 transition-colors" />
+            </div>
+            <span className="font-semibold text-stone-900 text-sm font-serif">Student</span>
           </Link>
 
           <Link
             href="/company/register"
-            className="flex flex-col items-center gap-3 bg-white border border-slate-200 rounded-2xl p-6 hover:border-indigo-400 hover:shadow-md transition-all"
+            className="flex flex-col items-center gap-3 bg-white border border-stone-200 rounded-xl p-6 hover:border-emerald-800 hover:shadow-2xs transition-all group"
           >
-            <Building2 className="w-8 h-8 text-indigo-600" />
-            <span className="font-medium text-slate-800">Company</span>
+            <div className="w-12 h-12 rounded-lg bg-stone-100 group-hover:bg-emerald-50 flex items-center justify-center transition-colors">
+              <Building2 className="w-6 h-6 text-stone-700 group-hover:text-emerald-800 transition-colors" />
+            </div>
+            <span className="font-semibold text-stone-900 text-sm font-serif">Company</span>
           </Link>
 
           <Link
             href="/tpo/register"
-            className="flex flex-col items-center gap-3 bg-white border border-slate-200 rounded-2xl p-6 hover:border-indigo-400 hover:shadow-md transition-all"
+            className="flex flex-col items-center gap-3 bg-white border border-stone-200 rounded-xl p-6 hover:border-emerald-800 hover:shadow-2xs transition-all group"
           >
-            <GraduationCap className="w-8 h-8 text-indigo-600" />
-            <span className="font-medium text-slate-800">TPO / College</span>
+            <div className="w-12 h-12 rounded-lg bg-stone-100 group-hover:bg-emerald-50 flex items-center justify-center transition-colors">
+              <GraduationCap className="w-6 h-6 text-stone-700 group-hover:text-emerald-800 transition-colors" />
+            </div>
+            <span className="font-semibold text-stone-900 text-sm font-serif">TPO / College</span>
           </Link>
 
           <Link
             href="/alumni/register"
-            className="flex flex-col items-center gap-3 bg-white border border-slate-200 rounded-2xl p-6 hover:border-indigo-400 hover:shadow-md transition-all"
+            className="flex flex-col items-center gap-3 bg-white border border-stone-200 rounded-xl p-6 hover:border-emerald-800 hover:shadow-2xs transition-all group"
           >
-            <Users className="w-8 h-8 text-indigo-600" />
-            <span className="font-medium text-slate-800">Alumni</span>
+            <div className="w-12 h-12 rounded-lg bg-stone-100 group-hover:bg-emerald-50 flex items-center justify-center transition-colors">
+              <Users className="w-6 h-6 text-stone-700 group-hover:text-emerald-800 transition-colors" />
+            </div>
+            <span className="font-semibold text-stone-900 text-sm font-serif">Alumni</span>
           </Link>
         </div>
 
         <Link
           href="/login"
-          className="inline-flex items-center gap-2 text-sm text-indigo-600 font-medium hover:underline"
+          className="inline-flex items-center gap-2 text-xs text-emerald-800 font-bold hover:underline"
         >
-          Already have an account? Login <LogIn className="w-4 h-4" />
+          <span>Already have an account? Sign in here</span>
+          <LogIn className="w-3.5 h-3.5" />
         </Link>
       </div>
     </div>

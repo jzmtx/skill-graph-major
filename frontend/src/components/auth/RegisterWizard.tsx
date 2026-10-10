@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { ChevronRight, ChevronLeft, CheckCircle2, User, GraduationCap } from 'lucide-react';
+import { ChevronRight, ChevronLeft, CheckCircle2 } from 'lucide-react';
 import { registerStudent, searchColleges } from '@/lib/api';
 
 export default function RegisterWizard() {
@@ -26,14 +26,14 @@ export default function RegisterWizard() {
   const handleSearchCollege = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setCollegeSearch(val);
-    setFormData({ ...formData, college_name: val }); // fallback if new
+    setFormData({ ...formData, college_name: val });
     
     if (val.length >= 3) {
       try {
         const results = await searchColleges(val);
         setCollegeResults(results);
       } catch (err) {
-        console.error("College search failed");
+        console.error("College search failed", err);
       }
     } else {
       setCollegeResults([]);
@@ -53,16 +53,14 @@ export default function RegisterWizard() {
       const data = { ...formData, year: parseInt(formData.year) || 1 };
       const response = await registerStudent(data);
       
-      // Save info to local storage for the dashboard
       if (response.user) {
         localStorage.setItem('student_id', response.user.id);
         localStorage.setItem('student_github', response.user.github_url || '');
+        localStorage.setItem('student_name', response.user.name || '');
       }
-      
-      // Success: redirect to dashboard
       window.location.href = '/dashboard';
     } catch (err: unknown) {
-      const error = err as { response?: { data?: { detail?: string } } };
+      const error = err as { response?: { data?: { detail?: string } }; message?: string };
       setError(error.response?.data?.detail || "Registration failed. Try again.");
     } finally {
       setLoading(false);
@@ -70,22 +68,22 @@ export default function RegisterWizard() {
   };
 
   return (
-    <div className="flex flex-col h-full justify-center">
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold text-slate-800">Create your account</h2>
-        <p className="text-slate-500 text-sm mt-1">Step {step} of 3</p>
+    <div className="w-full text-stone-900">
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold text-stone-900 font-serif">Create Student Account</h2>
+        <p className="text-stone-500 text-xs mt-1">Step {step} of 3</p>
         
         {/* Progress Bar */}
-        <div className="w-full bg-slate-100 h-2 rounded-full mt-4">
+        <div className="w-full bg-stone-200 h-1.5 rounded-full mt-3">
           <div 
-            className="bg-indigo-600 h-2 rounded-full transition-all duration-300"
+            className="bg-emerald-800 h-1.5 rounded-full transition-all duration-300"
             style={{ width: `${(step / 3) * 100}%` }}
           />
         </div>
       </div>
 
       {error && (
-        <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm mb-6">
+        <div className="bg-rose-50 border border-rose-200 text-rose-800 p-3 rounded-xl text-xs mb-6">
           {error}
         </div>
       )}
@@ -95,31 +93,39 @@ export default function RegisterWizard() {
         {step === 1 && (
           <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
+              <label className="block text-xs font-bold uppercase tracking-wider text-stone-600 mb-1">Full Name</label>
               <input 
-                type="text" className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})}
+                type="text" 
+                className="w-full p-2.5 text-sm bg-stone-50 border border-stone-300 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-emerald-800 text-stone-900"
+                value={formData.name} 
+                onChange={e => setFormData({...formData, name: e.target.value})}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+              <label className="block text-xs font-bold uppercase tracking-wider text-stone-600 mb-1">Email Address</label>
               <input 
-                type="email" className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})}
+                type="email" 
+                className="w-full p-2.5 text-sm bg-stone-50 border border-stone-300 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-emerald-800 text-stone-900"
+                value={formData.email} 
+                onChange={e => setFormData({...formData, email: e.target.value})}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
+              <label className="block text-xs font-bold uppercase tracking-wider text-stone-600 mb-1">Password</label>
               <input 
-                type="password" className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})}
+                type="password" 
+                className="w-full p-2.5 text-sm bg-stone-50 border border-stone-300 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-emerald-800 text-stone-900"
+                value={formData.password} 
+                onChange={e => setFormData({...formData, password: e.target.value})}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Phone</label>
+              <label className="block text-xs font-bold uppercase tracking-wider text-stone-600 mb-1">Contact Phone</label>
               <input 
-                type="tel" className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})}
+                type="tel" 
+                className="w-full p-2.5 text-sm bg-stone-50 border border-stone-300 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-emerald-800 text-stone-900"
+                value={formData.phone} 
+                onChange={e => setFormData({...formData, phone: e.target.value})}
               />
             </div>
           </div>
@@ -129,17 +135,17 @@ export default function RegisterWizard() {
         {step === 2 && (
           <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
             <div className="relative">
-              <label className="block text-sm font-medium text-slate-700 mb-1">College</label>
+              <label className="block text-xs font-bold uppercase tracking-wider text-stone-600 mb-1">College / University</label>
               <input 
-                type="text" placeholder="Search your college..."
-                className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                type="text" placeholder="Type to search your college..."
+                className="w-full p-2.5 text-sm bg-stone-50 border border-stone-300 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-emerald-800 text-stone-900"
                 value={collegeSearch} onChange={handleSearchCollege}
               />
               {collegeResults.length > 0 && (
-                <div className="absolute z-10 w-full bg-white border border-slate-200 mt-1 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                <div className="absolute z-10 w-full bg-white border border-stone-200 mt-1 rounded-xl shadow-md max-h-40 overflow-y-auto">
                   {collegeResults.map(c => (
-                    <div key={c.id} onClick={() => handleSelectCollege(c)} className="p-2 hover:bg-slate-50 cursor-pointer text-sm">
-                      {c.name} ({c.state})
+                    <div key={c.id} onClick={() => handleSelectCollege(c)} className="p-2.5 hover:bg-stone-50 cursor-pointer text-xs border-b border-stone-100 last:border-none">
+                      <span className="font-semibold text-stone-900">{c.name}</span> <span className="text-stone-500">({c.state})</span>
                     </div>
                   ))}
                 </div>
@@ -147,32 +153,32 @@ export default function RegisterWizard() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">State</label>
+                <label className="block text-xs font-bold uppercase tracking-wider text-stone-600 mb-1">State</label>
                 <input 
-                  type="text" className="w-full p-2 border border-slate-300 rounded-lg outline-none"
+                  type="text" className="w-full p-2.5 text-sm bg-stone-50 border border-stone-300 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-emerald-800 text-stone-900"
                   value={formData.state} onChange={e => setFormData({...formData, state: e.target.value})}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Branch</label>
+                <label className="block text-xs font-bold uppercase tracking-wider text-stone-600 mb-1">Branch / Major</label>
                 <input 
-                  type="text" placeholder="e.g. CSE" className="w-full p-2 border border-slate-300 rounded-lg outline-none"
+                  type="text" placeholder="e.g. CSE, ECE" className="w-full p-2.5 text-sm bg-stone-50 border border-stone-300 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-emerald-800 text-stone-900"
                   value={formData.branch} onChange={e => setFormData({...formData, branch: e.target.value})}
                 />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Year / Sem</label>
+                <label className="block text-xs font-bold uppercase tracking-wider text-stone-600 mb-1">Graduation Year</label>
                 <input 
-                  type="number" className="w-full p-2 border border-slate-300 rounded-lg outline-none"
+                  type="number" className="w-full p-2.5 text-sm bg-stone-50 border border-stone-300 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-emerald-800 text-stone-900"
                   value={formData.year} onChange={e => setFormData({...formData, year: e.target.value})}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">USN / Roll No</label>
+                <label className="block text-xs font-bold uppercase tracking-wider text-stone-600 mb-1">USN / Student ID</label>
                 <input 
-                  type="text" className="w-full p-2 border border-slate-300 rounded-lg outline-none"
+                  type="text" className="w-full p-2.5 text-sm bg-stone-50 border border-stone-300 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-emerald-800 text-stone-900"
                   value={formData.usn} onChange={e => setFormData({...formData, usn: e.target.value})}
                 />
               </div>
@@ -184,18 +190,18 @@ export default function RegisterWizard() {
         {step === 3 && (
           <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">GitHub URL (Optional)</label>
+              <label className="block text-xs font-bold uppercase tracking-wider text-stone-600 mb-1">GitHub Profile URL (Optional)</label>
               <input 
                 type="url" placeholder="https://github.com/yourusername"
-                className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                className="w-full p-2.5 text-sm bg-stone-50 border border-stone-300 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-emerald-800 text-stone-900"
                 value={formData.github_url} onChange={e => setFormData({...formData, github_url: e.target.value})}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">LinkedIn URL (Optional)</label>
+              <label className="block text-xs font-bold uppercase tracking-wider text-stone-600 mb-1">LinkedIn Profile URL (Optional)</label>
               <input 
                 type="url" placeholder="https://linkedin.com/in/yourusername"
-                className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                className="w-full p-2.5 text-sm bg-stone-50 border border-stone-300 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-emerald-800 text-stone-900"
                 value={formData.linkedin_url} onChange={e => setFormData({...formData, linkedin_url: e.target.value})}
               />
             </div>
@@ -204,11 +210,11 @@ export default function RegisterWizard() {
       </div>
 
       {/* Navigation Buttons */}
-      <div className="flex justify-between mt-8 pt-4 border-t border-slate-100">
+      <div className="flex justify-between mt-8 pt-4 border-t border-stone-200">
         <button
           onClick={handlePrev}
           disabled={step === 1 || loading}
-          className="flex items-center px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 disabled:opacity-50"
+          className="flex items-center px-4 py-2 text-xs font-bold text-stone-600 hover:text-stone-900 disabled:opacity-40"
         >
           <ChevronLeft className="w-4 h-4 mr-1" /> Back
         </button>
@@ -216,25 +222,25 @@ export default function RegisterWizard() {
         {step < 3 ? (
           <button
             onClick={handleNext}
-            className="flex items-center px-6 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700"
+            className="flex items-center px-6 py-2 bg-emerald-800 text-white text-xs font-bold rounded-xl hover:bg-emerald-900 shadow-2xs transition-colors"
           >
-            Next <ChevronRight className="w-4 h-4 ml-1" />
+            <span>Next</span> <ChevronRight className="w-4 h-4 ml-1" />
           </button>
         ) : (
           <button
             onClick={handleSubmit}
             disabled={loading}
-            className="flex items-center px-6 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+            className="flex items-center px-6 py-2 bg-emerald-800 text-white text-xs font-bold rounded-xl hover:bg-emerald-900 disabled:opacity-50 shadow-2xs transition-colors"
           >
-            {loading ? "Creating..." : "Complete Registration"} <CheckCircle2 className="w-4 h-4 ml-2" />
+            <span>{loading ? "Creating..." : "Complete Registration"}</span> <CheckCircle2 className="w-4 h-4 ml-2" />
           </button>
         )}
       </div>
 
-      <div className="mt-6 text-center text-sm text-slate-500">
+      <div className="mt-6 text-center text-xs text-stone-500">
         Already have an account?{' '}
-        <Link href="/login" className="text-indigo-600 font-medium hover:underline">
-          Log in here
+        <Link href="/login" className="text-emerald-800 font-bold hover:underline">
+          Sign in here
         </Link>
       </div>
     </div>

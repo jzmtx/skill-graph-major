@@ -37,27 +37,27 @@ export default function FileUploadField({ label, onUploaded, value }: FileUpload
 
   return (
     <div>
-      <label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>
-      <label className="flex items-center gap-2 w-full p-2 border border-slate-300 border-dashed rounded-lg cursor-pointer hover:border-indigo-400 transition-colors">
+      <label className="block text-xs font-semibold text-stone-700 mb-1">{label}</label>
+      <label className="flex items-center gap-2 w-full p-2.5 border border-stone-300 border-dashed rounded-lg cursor-pointer hover:border-emerald-700 hover:bg-stone-50 transition-colors bg-white">
         <input type="file" className="hidden" onChange={handleFileChange} accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" />
         {uploading ? (
           <>
-            <Loader2 className="w-4 h-4 text-indigo-500 animate-spin" />
-            <span className="text-sm text-slate-500">Uploading...</span>
+            <Loader2 className="w-4 h-4 text-emerald-800 animate-spin" />
+            <span className="text-xs text-stone-500">Uploading document...</span>
           </>
         ) : value ? (
           <>
-            <CheckCircle2 className="w-4 h-4 text-green-600" />
-            <span className="text-sm text-slate-700 truncate">{fileName || 'File uploaded'}</span>
+            <CheckCircle2 className="w-4 h-4 text-emerald-800" />
+            <span className="text-xs text-stone-800 font-medium truncate">{fileName || 'File attached'}</span>
           </>
         ) : (
           <>
-            <Upload className="w-4 h-4 text-slate-400" />
-            <span className="text-sm text-slate-500">Click to browse a file (PDF, image, or Word doc)</span>
+            <Upload className="w-4 h-4 text-stone-400" />
+            <span className="text-xs text-stone-500">Click to attach document (PDF, PNG, JPG, or DOC)</span>
           </>
         )}
       </label>
-      {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
+      {error && <p className="text-xs text-rose-700 mt-1">{error}</p>}
     </div>
   );
 }

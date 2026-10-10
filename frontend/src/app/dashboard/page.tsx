@@ -1,12 +1,42 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
-import { ArrowRight, Lock, Target, TrendingUp, Briefcase, CodeXml, ShieldAlert, Terminal, CheckCircle2, Plus, RefreshCcw, Loader2, X } from 'lucide-react';
-import { extractGithubSkills, getMySkills, addSkill, getStudentInvitations, acceptStudentInvitation } from '@/lib/api';
+import { 
+  ArrowRight, 
+  Target, 
+  TrendingUp, 
+  Briefcase, 
+  CodeXml, 
+  ShieldCheck, 
+  CheckCircle2, 
+  Plus, 
+  RefreshCw, 
+  Loader2, 
+  X, 
+  GraduationCap, 
+  UserCircle, 
+  Compass, 
+  Map, 
+  Search,
+  Check,
+  AlertCircle,
+  MessageSquare,
+  Sparkles
+} from 'lucide-react';
+import { 
+  extractGithubSkills, 
+  getMySkills, 
+  addSkill, 
+  getStudentInvitations, 
+  acceptStudentInvitation,
+  getStudentProfile,
+  getHireabilityScore
+} from '@/lib/api';
 import { getAppliedJobs } from '@/lib/companyApi';
 import { motion, AnimatePresence } from 'framer-motion';
 import HireabilityScore from '@/components/dashboard/HireabilityScore';
+import StudentProfileModal, { StudentProfileData } from '@/components/dashboard/StudentProfileModal';
 
 export default function DashboardPage() {
   const [skills, setSkills] = useState<any[]>([]);
@@ -16,12 +46,23 @@ export default function DashboardPage() {
   const [customSkill, setCustomSkill] = useState("");
   const [invitations, setInvitations] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
+  const [appliedJobsCount, setAppliedJobsCount] = useState<number>(0);
   
-  const hasVerifiedSkills = skills.some(s => s.verification_level > 0);
+  // Student profile state
+  const [studentProfile, setStudentProfile] = useState<any>(null);
+  const [collegeName, setCollegeName] = useState<string>("");
+  const [hireabilityData, setHireabilityData] = useState<any>(null);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+
+  // Skill filter
+  const [skillFilter, setSkillFilter] = useState<'all' | 'verified' | 'unverified'>('all');
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const popularSuggestions = ["TypeScript", "Docker", "PostgreSQL", "Next.js", "Python", "FastAPI"];
 
   const fetchSkills = async () => {
     try {
-      const studentId = localStorage.getItem('student_id');
+      const studentId = typeof window !== 'undefined' ? localStorage.getItem('student_id') : null;
       if (!studentId) return;
 
       setSyncing(true);
@@ -39,17 +80,17 @@ export default function DashboardPage() {
     }
   };
 
-  const handleAddSkill = async () => {
-    if (!customSkill.trim()) return;
+  const handleAddSkill = async (skillToAdd?: string) => {
+    const targetSkill = (skillToAdd || customSkill).trim();
+    if (!targetSkill) return;
     
-    const studentId = localStorage.getItem('student_id');
+    const studentId = typeof window !== 'undefined' ? localStorage.getItem('student_id') : null;
     if (!studentId) return;
 
     setAddingSkill(true);
     try {
-      await addSkill({ student_id: studentId, skill_name: customSkill.trim() });
+      await addSkill({ student_id: studentId, skill_name: targetSkill });
       setCustomSkill("");
-      // Sync immediately to show the new skill
       await fetchSkills();
     } catch (e) {
       console.error("Failed to add skill", e);
@@ -59,24 +100,24 @@ export default function DashboardPage() {
   };
 
   const handleAcceptInvitation = async (linkId: string) => {
-    const studentId = localStorage.getItem('student_id');
+    const studentId = typeof window !== 'undefined' ? localStorage.getItem('student_id') : null;
     if (!studentId) return;
     try {
       await acceptStudentInvitation(studentId, linkId);
       setInvitations(invitations.filter(inv => inv.id !== linkId));
     } catch(e) {
-      console.error("Failed to accept invitation");
+      console.error("Failed to accept invitation", e);
     }
   };
 
   useEffect(() => {
     const init = async () => {
       try {
-        const studentId = localStorage.getItem('student_id');
-        const githubUrl = localStorage.getItem('student_github');
+        const studentId = typeof window !== 'undefined' ? localStorage.getItem('student_id') : null;
+        const githubUrl = typeof window !== 'undefined' ? localStorage.getItem('student_github') : null;
         
-        // Optimistic UI: Load from cache instantly to prevent flicker
-        const cached = localStorage.getItem('cached_skills');
+        // Optimistic UI cache load
+        const cached = typeof window !== 'undefined' ? localStorage.getItem('cached_skills') : null;
         if (cached) {
           setSkills(JSON.parse(cached));
           setLoading(false);
@@ -87,17 +128,39 @@ export default function DashboardPage() {
           return;
         }
 
-        // 1. Trigger extraction in background if they have github
+        // 1. Fetch Profile Data
+        try {
+          const profData = await getStudentProfile(studentId);
+          if (profData?.student) {
+            setStudentProfile(profData.student);
+            setCollegeName(profData.college_name || "");
+            if (profData.student.name && typeof window !== 'undefined') {
+              localStorage.setItem('student_name', profData.student.name);
+            }
+          }
+        } catch (err) {
+          console.warn("Could not load student profile", err);
+        }
+
+        // 2. Fetch Hireability Score
+        try {
+          const hScore = await getHireabilityScore(studentId);
+          setHireabilityData(hScore);
+        } catch (err) {
+          console.warn("Could not load hireability data", err);
+        }
+
+        // 3. Trigger extraction in background if github exists
         if (githubUrl) {
           extractGithubSkills(studentId, githubUrl)
             .then(() => fetchSkills())
-            .catch(e => console.error("Extraction failed or already done", e));
+            .catch(e => console.error("GitHub extraction skipped or done", e));
         }
 
-        // 2. Sync all skills
+        // 4. Sync all skills
         await fetchSkills();
 
-        // 3. Fetch Invitations
+        // 5. Fetch Invitations
         try {
           const invs = await getStudentInvitations(studentId);
           setInvitations(invs || []);
@@ -105,10 +168,11 @@ export default function DashboardPage() {
           console.error("Failed to fetch invitations:", error);
         }
 
-        // 4. Fetch Job Applications for Notifications
+        // 6. Fetch Job Applications
         try {
           const apps = await getAppliedJobs(studentId);
           if (apps) {
+            setAppliedJobsCount(apps.length);
             const dismissed = JSON.parse(localStorage.getItem('dismissed_notifications') || '[]');
             const newNotifs = apps.filter((a: any) => 
               (a.status === 'hired' || a.status === 'rejected') && !dismissed.includes(`${a.id}-${a.status}`)
@@ -116,7 +180,7 @@ export default function DashboardPage() {
             setNotifications(newNotifs);
           }
         } catch(e) {
-          console.error("Failed to fetch applications for notifications");
+          console.error("Failed to fetch applications for notifications", e);
         }
 
       } catch (error) {
@@ -126,6 +190,10 @@ export default function DashboardPage() {
     };
 
     init();
+
+    const handleProfileEvent = () => setIsProfileModalOpen(true);
+    window.addEventListener('open-student-profile', handleProfileEvent);
+    return () => window.removeEventListener('open-student-profile', handleProfileEvent);
   }, []);
 
   const dismissNotification = (appId: string, status: string) => {
@@ -135,60 +203,141 @@ export default function DashboardPage() {
     setNotifications(prev => prev.filter(n => n.id !== appId));
   };
 
+  const totalSkillsCount = skills.length;
+  const verifiedSkillsCount = useMemo(() => skills.filter(s => s.verification_level > 0).length, [skills]);
+  const level2SkillsCount = useMemo(() => skills.filter(s => s.verification_level >= 2).length, [skills]);
+  const hasVerifiedSkills = verifiedSkillsCount > 0;
+
+  const filteredSkills = useMemo(() => {
+    return skills.filter(s => {
+      const matchesSearch = s.skill_name.toLowerCase().includes(searchQuery.toLowerCase());
+      if (!matchesSearch) return false;
+      if (skillFilter === 'verified') return s.verification_level > 0;
+      if (skillFilter === 'unverified') return s.verification_level === 0;
+      return true;
+    });
+  }, [skills, searchQuery, skillFilter]);
+
+  const modalData: StudentProfileData | null = useMemo(() => {
+    if (!studentProfile) return null;
+    return {
+      student: studentProfile,
+      college_name: collegeName,
+      skills: skills,
+      hireability: hireabilityData
+    };
+  }, [studentProfile, collegeName, skills, hireabilityData]);
+
+  const studentDisplayName = studentProfile?.name || (typeof window !== 'undefined' ? localStorage.getItem('student_name') : null) || 'Student';
+
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="space-y-6 animate-in fade-in duration-300 text-stone-900">
       
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+      {/* Executive Header Banner (Classical Warm White & Stone with Warm Orange Accent Trim) */}
+      <div className="bg-white border border-stone-200 rounded-2xl p-6 md:p-8 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden">
+        {/* Subtle Orange Accent Top Trim */}
+        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-700 via-orange-500 to-amber-500" />
+
         <div>
-          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Welcome to your Dashboard</h1>
-          <p className="text-slate-500 mt-1">Let's map out your journey from campus to top-tier placements.</p>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-orange-900 bg-orange-50 border border-orange-200 px-2.5 py-0.5 rounded-full flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
+              Student Workspace
+            </span>
+            {collegeName && (
+              <span className="flex items-center gap-1 text-xs font-medium text-stone-600">
+                <GraduationCap className="w-3.5 h-3.5 text-stone-500" />
+                {collegeName}
+              </span>
+            )}
+          </div>
+          <h1 className="text-2xl md:text-3xl font-extrabold text-stone-900 tracking-tight mt-1.5 font-serif">
+            Welcome back, {studentDisplayName}
+          </h1>
+          <p className="text-sm text-stone-600 mt-1 max-w-2xl leading-relaxed">
+            Monitor your verified competency benchmarks, roadmap progression, and live industry hireability ratings.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3 shrink-0">
+          <button
+            onClick={() => setIsProfileModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-stone-800 bg-stone-100 hover:bg-stone-200 border border-stone-300 transition-colors"
+          >
+            <UserCircle className="w-4 h-4 text-stone-600" />
+            <span>Profile Details</span>
+          </button>
+
+          <button
+            onClick={fetchSkills}
+            disabled={syncing}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-emerald-800 hover:bg-emerald-900 shadow-2xs transition-colors disabled:opacity-70"
+          >
+            <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+            <span>{syncing ? 'Syncing...' : 'Sync Data'}</span>
+          </button>
         </div>
       </div>
 
-      {/* Invitations Banner */}
+      {/* College Invitations Alert */}
       {invitations.length > 0 && (
-        <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="bg-stone-100 border border-stone-300 rounded-xl p-4 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="bg-indigo-100 p-2 rounded-full text-indigo-600">
-              <Target className="w-5 h-5" />
+            <div className="w-9 h-9 rounded-lg bg-emerald-800 text-white flex items-center justify-center shrink-0">
+              <GraduationCap className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-indigo-900">College Invitation</h3>
-              <p className="text-xs text-indigo-700">You have been invited to join {invitations[0].colleges?.name} on SkillGraph.</p>
+              <h3 className="text-sm font-bold text-stone-900">Institutional Affiliation Invitation</h3>
+              <p className="text-xs text-stone-600 mt-0.5">
+                Your institution <span className="font-semibold text-stone-900">{invitations[0].colleges?.name}</span> has invited you to join their official placement cluster.
+              </p>
             </div>
           </div>
           <button 
             onClick={() => handleAcceptInvitation(invitations[0].id)}
-            className="px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition-colors whitespace-nowrap shadow-sm"
+            className="px-4 py-2 bg-emerald-800 text-white text-xs font-bold rounded-lg hover:bg-emerald-900 transition-colors whitespace-nowrap shadow-2xs"
           >
-            Accept Invitation
+            Confirm Affiliation
           </button>
         </div>
       )}
 
-      {/* Notifications */}
+      {/* Notifications Banner */}
       {notifications.length > 0 && (
-        <div className="mb-6 space-y-3">
+        <div className="space-y-3">
           {notifications.map(notif => {
             const isHired = notif.status === 'hired';
-            const companyName = notif.job_postings?.companies?.name || 'a company';
-            const jobTitle = notif.job_postings?.title || 'a role';
+            const companyName = notif.job_postings?.companies?.name || 'Recruiter';
+            const jobTitle = notif.job_postings?.title || 'Applied Position';
             
             return (
-              <div key={notif.id} className={`p-4 rounded-xl border flex items-center justify-between ${isHired ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
+              <div 
+                key={notif.id} 
+                className={`p-4 rounded-xl border flex items-center justify-between gap-4 ${
+                  isHired 
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-950' 
+                    : 'bg-stone-100 border-stone-300 text-stone-900'
+                }`}
+              >
                 <div className="flex items-center gap-3">
-                  {isHired ? <CheckCircle2 className="w-5 h-5 text-emerald-600" /> : <ShieldAlert className="w-5 h-5 text-amber-600" />}
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${isHired ? 'bg-emerald-800 text-white' : 'bg-stone-300 text-stone-800'}`}>
+                    <CheckCircle2 className="w-4 h-4" />
+                  </div>
                   <div>
-                    <h4 className="font-bold">{isHired ? 'Congratulations! You are Hired!' : 'Application Update'}</h4>
-                    <p className="text-sm">
+                    <h4 className="text-sm font-bold">
+                      {isHired ? 'Selection Confirmation: Candidate Hired' : 'Application Status Update'}
+                    </h4>
+                    <p className="text-xs mt-0.5 text-stone-600">
                       {isHired 
-                        ? `You have been selected for the ${jobTitle} role at ${companyName}.`
-                        : `Your application for ${jobTitle} at ${companyName} has been reviewed but unfortunately was not selected.`}
+                        ? `Congratulations! You have received an offer for ${jobTitle} at ${companyName}.`
+                        : `Your candidate profile for ${jobTitle} at ${companyName} has been reviewed.`}
                     </p>
                   </div>
                 </div>
-                <button onClick={() => dismissNotification(notif.id, notif.status)} className="p-2 hover:bg-white/50 rounded-full transition-colors">
+                <button 
+                  onClick={() => dismissNotification(notif.id, notif.status)} 
+                  className="p-1.5 hover:bg-stone-100 rounded-lg transition-colors text-stone-600"
+                >
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -197,194 +346,432 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Hireability 3D Score Widget */}
+      {/* Key Performance Indicators (4 Classical Metric Tiles) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        
+        {/* KPI 1: Hireability Index */}
+        <div className="bg-white border border-stone-200 rounded-xl p-5 shadow-2xs">
+          <div className="flex items-center justify-between text-stone-500 text-xs font-semibold uppercase tracking-wider">
+            <span>Hireability Index</span>
+            <Target className="w-4 h-4 text-emerald-800" />
+          </div>
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="text-3xl font-extrabold text-stone-900 font-serif">
+              {hireabilityData?.score || 300}
+            </span>
+            <span className="text-xs font-medium text-stone-500">/ 850 pts</span>
+          </div>
+          <div className="mt-2 text-xs text-stone-600 flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-800"></span>
+            <span>Verified competency model</span>
+          </div>
+        </div>
+
+        {/* KPI 2: Verified Skills Ratio */}
+        <div className="bg-white border border-stone-200 rounded-xl p-5 shadow-2xs">
+          <div className="flex items-center justify-between text-stone-500 text-xs font-semibold uppercase tracking-wider">
+            <span>Verified Skills</span>
+            <ShieldCheck className="w-4 h-4 text-emerald-800" />
+          </div>
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="text-3xl font-extrabold text-stone-900 font-serif">
+              {verifiedSkillsCount}
+            </span>
+            <span className="text-xs font-medium text-stone-500">/ {totalSkillsCount} declared</span>
+          </div>
+          <div className="mt-2 text-xs text-stone-600 flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse"></span>
+            <span className="text-orange-950 font-medium">{level2SkillsCount} Level 2 Project Masteries</span>
+          </div>
+        </div>
+
+        {/* KPI 3: Learning Roadmap */}
+        <div className="bg-white border border-stone-200 rounded-xl p-5 shadow-2xs">
+          <div className="flex items-center justify-between text-stone-500 text-xs font-semibold uppercase tracking-wider">
+            <span>Learning Path</span>
+            <Map className="w-4 h-4 text-stone-700" />
+          </div>
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="text-lg font-bold text-stone-900 truncate">
+              Adaptive Roadmap
+            </span>
+          </div>
+          <div className="mt-2">
+            <Link 
+              href="/dashboard/roadmap" 
+              className="text-xs font-semibold text-emerald-800 hover:text-emerald-950 flex items-center gap-1 transition-colors"
+            >
+              <span>View Roadmap Canvas</span>
+              <ArrowRight className="w-3 h-3" />
+            </Link>
+          </div>
+        </div>
+
+        {/* KPI 4: Job Applications */}
+        <div className="bg-white border border-stone-200 rounded-xl p-5 shadow-2xs">
+          <div className="flex items-center justify-between text-stone-500 text-xs font-semibold uppercase tracking-wider">
+            <span>Placement Activity</span>
+            <Briefcase className="w-4 h-4 text-stone-700" />
+          </div>
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="text-3xl font-extrabold text-stone-900 font-serif">
+              {appliedJobsCount}
+            </span>
+            <span className="text-xs font-medium text-stone-500">applications</span>
+          </div>
+          <div className="mt-2">
+            <Link 
+              href="/dashboard/jobs" 
+              className="text-xs font-semibold text-emerald-800 hover:text-emerald-950 flex items-center gap-1 transition-colors"
+            >
+              <span>Explore Active Openings</span>
+              <ArrowRight className="w-3 h-3" />
+            </Link>
+          </div>
+        </div>
+
+      </div>
+
+      {/* Hireability Index Component */}
       <HireabilityScore />
 
-      {/* Extracted Skills Section */}
-      {!loading && skills.length > 0 && (
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <CodeXml className="w-5 h-5 text-slate-700" />
-              <h3 className="text-lg font-semibold text-slate-800">Your Skills</h3>
-            </div>
-            {syncing && (
-              <div className="flex items-center gap-1.5 text-xs font-medium text-slate-400">
-                <RefreshCcw className="w-3.5 h-3.5 animate-spin" />
-                Syncing...
-              </div>
-            )}
-          </div>
-          <p className="text-sm text-slate-500 mb-4">Verify your skills by taking adaptive assessments to boost your Global Learner Index.</p>
-          <motion.div layout className="flex flex-wrap gap-3">
-            <AnimatePresence>
-              {skills.map(s => {
-                const isLevel0 = s.verification_level === 0;
-                const isLevel1 = s.verification_level === 1;
-                const isLevel2 = s.verification_level >= 2;
-
-                return (
-                  <motion.div 
-                    layout
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.9 }}
-                    transition={{ type: "spring", stiffness: 400, damping: 25 }}
-                    key={s.id} 
-                    className={`flex items-center border rounded-lg px-4 py-2 gap-3 group transition-colors ${
-                      isLevel2 ? 'bg-emerald-50 border-emerald-200' :
-                      isLevel1 ? 'bg-indigo-50 border-indigo-200' :
-                      'bg-slate-50 border-slate-200'
-                    }`}
-                  >
-                    <div className="flex flex-col">
-                      <span className="font-semibold text-slate-800">{s.skill_name}</span>
-                      <span className={`text-[10px] font-bold uppercase tracking-wider ${
-                      isLevel2 ? 'text-emerald-600' :
-                      isLevel1 ? 'text-indigo-600' :
-                      'text-slate-500'
-                    }`}>
-                      Level {s.verification_level} {isLevel2 && "Verified"}
-                    </span>
-                  </div>
-                  
-                  {isLevel0 && (
-                    <Link href={`/assessment/${encodeURIComponent(s.skill_name)}`}>
-                      <button className="text-xs bg-indigo-100 text-indigo-700 font-medium px-3 py-1.5 rounded-md hover:bg-indigo-600 hover:text-white transition-colors flex items-center gap-1 ml-2">
-                        <ShieldAlert className="w-3 h-3" /> Upgrade to L1
-                      </button>
-                    </Link>
-                  )}
-
-                  {isLevel1 && (
-                    <Link href={`/project-verify/${encodeURIComponent(s.skill_name)}`}>
-                      <button className="text-xs bg-emerald-100 text-emerald-700 font-medium px-3 py-1.5 rounded-md hover:bg-emerald-600 hover:text-white transition-colors flex items-center gap-1 ml-2">
-                        <Terminal className="w-3 h-3" /> Verify L2 Project
-                      </button>
-                    </Link>
-                  )}
-                  
-                  {isLevel2 && (
-                    <div className="ml-2 px-3 py-1 bg-emerald-500 text-white text-xs font-bold rounded-md flex items-center gap-1">
-                      <CheckCircle2 className="w-3 h-3" /> MAX
-                    </div>
-                  )}
-                </motion.div>
-              );
-            })}
-            </AnimatePresence>
-          </motion.div>
-        </div>
-      )}
-
-      {/* Manual Skill Addition Section */}
-      {!loading && (
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col md:flex-row gap-6 items-center justify-between">
+      {/* Skills & Verification Management Hub */}
+      <div className="bg-white border border-stone-200 rounded-2xl p-6 md:p-8 shadow-2xs">
+        
+        {/* Section Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between pb-6 border-b border-stone-200 gap-4">
           <div>
-            <h3 className="text-lg font-semibold text-slate-800">Add a New Skill</h3>
-            <p className="text-sm text-slate-500 mt-1">Want to prove your expertise in something else? Type it below and take the assessment immediately.</p>
+            <div className="flex items-center gap-2">
+              <CodeXml className="w-5 h-5 text-emerald-800" />
+              <h3 className="text-lg font-bold text-stone-900 font-serif">Skills Competency Portfolio</h3>
+            </div>
+            <p className="text-xs text-stone-600 mt-1">
+              Verify your skills through adaptive technical evaluations (Level 1) and anti-plagiarism project audits (Level 2).
+            </p>
           </div>
-          <div className="flex items-center gap-3 w-full md:w-auto">
+
+          {/* Filter and Search Bar */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Filter skills..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-8 pr-3 py-1.5 text-xs bg-stone-50 border border-stone-300 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-emerald-800 w-36 sm:w-44 text-stone-800"
+              />
+            </div>
+
+            <div className="flex items-center bg-stone-100 p-0.5 rounded-lg border border-stone-200 text-xs font-medium">
+              <button
+                onClick={() => setSkillFilter('all')}
+                className={`px-3 py-1 rounded-md transition-all ${
+                  skillFilter === 'all' 
+                    ? 'bg-white text-stone-900 shadow-2xs font-semibold' 
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                All ({skills.length})
+              </button>
+              <button
+                onClick={() => setSkillFilter('verified')}
+                className={`px-3 py-1 rounded-md transition-all ${
+                  skillFilter === 'verified' 
+                    ? 'bg-white text-stone-900 shadow-2xs font-semibold' 
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                Verified ({verifiedSkillsCount})
+              </button>
+              <button
+                onClick={() => setSkillFilter('unverified')}
+                className={`px-3 py-1 rounded-md transition-all ${
+                  skillFilter === 'unverified' 
+                    ? 'bg-white text-stone-900 shadow-2xs font-semibold' 
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                Pending ({totalSkillsCount - verifiedSkillsCount})
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Skills Cards Grid */}
+        <div className="py-6">
+          {loading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="h-28 bg-stone-50 rounded-xl animate-pulse border border-stone-200"></div>
+              ))}
+            </div>
+          ) : filteredSkills.length > 0 ? (
+            <motion.div layout className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <AnimatePresence>
+                {filteredSkills.map(s => {
+                  const isLevel0 = s.verification_level === 0;
+                  const isLevel1 = s.verification_level === 1;
+                  const isLevel2 = s.verification_level >= 2;
+
+                  return (
+                    <motion.div 
+                      layout
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.95 }}
+                      key={s.id || s.skill_name}
+                      className={`p-4 rounded-xl border transition-all flex flex-col justify-between gap-3 ${
+                        isLevel2 
+                          ? 'bg-emerald-50/50 border-emerald-300' 
+                          : isLevel1 
+                          ? 'bg-stone-50 border-stone-300' 
+                          : 'bg-stone-50/70 border-stone-200 hover:border-stone-300'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <h4 className="font-bold text-stone-900 text-sm font-serif">{s.skill_name}</h4>
+                          <span className="text-[11px] text-stone-500 mt-0.5 block">
+                            Score: {s.skill_score || 0} / 100
+                          </span>
+                        </div>
+                        
+                        <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md uppercase tracking-wider shrink-0 ${
+                          isLevel2 
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
+                            : isLevel1 
+                            ? 'bg-stone-200 text-stone-800 border border-stone-300' 
+                            : 'bg-stone-100 text-stone-600'
+                        }`}>
+                          {isLevel2 ? 'L2 Mastered' : isLevel1 ? 'L1 Verified' : 'Declared'}
+                        </span>
+                      </div>
+
+                      <div className="pt-2 border-t border-stone-200 flex items-center justify-between gap-2">
+                        {isLevel0 && (
+                          <Link href={`/assessment/${encodeURIComponent(s.skill_name)}`} className="w-full">
+                            <button className="w-full text-xs font-semibold py-1.5 px-3 rounded-lg bg-emerald-800 hover:bg-emerald-900 text-white transition-colors flex items-center justify-center gap-1.5 shadow-2xs">
+                              <span>Take Adaptive Exam</span>
+                              <ArrowRight className="w-3 h-3" />
+                            </button>
+                          </Link>
+                        )}
+
+                        {isLevel1 && (
+                          <Link href={`/project-verify/${encodeURIComponent(s.skill_name)}`} className="w-full">
+                            <button className="w-full text-xs font-semibold py-1.5 px-3 rounded-lg bg-stone-800 hover:bg-stone-900 text-white transition-colors flex items-center justify-center gap-1.5 shadow-2xs">
+                              <span>Verify Project (L2)</span>
+                              <ArrowRight className="w-3 h-3" />
+                            </button>
+                          </Link>
+                        )}
+
+                        {isLevel2 && (
+                          <div className="w-full py-1 text-center text-xs font-semibold text-emerald-800 flex items-center justify-center gap-1.5">
+                            <Check className="w-3.5 h-3.5" />
+                            <span>Max Depth Achieved</span>
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
+            </motion.div>
+          ) : (
+            <div className="text-center py-12 border border-dashed border-stone-300 rounded-xl bg-stone-50/50">
+              <CodeXml className="w-8 h-8 text-stone-300 mx-auto mb-2" />
+              <p className="text-sm font-semibold text-stone-700">No skills matching your criteria</p>
+              <p className="text-xs text-stone-500 mt-1">Try adjusting your search query or add a new skill below.</p>
+            </div>
+          )}
+        </div>
+
+        {/* Skill Addition Control */}
+        <div className="pt-6 border-t border-stone-200 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex-1 w-full">
+            <div className="text-xs font-bold uppercase tracking-wider text-stone-500 mb-1.5">Add Technical Skill</div>
+            <div className="flex flex-wrap items-center gap-1.5 text-xs text-stone-500">
+              <span className="text-[11px] text-stone-600 font-medium mr-1">Suggestions:</span>
+              {popularSuggestions.map(sug => (
+                <button
+                  key={sug}
+                  onClick={() => handleAddSkill(sug)}
+                  disabled={addingSkill}
+                  className="px-2 py-0.5 rounded-md bg-stone-100 hover:bg-stone-200 text-stone-700 transition-colors text-[11px] font-medium border border-stone-200"
+                >
+                  +{sug}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 w-full md:w-auto">
             <input 
               type="text" 
-              placeholder="e.g. Docker, AWS, React"
+              placeholder="e.g. Docker, Rust, AWS"
               value={customSkill}
               onChange={(e) => setCustomSkill(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleAddSkill();
               }}
-              className="flex-1 md:w-64 border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              className="flex-1 md:w-64 border border-stone-300 bg-stone-50 rounded-xl px-3.5 py-2 text-xs focus:outline-hidden focus:bg-white focus:ring-1 focus:ring-emerald-800 text-stone-900"
             />
             <button 
-              onClick={handleAddSkill}
+              onClick={() => handleAddSkill()}
               disabled={!customSkill.trim() || addingSkill}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${
                 customSkill.trim() && !addingSkill
-                  ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/20' 
-                  : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                  ? 'bg-emerald-800 hover:bg-emerald-900 text-white shadow-2xs' 
+                  : 'bg-stone-100 text-stone-400 cursor-not-allowed border border-stone-200'
               }`}
             >
-              {addingSkill ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-              Add Skill
+              {addingSkill ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+              <span>Add Skill</span>
             </button>
+          </div>
+        </div>
+
+      </div>
+
+      {/* Action Prompt - If student has no verified skills yet (Warm Stone & Forest Green - No Black, No Blue) */}
+      {!loading && !hasVerifiedSkills && (
+        <div className="bg-stone-100 border border-stone-300 text-stone-900 rounded-2xl p-6 md:p-8 shadow-2xs flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="max-w-2xl">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-100 text-amber-900 border border-amber-300 text-xs font-bold uppercase tracking-wider mb-3">
+              <AlertCircle className="w-3.5 h-3.5" />
+              <span>Assessment Required</span>
+            </div>
+            <h3 className="text-xl md:text-2xl font-bold tracking-tight text-stone-900 font-serif">
+              Establish Your Competency Baseline
+            </h3>
+            <p className="text-stone-600 text-sm mt-1.5 leading-relaxed">
+              Before your personalized roadmap and company matching can activate, you must verify at least one skill through an adaptive assessment.
+            </p>
+          </div>
+
+          <div className="shrink-0">
+            {skills.length > 0 ? (
+              <Link href={`/assessment/${encodeURIComponent(skills[0].skill_name)}`}>
+                <button className="flex items-center gap-2 bg-emerald-800 hover:bg-emerald-900 text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-2xs">
+                  <span>Assess {skills[0].skill_name}</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </Link>
+            ) : (
+              <button 
+                onClick={() => handleAddSkill("Python")}
+                className="flex items-center gap-2 bg-emerald-800 hover:bg-emerald-900 text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-2xs"
+              >
+                <span>Add Skill & Assess</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
       )}
 
-      {/* Action Required Banner - Only show if NO verified skills */}
-      {!loading && !hasVerifiedSkills && (
-        <>
-          <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-2xl p-6 md:p-8 text-white shadow-xl shadow-indigo-900/20 relative overflow-hidden group mt-8">
-            <div className="absolute right-0 top-0 opacity-10 transform translate-x-1/4 -translate-y-1/4">
-              <Target className="w-64 h-64" />
-            </div>
-            
-            <div className="relative z-10 max-w-2xl">
-              <span className="inline-block px-3 py-1 bg-amber-400 text-amber-950 text-xs font-bold rounded-full mb-4 uppercase tracking-wider">
-                Action Required
-              </span>
-              <h2 className="text-2xl md:text-3xl font-bold mb-3">Establish your Baseline Skills</h2>
-              <p className="text-indigo-100 mb-6 text-lg">
-                Before we can generate your personalized roadmap or match you with jobs, we need to know where you stand. Take a quick, adaptive assessment to unlock your profile.
-              </p>
-              {skills.length > 0 ? (
-                <Link href={`/assessment/${encodeURIComponent(skills[0].skill_name)}`}>
-                  <button className="flex items-center space-x-2 bg-emerald-500 hover:bg-emerald-400 text-white px-6 py-3 rounded-xl font-medium transition-all group-hover:shadow-lg shadow-emerald-500/30">
-                    <span>Assess {skills[0].skill_name}</span>
-                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                  </button>
-                </Link>
-              ) : (
-                <button disabled className="flex items-center space-x-2 bg-slate-500 text-white px-6 py-3 rounded-xl font-medium opacity-50 cursor-not-allowed">
-                  <span>Add a skill above first</span>
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Locked Modules Grid */}
-          <div className="mt-8">
-            <h3 className="text-lg font-semibold text-slate-800 mb-4">What unlocks next?</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              
-              {/* Roadmap Card */}
-              <div className="bg-white border border-slate-200 rounded-2xl p-6 opacity-75 relative overflow-hidden">
-                <div className="absolute top-4 right-4 text-slate-400"><Lock className="w-5 h-5" /></div>
-                <div className="w-12 h-12 bg-slate-100 text-slate-500 rounded-xl flex items-center justify-center mb-4">
-                  <TrendingUp className="w-6 h-6" />
+      {/* Strategic Platform Workflows (Classical Professional Cards with Orange Accents) */}
+      <div className="space-y-3">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-stone-500">Core Career Workflows</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          
+          {/* Card 1: Adaptive Roadmap */}
+          <Link href="/dashboard/roadmap" className="group">
+            <div className="bg-white border border-stone-200 hover:border-emerald-800/40 rounded-xl p-5 shadow-2xs transition-all h-full flex flex-col justify-between">
+              <div>
+                <div className="w-10 h-10 rounded-lg bg-stone-100 text-stone-800 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
+                  <Map className="w-5 h-5" />
                 </div>
-                <h4 className="font-semibold text-slate-800 mb-2">Dynamic Roadmap</h4>
-                <p className="text-sm text-slate-500">
-                  A personalized step-by-step learning path tailored exactly to your baseline assessment and target career.
+                <h4 className="font-bold text-stone-900 text-sm group-hover:text-emerald-800 transition-colors font-serif">
+                  Personalized Roadmap
+                </h4>
+                <p className="text-xs text-stone-600 mt-1 leading-relaxed">
+                  Navigate milestone nodes curated for your target engineering career.
                 </p>
               </div>
-
-              {/* Skill Graph Card */}
-              <div className="bg-white border border-slate-200 rounded-2xl p-6 opacity-75 relative overflow-hidden">
-                <div className="absolute top-4 right-4 text-slate-400"><Lock className="w-5 h-5" /></div>
-                <div className="w-12 h-12 bg-slate-100 text-slate-500 rounded-xl flex items-center justify-center mb-4">
-                  <Target className="w-6 h-6" />
-                </div>
-                <h4 className="font-semibold text-slate-800 mb-2">Verified Skill Graph</h4>
-                <p className="text-sm text-slate-500">
-                  Your overall Global Learner Index (GLI) and visual representation of your mastered skills.
-                </p>
-              </div>
-
-              {/* Job Match Card */}
-              <div className="bg-white border border-slate-200 rounded-2xl p-6 opacity-75 relative overflow-hidden">
-                <div className="absolute top-4 right-4 text-slate-400"><Lock className="w-5 h-5" /></div>
-                <div className="w-12 h-12 bg-slate-100 text-slate-500 rounded-xl flex items-center justify-center mb-4">
-                  <Briefcase className="w-6 h-6" />
-                </div>
-                <h4 className="font-semibold text-slate-800 mb-2">Company Matching</h4>
-                <p className="text-sm text-slate-500">
-                  Apply to verified jobs directly. Our Eligibility Engine will automatically match your skills to Job Descriptions.
-                </p>
+              <div className="mt-4 pt-3 border-t border-stone-100 flex items-center justify-between text-xs font-semibold text-emerald-800">
+                <span>Open Canvas</span>
+                <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
               </div>
             </div>
-          </div>
-        </>
+          </Link>
+
+          {/* Card 2: Market Career Intelligence */}
+          <Link href="/dashboard/careers" className="group">
+            <div className="bg-white border border-stone-200 hover:border-emerald-800/40 rounded-xl p-5 shadow-2xs transition-all h-full flex flex-col justify-between">
+              <div>
+                <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-800 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
+                  <Compass className="w-5 h-5" />
+                </div>
+                <h4 className="font-bold text-stone-900 text-sm group-hover:text-emerald-800 transition-colors font-serif">
+                  Career Explorer & Demand
+                </h4>
+                <p className="text-xs text-stone-600 mt-1 leading-relaxed">
+                  Analyze real-time hiring demand across thousands of live job listings.
+                </p>
+              </div>
+              <div className="mt-4 pt-3 border-t border-stone-100 flex items-center justify-between text-xs font-semibold text-emerald-800">
+                <span>Analyze Demand</span>
+                <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+              </div>
+            </div>
+          </Link>
+
+          {/* Card 3: Placement Opportunities */}
+          <Link href="/dashboard/jobs" className="group">
+            <div className="bg-white border border-stone-200 hover:border-emerald-800/40 rounded-xl p-5 shadow-2xs transition-all h-full flex flex-col justify-between">
+              <div>
+                <div className="w-10 h-10 rounded-lg bg-stone-100 text-stone-800 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
+                  <Briefcase className="w-5 h-5" />
+                </div>
+                <h4 className="font-bold text-stone-900 text-sm group-hover:text-stone-900 transition-colors font-serif">
+                  Recruiter Matching & Jobs
+                </h4>
+                <p className="text-xs text-stone-600 mt-1 leading-relaxed">
+                  Browse company openings filtered directly by your verified Hireability Index.
+                </p>
+              </div>
+              <div className="mt-4 pt-3 border-t border-stone-100 flex items-center justify-between text-xs font-semibold text-stone-800">
+                <span>View Openings</span>
+                <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+              </div>
+            </div>
+          </Link>
+
+          {/* Card 4: Direct Communications & Advisory Channels */}
+          <Link href="/dashboard/job-offers" className="group">
+            <div className="bg-white border border-orange-200 hover:border-orange-400 rounded-xl p-5 shadow-2xs transition-all h-full flex flex-col justify-between relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-16 h-16 bg-orange-100/40 rounded-full blur-xl pointer-events-none" />
+              <div>
+                <div className="w-10 h-10 rounded-lg bg-orange-50 text-orange-800 border border-orange-200 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
+                  <MessageSquare className="w-5 h-5 text-orange-700" />
+                </div>
+                <h4 className="font-bold text-stone-900 text-sm group-hover:text-orange-950 transition-colors font-serif flex items-center gap-1.5">
+                  Direct Communications
+                  <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
+                </h4>
+                <p className="text-xs text-stone-600 mt-1 leading-relaxed">
+                  Direct dialogue with corporate recruiters, alumni mentors, and project teams.
+                </p>
+              </div>
+              <div className="mt-4 pt-3 border-t border-orange-100 flex items-center justify-between text-xs font-semibold text-orange-800">
+                <span>Open Communication Hub</span>
+                <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform text-orange-600" />
+              </div>
+            </div>
+          </Link>
+
+        </div>
+      </div>
+
+      {/* Student Profile Modal */}
+      {isProfileModalOpen && (
+        <StudentProfileModal
+          data={modalData}
+          onClose={() => setIsProfileModalOpen(false)}
+        />
       )}
 
     </div>

@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useState } from 'react';
+import { useState } from 'react';
+import Link from 'next/link';
+import { LogIn, GraduationCap, CheckCircle2 } from 'lucide-react';
 import { loginStudent, devLoginStudent } from '@/lib/api';
 import { loginCompany } from '@/lib/companyApi';
 import { loginTPO } from '@/lib/tpoApi';
 import { loginAlumni } from '@/lib/alumniApi';
-import Link from 'next/link';
-import { LogIn, Zap } from 'lucide-react';
 
 type Role = 'student' | 'company' | 'tpo' | 'alumni';
 
@@ -14,8 +14,8 @@ export default function LoginPage() {
   const [role, setRole] = useState<Role>('student');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleDevLogin = async () => {
     setLoading(true);
@@ -25,6 +25,7 @@ export default function LoginPage() {
       if (response.user) {
         localStorage.setItem('student_id', response.user.id);
         localStorage.setItem('student_github', response.user.github_url || '');
+        localStorage.setItem('student_name', response.user.name || '');
       }
       window.location.href = '/dashboard';
     } catch (err: unknown) {
@@ -44,6 +45,7 @@ export default function LoginPage() {
         if (response.user) {
           localStorage.setItem('student_id', response.user.id);
           localStorage.setItem('student_github', response.user.github_url || '');
+          localStorage.setItem('student_name', response.user.name || '');
         }
         window.location.href = '/dashboard';
 
@@ -90,40 +92,61 @@ export default function LoginPage() {
     '/alumni/register';
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-4xl bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col md:flex-row">
-        {/* Left Side: Branding / Info */}
-        <div className="w-full md:w-1/3 bg-indigo-900 p-8 text-white flex flex-col justify-between hidden md:flex">
+    <div className="min-h-screen bg-stone-50 flex items-center justify-center p-4 text-stone-900">
+      <div className="w-full max-w-4xl bg-white border border-stone-200 rounded-2xl shadow-sm overflow-hidden flex flex-col md:flex-row">
+        
+        {/* Left Side: Classical Academic Column (No Black, No Blue) */}
+        <div className="w-full md:w-5/12 bg-stone-100 border-r border-stone-200 p-8 flex flex-col justify-between hidden md:flex">
           <div>
-            <h1 className="text-3xl font-bold mb-4 tracking-tight">SkillGraph</h1>
-            <p className="text-indigo-200">
-              Welcome back to your personalized career ecosystem.
+            <div className="flex items-center gap-2.5 mb-6">
+              <div className="w-9 h-9 rounded-lg bg-emerald-800 flex items-center justify-center text-white font-serif font-bold text-lg shadow-2xs">
+                S
+              </div>
+              <span className="font-serif font-bold text-stone-900 text-lg">SkillGraph</span>
+            </div>
+
+            <h1 className="text-2xl font-bold tracking-tight text-stone-900 mb-2 font-serif">
+              Institutional Placement Platform
+            </h1>
+            <p className="text-sm text-stone-600 leading-relaxed">
+              Standardized competency benchmarking, live market roadmaps, and campus-to-corporate career pipelines.
             </p>
           </div>
 
-          <div className="text-sm text-indigo-300">
-            <p className="mb-2">✓ AI-Driven Roadmaps</p>
-            <p className="mb-2">✓ Verified Skill Scores</p>
-            <p>✓ Direct Company Matching</p>
+          <div className="space-y-3 pt-6 border-t border-stone-200 text-xs text-stone-700">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-800 shrink-0" />
+              <span>Verified Hireability Index (GLI)</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-800 shrink-0" />
+              <span>Adaptive Engineering Assessments</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-800 shrink-0" />
+              <span>Institutional Placement Clusters</span>
+            </div>
           </div>
         </div>
 
         {/* Right Side: Form */}
-        <div className="w-full md:w-2/3 p-8 flex flex-col justify-center">
+        <div className="w-full md:w-7/12 p-8 sm:p-10 flex flex-col justify-center">
           <div className="mb-6">
-            <h2 className="text-2xl font-bold text-slate-800">Welcome Back</h2>
-            <p className="text-slate-500 text-sm mt-1">Log in to your account.</p>
+            <h2 className="text-2xl font-bold text-stone-900 font-serif">Sign In to Your Portal</h2>
+            <p className="text-stone-500 text-xs mt-1">Select your platform role to continue.</p>
           </div>
 
           {/* Role Tabs */}
-          <div className="flex gap-1.5 mb-6 bg-slate-100 p-1 rounded-lg w-fit flex-wrap">
+          <div className="flex gap-1.5 mb-6 bg-stone-100 p-1 rounded-xl w-fit flex-wrap border border-stone-200">
             {(['student', 'company', 'tpo', 'alumni'] as Role[]).map(r => (
               <button
                 key={r}
                 type="button"
                 onClick={() => { setRole(r); setError(''); }}
-                className={`px-3.5 py-1.5 text-sm font-medium rounded-md capitalize transition-colors ${
-                  role === r ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500'
+                className={`px-3 py-1.5 text-xs rounded-lg capitalize transition-all ${
+                  role === r 
+                    ? 'bg-emerald-800 text-white font-bold shadow-2xs' 
+                    : 'text-stone-600 hover:text-stone-900 font-medium'
                 }`}
               >
                 {r === 'tpo' ? 'TPO / College' : r}
@@ -132,66 +155,70 @@ export default function LoginPage() {
           </div>
 
           {error && (
-            <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm mb-6">
+            <div className="bg-rose-50 border border-rose-200 text-rose-800 p-3 rounded-xl text-xs mb-6">
               {error}
             </div>
           )}
 
-          <form onSubmit={handleLogin} className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
+          <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+              <label className="block text-xs font-bold uppercase tracking-wider text-stone-600 mb-1.5">Email Address</label>
               <input
-                type="email" required
-                className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                value={email} onChange={e => setEmail(e.target.value)}
+                type="email" 
+                required
+                className="w-full p-2.5 text-sm bg-stone-50 border border-stone-300 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-emerald-800 text-stone-900"
+                value={email} 
+                onChange={e => setEmail(e.target.value)}
               />
             </div>
             <div>
-              <div className="flex justify-between items-center mb-1">
-                <label className="block text-sm font-medium text-slate-700">Password</label>
+              <div className="flex justify-between items-center mb-1.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-stone-600">Password</label>
                 {role === 'student' && (
-                  <Link href="/forgot-password" className="text-xs text-indigo-600 hover:underline font-medium">
+                  <Link href="/forgot-password" className="text-xs text-emerald-800 hover:underline font-semibold">
                     Forgot password?
                   </Link>
                 )}
               </div>
               <input
-                type="password" required
-                className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                value={password} onChange={e => setPassword(e.target.value)}
+                type="password" 
+                required
+                className="w-full p-2.5 text-sm bg-stone-50 border border-stone-300 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-emerald-800 text-stone-900"
+                value={password} 
+                onChange={e => setPassword(e.target.value)}
               />
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full flex items-center justify-center px-6 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 mt-6"
+              className="w-full flex items-center justify-center px-6 py-2.5 bg-emerald-800 text-white text-sm font-bold rounded-xl hover:bg-emerald-900 disabled:opacity-50 mt-6 shadow-2xs transition-colors"
             >
-              {loading ? "Logging in..." : "Login"} <LogIn className="w-4 h-4 ml-2" />
+              {loading ? "Signing in..." : "Sign In"} <LogIn className="w-4 h-4 ml-2" />
             </button>
 
             {role === 'student' && (
               <>
-                <div className="relative my-6">
-                  <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-200"></div></div>
-                  <div className="relative flex justify-center text-sm"><span className="px-2 bg-white text-slate-500">Or bypass auth for testing</span></div>
+                <div className="relative my-5">
+                  <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-stone-200"></div></div>
+                  <div className="relative flex justify-center text-xs"><span className="px-2 bg-white text-stone-400 uppercase font-semibold">Testing Bypass</span></div>
                 </div>
 
                 <button
                   type="button"
                   onClick={handleDevLogin}
                   disabled={loading}
-                  className="w-full flex items-center justify-center px-6 py-2.5 bg-amber-500 text-white text-sm font-bold rounded-lg hover:bg-amber-600 shadow-md transition-colors"
+                  className="w-full flex items-center justify-center px-6 py-2.5 bg-stone-100 text-stone-800 text-xs font-bold rounded-xl hover:bg-stone-200 border border-stone-300 transition-colors"
                 >
-                  <Zap className="w-4 h-4 mr-2" /> DEV MODE: One-Click Auto Login
+                  <GraduationCap className="w-4 h-4 mr-2 text-emerald-800" /> Fast Dev Login (Demo Student)
                 </button>
               </>
             )}
           </form>
 
-          <div className="mt-6 text-center text-sm text-slate-500">
+          <div className="mt-6 text-center text-xs text-stone-600">
             Don&apos;t have an account?{' '}
-            <Link href={registerLink} className="text-indigo-600 font-medium hover:underline">
+            <Link href={registerLink} className="text-emerald-800 font-bold hover:underline">
               Register here
             </Link>
           </div>
