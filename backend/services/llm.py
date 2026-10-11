@@ -826,15 +826,46 @@ def analyze_github_repo(github_url: str, skill_name: str, project_abstract: str)
     username, repo = match.group(1), match.group(2)
     repo = repo.replace('.git', '').strip('/')
     
+    default_branch = "main"
+    root_filenames = set()
+    repo_languages = {}
+    
+    # 1. Fast metadata & root contents check via GitHub API
+    try:
+        req = urllib.request.Request(f"https://api.github.com/repos/{username}/{repo}", headers={'User-Agent': 'SkillGraph-App'})
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            if resp.status == 200:
+                repo_data = json.loads(resp.read().decode())
+                default_branch = repo_data.get("default_branch", "main")
+                primary_lang = repo_data.get("language", "")
+                if primary_lang:
+                    repo_languages[primary_lang] = 1
+    except Exception:
+        pass
+
+    try:
+        req = urllib.request.Request(f"https://api.github.com/repos/{username}/{repo}/contents", headers={'User-Agent': 'SkillGraph-App'})
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            if resp.status == 200:
+                contents_data = json.loads(resp.read().decode())
+                if isinstance(contents_data, list):
+                    root_filenames = {x.get("name", "").lower() for x in contents_data}
+    except Exception:
+        pass
+
     def try_fetch_raw(filename: str) -> str:
-        for branch in ['main', 'master']:
+        branches = [default_branch]
+        if default_branch != 'main':
+            branches.append('main')
+        if default_branch != 'master':
+            branches.append('master')
+        for branch in branches:
             try:
                 raw_url = f"https://raw.githubusercontent.com/{username}/{repo}/{branch}/{filename}"
                 req = urllib.request.Request(raw_url, headers={'User-Agent': 'SkillGraph-App'})
-                with urllib.request.urlopen(req, timeout=4) as response:
+                with urllib.request.urlopen(req, timeout=2.5) as response:
                     if response.status == 200:
-                        content = response.read().decode('utf-8')
-                        return content
+                        return response.read().decode('utf-8')
             except Exception:
                 pass
         return ""
@@ -844,7 +875,7 @@ def analyze_github_repo(github_url: str, skill_name: str, project_abstract: str)
     api_url = f"https://api.github.com/repos/{username}/{repo}/readme"
     try:
         req = urllib.request.Request(api_url, headers={'User-Agent': 'SkillGraph-App'})
-        with urllib.request.urlopen(req, timeout=5) as response:
+        with urllib.request.urlopen(req, timeout=4) as response:
             if response.status == 200:
                 data = json.loads(response.read().decode())
                 if 'content' in data:
@@ -857,25 +888,116 @@ def analyze_github_repo(github_url: str, skill_name: str, project_abstract: str)
     if not readme_content:
         readme_content = f"Repository: {repo} by {username}.\nCandidate's Project Abstract:\n{project_abstract}"
         
-    # 3. Proactively inspect skill-specific codebase files
+    # 3. Proactively validate skill-specific codebase files & evidence
     additional_context = []
     skill_lower = skill_name.lower()
-    
+    found_skill_evidence = False
+    evidence_missing_reason = ""
+
     if "docker" in skill_lower or "container" in skill_lower:
-        for f in ['Dockerfile', 'docker-compose.yml', 'docker-compose.yaml', '.dockerignore', 'compose.yaml']:
-            content = try_fetch_raw(f)
-            if content:
-                additional_context.append(f"--- Detected {f} ---\n{content[:1500]}")
-    elif "python" in skill_lower:
-        for f in ['requirements.txt', 'pyproject.toml', 'main.py', 'app.py']:
-            content = try_fetch_raw(f)
-            if content:
-                additional_context.append(f"--- Detected {f} ---\n{content[:1000]}")
-    elif "react" in skill_lower or "node" in skill_lower or "next" in skill_lower:
-        for f in ['package.json', 'next.config.js', 'next.config.mjs']:
-            content = try_fetch_raw(f)
-            if content:
-                additional_context.append(f"--- Detected {f} ---\n{content[:1000]}")
+        docker_candidates = ['dockerfile', 'docker-compose.yml', 'docker-compose.yaml', '.dockerignore', 'compose.yaml', 'compose.yml', 'containerfile']
+        found_docker = [f for f in docker_candidates if f in root_filenames]
+        
+        # If not detected in root_filenames (e.g. if API was rate-limited), probe primary files via raw
+        if not found_docker:
+            for f in ['Dockerfile', 'docker-compose.yml']:
+                content = try_fetch_raw(f)
+                if content:
+                    found_docker.append(f.lower())
+                    additional_context.append(f"--- Detected {f} ---\n{content[:1500]}")
+                    break
+        else:
+            # Fetch content of the first found docker file
+            for f in found_docker[:2]:
+                content = try_fetch_raw(f)
+                if content:
+                    additional_context.append(f"--- Detected {f} ---\n{content[:1500]}")
+        
+        has_docker_in_readme = "docker" in readme_content.lower() or "dockerfile" in readme_content.lower() or "docker-compose" in readme_content.lower() or "container" in readme_content.lower()
+        if found_docker or has_docker_in_readme:
+            found_skill_evidence = True
+        else:
+            evidence_missing_reason = f"No Dockerfile, docker-compose.yml, or container configuration found in repository '{repo}'. Level 2 verification for Docker requires an active Docker implementation in your repository."
+
+    elif "python" in skill_lower or "fastapi" in skill_lower or "django" in skill_lower or "flask" in skill_lower:
+        py_candidates = ['requirements.txt', 'pyproject.toml', 'main.py', 'app.py', 'setup.py', 'pipfile', 'manage.py']
+        has_py_file = any(f in root_filenames for f in py_candidates) or any(f.endswith('.py') for f in root_filenames)
+        
+        if not has_py_file:
+            for f in ['requirements.txt', 'main.py', 'pyproject.toml']:
+                content = try_fetch_raw(f)
+                if content:
+                    has_py_file = True
+                    additional_context.append(f"--- Detected {f} ---\n{content[:1000]}")
+                    break
+        else:
+            for f in ['requirements.txt', 'main.py', 'pyproject.toml']:
+                if f in root_filenames:
+                    content = try_fetch_raw(f)
+                    if content:
+                        additional_context.append(f"--- Detected {f} ---\n{content[:1000]}")
+                        break
+
+        has_python_lang = any("python" in k.lower() for k in repo_languages.keys())
+        has_python_in_readme = ".py" in readme_content.lower() or "python" in readme_content.lower()
+        if has_py_file or has_python_lang or has_python_in_readme:
+            found_skill_evidence = True
+        else:
+            evidence_missing_reason = f"No Python source code (.py), requirements.txt, or pyproject.toml detected in repository '{repo}'. Level 2 verification requires an authentic Python codebase."
+
+    elif "react" in skill_lower or "next" in skill_lower:
+        has_pkg = 'package.json' in root_filenames
+        has_react_dep = False
+        if has_pkg:
+            pkg_content = try_fetch_raw("package.json")
+            if pkg_content:
+                additional_context.append(f"--- Detected package.json ---\n{pkg_content[:1000]}")
+                if "react" in pkg_content.lower() or "next" in pkg_content.lower():
+                    has_react_dep = True
+        else:
+            # Fallback probe
+            pkg_content = try_fetch_raw("package.json")
+            if pkg_content and ("react" in pkg_content.lower() or "next" in pkg_content.lower()):
+                has_react_dep = True
+
+        has_frontend_files = any(f in root_filenames for f in ['next.config.js', 'next.config.mjs', 'next.config.ts', 'src', 'app', 'pages'])
+        has_js_lang = any(k.lower() in ['javascript', 'typescript'] for k in repo_languages.keys())
+        if has_react_dep or has_frontend_files or (has_js_lang and ("react" in readme_content.lower() or "next" in readme_content.lower())):
+            found_skill_evidence = True
+        else:
+            evidence_missing_reason = f"No React or Next.js dependencies or components detected in repository '{repo}'. Level 2 verification requires a React/Next.js codebase with package.json."
+
+    elif "kubernetes" in skill_lower or "k8s" in skill_lower:
+        has_k8s_file = any(f in root_filenames for f in ['deployment.yaml', 'deployment.yml', 'service.yaml', 'k8s'])
+        if not has_k8s_file:
+            for f in ['k8s/deployment.yaml', 'deployment.yaml', 'deployment.yml']:
+                content = try_fetch_raw(f)
+                if content:
+                    has_k8s_file = True
+                    additional_context.append(f"--- Detected {f} ---\n{content[:1000]}")
+                    break
+        has_k8s_in_readme = "kubernetes" in readme_content.lower() or "kubectl" in readme_content.lower() or "helm" in readme_content.lower()
+        if has_k8s_file or has_k8s_in_readme:
+            found_skill_evidence = True
+        else:
+            evidence_missing_reason = f"No Kubernetes manifests (.yaml with deployment/service) or Helm charts detected in repository '{repo}'. Level 2 verification requires active Kubernetes configuration."
+    else:
+        # Generic language/skill check: check repo languages or keywords
+        has_lang = any(skill_lower in k.lower() for k in repo_languages.keys())
+        has_keyword = skill_lower in readme_content.lower() or skill_lower in project_abstract.lower()
+        if has_lang or has_keyword or not repo_languages:
+            found_skill_evidence = True
+        else:
+            evidence_missing_reason = f"No evidence of {skill_name} implementation detected in repository '{repo}'. Level 2 verification requires project code demonstrating this skill."
+
+    # If the skill implementation is completely absent, reject the repository!
+    if not found_skill_evidence:
+        print(f"[AnalyzeRepo] REJECTED (Skill Missing): {evidence_missing_reason}")
+        return {
+            "passed_checks": False,
+            "feedback": evidence_missing_reason,
+            "questions": []
+        }
 
     extra_code_text = "\n\n".join(additional_context)
         

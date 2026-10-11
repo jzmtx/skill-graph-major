@@ -29,7 +29,8 @@ export default function ProjectVerificationPage({ params }: { params: Promise<{ 
   
   // Scheduling & Asynchronous Audit States
   const [interviewId, setInterviewId] = useState<string | null>(null);
-  const [scheduledStatus, setScheduledStatus] = useState<'PREPARING' | 'READY'>('PREPARING');
+  const [scheduledStatus, setScheduledStatus] = useState<'PREPARING' | 'READY' | 'INVALID'>('PREPARING');
+  const [auditFeedback, setAuditFeedback] = useState<string>('');
   const [estimatedSeconds, setEstimatedSeconds] = useState(25);
   const [scheduledTime, setScheduledTime] = useState<string>('');
   
@@ -196,7 +197,7 @@ export default function ProjectVerificationPage({ params }: { params: Promise<{ 
 
   // Polling hook for scheduled interview preparation in Step 2
   useEffect(() => {
-    if (step !== 2 || !interviewId || scheduledStatus === 'READY') return;
+    if (step !== 2 || !interviewId || scheduledStatus === 'READY' || scheduledStatus === 'INVALID') return;
 
     const interval = setInterval(async () => {
       try {
@@ -207,6 +208,10 @@ export default function ProjectVerificationPage({ params }: { params: Promise<{ 
             setQuestions(statusRes.questions);
           }
           clearInterval(interval);
+        } else if (statusRes.status === 'INVALID') {
+          setScheduledStatus('INVALID');
+          setAuditFeedback(statusRes.feedback || `No ${skillName} implementation detected in this repository.`);
+          clearInterval(interval);
         }
       } catch (e) {
         console.warn("Polling interview status:", e);
@@ -214,11 +219,11 @@ export default function ProjectVerificationPage({ params }: { params: Promise<{ 
     }, 2500);
 
     return () => clearInterval(interval);
-  }, [step, interviewId, scheduledStatus]);
+  }, [step, interviewId, scheduledStatus, skillName]);
 
   // Countdown timer in scheduled lobby
   useEffect(() => {
-    if (step !== 2 || scheduledStatus === 'READY') return;
+    if (step !== 2 || scheduledStatus !== 'PREPARING') return;
     const timer = setInterval(() => {
       setEstimatedSeconds(prev => (prev > 1 ? prev - 1 : 1));
     }, 1000);
@@ -530,131 +535,189 @@ export default function ProjectVerificationPage({ params }: { params: Promise<{ 
             {/* Step 2: Scheduled Interview & Codebase Audit Lobby */}
             {step === 2 && (
               <div className="animate-in fade-in duration-300 max-w-2xl mx-auto">
-                <div className="text-center mb-6">
-                  <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 border transition-all ${
-                    scheduledStatus === 'READY' 
-                      ? 'bg-emerald-50 border-emerald-300 text-emerald-800 shadow-md shadow-emerald-500/10'
-                      : 'bg-amber-50 border-amber-300 text-amber-700'
-                  }`}>
-                    {scheduledStatus === 'READY' ? (
-                      <CheckCircle2 className="w-8 h-8 text-emerald-700 animate-bounce" />
-                    ) : (
-                      <Clock className="w-8 h-8 text-amber-600 animate-spin" />
-                    )}
-                  </div>
+                {scheduledStatus === 'INVALID' ? (
+                  <div className="bg-red-50 border border-red-200 rounded-2xl p-6 sm:p-8 text-left shadow-xs">
+                    <div className="flex items-start gap-3.5 mb-4">
+                      <div className="w-12 h-12 rounded-xl bg-red-100 border border-red-200 text-red-700 flex items-center justify-center shrink-0">
+                        <XCircle className="w-7 h-7 text-red-600" />
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-red-800 bg-red-100/80 border border-red-200 px-2 py-0.5 rounded-full">
+                          Verification Check Failed
+                        </span>
+                        <h2 className="text-xl sm:text-2xl font-serif font-bold text-red-950 mt-1">
+                          No {skillName} Implementation Detected
+                        </h2>
+                      </div>
+                    </div>
 
-                  <span className={`text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full border ${
-                    scheduledStatus === 'READY'
-                      ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
-                      : 'bg-amber-50 text-amber-900 border-amber-200'
-                  }`}>
-                    {scheduledStatus === 'READY' ? 'Oral Defense Room Ready' : 'Interview Scheduled & Preparing'}
-                  </span>
+                    <div className="bg-white border border-red-200/80 rounded-xl p-4 text-xs md:text-sm text-stone-800 leading-relaxed mb-4">
+                      <p className="font-semibold text-red-900 mb-1 flex items-center gap-1.5">
+                        <ShieldAlert className="w-4 h-4 text-red-600" />
+                        Assessor Audit Telemetry:
+                      </p>
+                      <p className="text-stone-700 font-mono text-xs bg-stone-50 p-2.5 rounded-lg border border-stone-200 mt-1">
+                        {auditFeedback || `Scanned ${githubUrl}: No evidence of ${skillName} source code or configurations found.`}
+                      </p>
+                    </div>
 
-                  <h2 className="text-2xl md:text-3xl font-serif font-bold text-stone-900 mt-3 mb-2">
-                    {scheduledStatus === 'READY' ? "Your Defense Room is Open!" : "Interview Scheduled & Under Review"}
-                  </h2>
-                  <p className="text-stone-600 text-xs md:text-sm max-w-lg mx-auto leading-relaxed">
-                    {scheduledStatus === 'READY'
-                      ? "Our AI Assessor has audited your repository structure and calibrated 5 tailored defense questions. You may enter whenever you are ready."
-                      : "Analyzing real-world code takes a few moments. Your interview has been scheduled — our AI Assessor is currently reviewing your codebase."}
-                  </p>
-                </div>
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-xs text-amber-900 mb-6 space-y-1">
+                      <p className="font-bold flex items-center gap-1.5 text-amber-950">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-700" />
+                        Level 2 Codebase Standards:
+                      </p>
+                      <p className="text-amber-900/90 leading-relaxed">
+                        Level 2 certification requires an authentic project codebase. If you are validating <strong>{skillName}</strong>, your repository must contain real implementation files (e.g., Docker requires a <code>Dockerfile</code> or <code>docker-compose.yml</code>; Python requires <code>.py</code> source files).
+                      </p>
+                    </div>
 
-                {/* Repository & Schedule Overview Card */}
-                <div className="bg-stone-50 border border-stone-200 rounded-2xl p-5 mb-6 space-y-3.5">
-                  <div className="flex items-center justify-between text-xs pb-3 border-b border-stone-200">
-                    <span className="text-stone-500 font-medium">Target Competency:</span>
-                    <span className="font-bold text-stone-900">{skillName}</span>
+                    <div className="flex flex-col sm:flex-row items-center gap-3">
+                      <button
+                        onClick={() => {
+                          setScheduledStatus('PREPARING');
+                          setStep(1);
+                        }}
+                        className="w-full sm:flex-1 py-3.5 bg-red-800 hover:bg-red-900 text-white font-semibold text-xs md:text-sm rounded-xl transition-colors shadow-2xs text-center cursor-pointer"
+                      >
+                        Submit Qualified Repository
+                      </button>
+                      <button
+                        onClick={() => router.push('/dashboard/verify')}
+                        className="w-full sm:w-auto px-6 py-3.5 bg-stone-100 hover:bg-stone-200 text-stone-700 font-semibold text-xs md:text-sm rounded-xl transition-colors border border-stone-300 text-center cursor-pointer"
+                      >
+                        Return to Hub
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between text-xs pb-3 border-b border-stone-200">
-                    <span className="text-stone-500 font-medium">Registered Repository:</span>
-                    <a 
-                      href={githubUrl} 
-                      target="_blank" 
-                      rel="noopener noreferrer" 
-                      className="font-mono text-emerald-800 font-semibold hover:underline flex items-center gap-1 max-w-[260px] truncate"
-                    >
-                      {githubUrl.replace('https://github.com/', '')}
-                      <ExternalLink className="w-3 h-3 shrink-0" />
-                    </a>
-                  </div>
-                  <div className="flex items-center justify-between text-xs pb-3 border-b border-stone-200">
-                    <span className="text-stone-500 font-medium">Scheduled Time:</span>
-                    <span className="font-semibold text-stone-900 flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5 text-stone-600" />
-                      Today at {scheduledTime || "Now"} (On-Demand / Flexible)
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-stone-500 font-medium">Assessor Telemetry Status:</span>
-                    <span className={`font-semibold flex items-center gap-1.5 ${
-                      scheduledStatus === 'READY' ? 'text-emerald-800' : 'text-amber-700'
-                    }`}>
+                ) : (
+                  <div>
+                    <div className="text-center mb-6">
+                      <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 border transition-all ${
+                        scheduledStatus === 'READY' 
+                          ? 'bg-emerald-50 border-emerald-300 text-emerald-800 shadow-md shadow-emerald-500/10'
+                          : 'bg-amber-50 border-amber-300 text-amber-700'
+                      }`}>
+                        {scheduledStatus === 'READY' ? (
+                          <CheckCircle2 className="w-8 h-8 text-emerald-700 animate-bounce" />
+                        ) : (
+                          <Clock className="w-8 h-8 text-amber-600 animate-spin" />
+                        )}
+                      </div>
+
+                      <span className={`text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full border ${
+                        scheduledStatus === 'READY'
+                          ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
+                          : 'bg-amber-50 text-amber-900 border-amber-200'
+                      }`}>
+                        {scheduledStatus === 'READY' ? 'Oral Defense Room Ready' : 'Interview Scheduled & Preparing'}
+                      </span>
+
+                      <h2 className="text-2xl md:text-3xl font-serif font-bold text-stone-900 mt-3 mb-2">
+                        {scheduledStatus === 'READY' ? "Your Defense Room is Open!" : "Interview Scheduled & Under Review"}
+                      </h2>
+                      <p className="text-stone-600 text-xs md:text-sm max-w-lg mx-auto leading-relaxed">
+                        {scheduledStatus === 'READY'
+                          ? "Our AI Assessor has audited your repository structure and calibrated 5 tailored defense questions. You may enter whenever you are ready."
+                          : "Analyzing real-world code takes a few moments. Your interview has been scheduled — our AI Assessor is currently reviewing your codebase."}
+                      </p>
+                    </div>
+
+                    {/* Repository & Schedule Overview Card */}
+                    <div className="bg-stone-50 border border-stone-200 rounded-2xl p-5 mb-6 space-y-3.5">
+                      <div className="flex items-center justify-between text-xs pb-3 border-b border-stone-200">
+                        <span className="text-stone-500 font-medium">Target Competency:</span>
+                        <span className="font-bold text-stone-900">{skillName}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs pb-3 border-b border-stone-200">
+                        <span className="text-stone-500 font-medium">Registered Repository:</span>
+                        <a 
+                          href={githubUrl} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          className="font-mono text-emerald-800 font-semibold hover:underline flex items-center gap-1 max-w-[260px] truncate"
+                        >
+                          {githubUrl.replace('https://github.com/', '')}
+                          <ExternalLink className="w-3 h-3 shrink-0" />
+                        </a>
+                      </div>
+                      <div className="flex items-center justify-between text-xs pb-3 border-b border-stone-200">
+                        <span className="text-stone-500 font-medium">Scheduled Time:</span>
+                        <span className="font-semibold text-stone-900 flex items-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5 text-stone-600" />
+                          Today at {scheduledTime || "Now"} (On-Demand / Flexible)
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-stone-500 font-medium">Assessor Telemetry Status:</span>
+                        <span className={`font-semibold flex items-center gap-1.5 ${
+                          scheduledStatus === 'READY' ? 'text-emerald-800' : 'text-amber-700'
+                        }`}>
+                          {scheduledStatus === 'READY' ? (
+                            <>
+                              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                              Questions Ready & Calibrated
+                            </>
+                          ) : (
+                            <>
+                              <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
+                              Scanning Codebase (~{estimatedSeconds}s remaining)
+                            </>
+                          )}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Background Checklist */}
+                    <div className="bg-white border border-stone-200 rounded-xl p-4 mb-6 space-y-2.5 text-xs text-stone-700">
+                      <div className="flex items-center gap-2.5">
+                        <Check className="w-4 h-4 text-emerald-700 shrink-0" />
+                        <span>Repository endpoint validated & commits indexed</span>
+                      </div>
+                      <div className="flex items-center gap-2.5">
+                        <Check className="w-4 h-4 text-emerald-700 shrink-0" />
+                        <span>Architectural patterns and {skillName} usage mapped</span>
+                      </div>
+                      <div className="flex items-center gap-2.5">
+                        {scheduledStatus === 'READY' ? (
+                          <Check className="w-4 h-4 text-emerald-700 shrink-0" />
+                        ) : (
+                          <Loader2 className="w-4 h-4 text-amber-600 animate-spin shrink-0" />
+                        )}
+                        <span className={scheduledStatus === 'READY' ? 'text-stone-700' : 'text-amber-800 font-semibold'}>
+                          {scheduledStatus === 'READY' 
+                            ? '5 custom oral defense and coding questions prepared' 
+                            : 'AI formulating customized defense & coding challenge questions...'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Pre-Interview Checklist & Actions */}
+                    <div className="space-y-3">
                       {scheduledStatus === 'READY' ? (
-                        <>
-                          <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                          Questions Ready & Calibrated
-                        </>
+                        <button
+                          onClick={handleEnterInterview}
+                          className="w-full flex items-center justify-center gap-2 py-4 bg-emerald-800 text-white font-bold text-sm rounded-xl hover:bg-emerald-900 transition-all shadow-md shadow-emerald-900/10 cursor-pointer"
+                        >
+                          <Play className="w-4 h-4 fill-current" />
+                          Enter Virtual Interview Room Now
+                          <ArrowRight className="w-4 h-4 ml-1" />
+                        </button>
                       ) : (
-                        <>
-                          <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
-                          Scanning Codebase (~{estimatedSeconds}s remaining)
-                        </>
+                        <button
+                          onClick={handleEnterInterview}
+                          className="w-full flex items-center justify-center gap-2 py-4 bg-stone-100 hover:bg-stone-200 text-stone-800 font-semibold text-xs md:text-sm rounded-xl transition-all border border-stone-300"
+                        >
+                          <Loader2 className="w-4 h-4 animate-spin text-stone-600" />
+                          Waiting for Assessor Calibration (~{estimatedSeconds}s) • Or Enter Now
+                        </button>
                       )}
-                    </span>
-                  </div>
-                </div>
 
-                {/* Background Checklist */}
-                <div className="bg-white border border-stone-200 rounded-xl p-4 mb-6 space-y-2.5 text-xs text-stone-700">
-                  <div className="flex items-center gap-2.5">
-                    <Check className="w-4 h-4 text-emerald-700 shrink-0" />
-                    <span>Repository endpoint validated & commits indexed</span>
+                      <p className="text-[11px] text-stone-500 text-center leading-normal">
+                        Your interview is reserved. You can take it immediately or return later to complete your oral defense.
+                      </p>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2.5">
-                    <Check className="w-4 h-4 text-emerald-700 shrink-0" />
-                    <span>Architectural patterns and {skillName} usage mapped</span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    {scheduledStatus === 'READY' ? (
-                      <Check className="w-4 h-4 text-emerald-700 shrink-0" />
-                    ) : (
-                      <Loader2 className="w-4 h-4 text-amber-600 animate-spin shrink-0" />
-                    )}
-                    <span className={scheduledStatus === 'READY' ? 'text-stone-700' : 'text-amber-800 font-semibold'}>
-                      {scheduledStatus === 'READY' 
-                        ? '5 custom oral defense and coding questions prepared' 
-                        : 'AI formulating customized defense & coding challenge questions...'}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Pre-Interview Checklist & Actions */}
-                <div className="space-y-3">
-                  {scheduledStatus === 'READY' ? (
-                    <button
-                      onClick={handleEnterInterview}
-                      className="w-full flex items-center justify-center gap-2 py-4 bg-emerald-800 text-white font-bold text-sm rounded-xl hover:bg-emerald-900 transition-all shadow-md shadow-emerald-900/10 cursor-pointer"
-                    >
-                      <Play className="w-4 h-4 fill-current" />
-                      Enter Virtual Interview Room Now
-                      <ArrowRight className="w-4 h-4 ml-1" />
-                    </button>
-                  ) : (
-                    <button
-                      onClick={handleEnterInterview}
-                      className="w-full flex items-center justify-center gap-2 py-4 bg-stone-100 hover:bg-stone-200 text-stone-800 font-semibold text-xs md:text-sm rounded-xl transition-all border border-stone-300"
-                    >
-                      <Loader2 className="w-4 h-4 animate-spin text-stone-600" />
-                      Waiting for Assessor Calibration (~{estimatedSeconds}s) • Or Enter Now
-                    </button>
-                  )}
-
-                  <p className="text-[11px] text-stone-500 text-center leading-normal">
-                    Your interview is reserved. You can take it immediately or return later to complete your oral defense.
-                  </p>
-                </div>
+                )}
               </div>
             )}
 

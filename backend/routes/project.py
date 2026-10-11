@@ -39,6 +39,13 @@ def process_async_repo_audit(interview_id: str, github_url: str, skill_name: str
     print(f"[AsyncInterview] Background audit started for interview {interview_id} ({skill_name})...")
     try:
         analysis_result = analyze_github_repo(github_url, skill_name, project_abstract)
+        if not analysis_result.get("passed_checks", True):
+            scheduled_interviews[interview_id]["status"] = "INVALID"
+            scheduled_interviews[interview_id]["feedback"] = analysis_result.get("feedback", f"No {skill_name} implementation found in this repository.")
+            scheduled_interviews[interview_id]["questions"] = []
+            print(f"[AsyncInterview] Repository rejected for {interview_id}: {scheduled_interviews[interview_id]['feedback']}")
+            return
+
         questions = analysis_result.get("questions") or []
         if not questions:
             questions = get_calibrated_defense_questions(skill_name, github_url, project_abstract)
@@ -101,6 +108,7 @@ async def get_interview_status(interview_id: str):
     return {
         "interview_id": interview_id,
         "status": interview["status"],
+        "feedback": interview.get("feedback"),
         "questions": interview.get("questions", []),
         "ready_at": interview.get("ready_at"),
         "skill_name": interview.get("skill_name"),
@@ -111,10 +119,14 @@ async def get_interview_status(interview_id: str):
 async def verify_repo(req: VerifyRepoRequest):
     try:
         analysis_result = analyze_github_repo(req.github_url, req.skill_name, req.project_abstract)
+        if not analysis_result.get("passed_checks", True):
+            raise HTTPException(status_code=400, detail=analysis_result.get("feedback", f"No {req.skill_name} implementation detected."))
         return {
             "message": "Repository analyzed and principles verified.",
             "questions": analysis_result.get("questions", [])
         }
+    except HTTPException:
+        raise
     except Exception as e:
         print("Error verifying repo:", e)
         # Fallback questions so student is never blocked
