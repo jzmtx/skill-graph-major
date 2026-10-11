@@ -97,3 +97,8 @@ export const deleteApplicationMessage = async (message_id: string) => {
   const response = await api.delete(`/api/company/messages/${message_id}`);
   return response.data;
 };
+
+export const getStudentRecruiterProfile = async (student_id: string) => {
+  const response = await api.get(`/api/company/students/${student_id}/profile`);
+  return response.data;
+};

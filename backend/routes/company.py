@@ -256,6 +256,212 @@ async def get_company_jobs(auth_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+def _enrich_students_career_portfolio(student_ids: List[str]) -> Dict[str, Dict]:
+    """Bulk enrichment for students:
+    1. Active open-source projects the student is currently working on.
+    2. Total open-source projects worked on (active + completed).
+    3. Current hired jobs/placements across all companies in the system.
+    """
+    portfolio_map = {}
+    if not student_ids:
+        return portfolio_map
+
+    for sid in student_ids:
+        portfolio_map[sid] = {
+            "open_source_projects": {
+                "active_count": 0,
+                "total_worked_count": 0,
+                "active_projects": [],
+                "completed_projects": []
+            },
+            "hired_status": {
+                "is_hired": False,
+                "hired_count": 0,
+                "hired_jobs": []
+            }
+        }
+
+    # 1. Fetch Open Source Applications & Projects
+    try:
+        from routes.opensource import _MEM_APPLICATIONS, _MEM_PROJECTS
+    except Exception:
+        _MEM_APPLICATIONS, _MEM_PROJECTS = [], []
+
+    try:
+        os_apps = []
+        try:
+            res = supabase.table("open_source_applications").select("*").in_("student_id", student_ids).execute()
+            if res.data:
+                os_apps = res.data
+        except Exception:
+            pass
+
+        for mem_app in _MEM_APPLICATIONS:
+            if mem_app.get("student_id") in student_ids:
+                if not any(a.get("id") == mem_app.get("id") for a in os_apps):
+                    os_apps.append(mem_app)
+
+        proj_ids = list(set([a.get("project_id") for a in os_apps if a.get("project_id")]))
+        projects_dict = {}
+        if proj_ids:
+            try:
+                p_res = supabase.table("open_source_projects").select("*").in_("id", proj_ids).execute()
+                if p_res.data:
+                    for p in p_res.data:
+                        projects_dict[p["id"]] = p
+            except Exception:
+                pass
+
+        for mem_p in _MEM_PROJECTS:
+            if mem_p.get("id") in proj_ids:
+                projects_dict[mem_p["id"]] = mem_p
+
+        # Check group assignments for roles
+        group_members_map = {}
+        try:
+            gm_res = supabase.table("open_source_group_members").select("group_id, student_id, role, open_source_groups(project_id, name)").in_("student_id", student_ids).execute()
+            if gm_res.data:
+                for gm in gm_res.data:
+                    st_id = gm.get("student_id")
+                    if st_id:
+                        group_members_map.setdefault(st_id, []).append(gm)
+        except Exception:
+            pass
+
+        for a in os_apps:
+            sid = str(a.get("student_id"))
+            if sid not in portfolio_map:
+                continue
+
+            pid = a.get("project_id")
+            proj = projects_dict.get(pid) or {"id": pid, "title": "Open Source Project", "tech_stack": []}
+            status = str(a.get("status") or "").lower()
+
+            proj_entry = {
+                "id": proj.get("id") or pid,
+                "title": proj.get("title") or "Open Source Project",
+                "description": proj.get("description"),
+                "repo_url": proj.get("repo_url"),
+                "tech_stack": proj.get("tech_stack") or [],
+                "status": status or "contributing",
+                "role": "Contributor",
+                "applied_at": a.get("applied_at")
+            }
+
+            st_groups = group_members_map.get(sid, [])
+            matched_g = next((g for g in st_groups if g.get("open_source_groups", {}).get("project_id") == pid), None)
+            if matched_g:
+                proj_entry["role"] = matched_g.get("role") or "Core Contributor"
+                proj_entry["team_name"] = matched_g.get("open_source_groups", {}).get("name")
+
+            if status in ["selected", "hired", "contributing", "active", "in-progress", "referred"] or matched_g:
+                portfolio_map[sid]["open_source_projects"]["active_projects"].append(proj_entry)
+            elif status in ["completed", "merged", "finished"]:
+                portfolio_map[sid]["open_source_projects"]["completed_projects"].append(proj_entry)
+            else:
+                portfolio_map[sid]["open_source_projects"]["active_projects"].append(proj_entry)
+
+        for sid, pdata in portfolio_map.items():
+            os_data = pdata["open_source_projects"]
+            seen_active = {}
+            for ap in os_data["active_projects"]:
+                seen_active[ap["id"]] = ap
+            os_data["active_projects"] = list(seen_active.values())
+            os_data["active_count"] = len(os_data["active_projects"])
+
+            seen_comp = {}
+            for cp in os_data["completed_projects"]:
+                seen_comp[cp["id"]] = cp
+            os_data["completed_projects"] = list(seen_comp.values())
+
+            os_data["total_worked_count"] = len(os_data["active_projects"]) + len(os_data["completed_projects"])
+
+    except Exception as e:
+        print("Error enriching open source portfolio:", e)
+
+    # 2. Fetch Hired Job Positions across all jobs
+    try:
+        hired_res = supabase.table("job_applications").select("id, student_id, job_id, status, created_at").in_("student_id", student_ids).eq("status", "hired").execute()
+        if hired_res.data:
+            job_ids = list(set([h["job_id"] for h in hired_res.data if h.get("job_id")]))
+            jobs_meta = {}
+            if job_ids:
+                j_res = supabase.table("job_postings").select("id, title, company_id").in_("id", job_ids).execute()
+                comp_ids = []
+                if j_res.data:
+                    for jp in j_res.data:
+                        jobs_meta[jp["id"]] = jp
+                        if jp.get("company_id"):
+                            comp_ids.append(jp["company_id"])
+                    
+                    if comp_ids:
+                        c_res = supabase.table("companies").select("id, name").in_("id", list(set(comp_ids))).execute()
+                        c_map = {c["id"]: c["name"] for c in (c_res.data or [])}
+                        for jp in jobs_meta.values():
+                            jp["company_name"] = c_map.get(jp.get("company_id"), "Corporate Employer")
+
+            for h in hired_res.data:
+                sid = str(h.get("student_id"))
+                if sid in portfolio_map:
+                    j_info = jobs_meta.get(h.get("job_id"), {})
+                    job_entry = {
+                        "id": h.get("id"),
+                        "job_id": h.get("job_id"),
+                        "job_title": j_info.get("title") or "Software Engineer",
+                        "company_name": j_info.get("company_name") or "Corporate Employer",
+                        "hired_at": h.get("created_at"),
+                        "status": "hired"
+                    }
+                    portfolio_map[sid]["hired_status"]["hired_jobs"].append(job_entry)
+
+        for sid, pdata in portfolio_map.items():
+            h_data = pdata["hired_status"]
+            h_data["hired_count"] = len(h_data["hired_jobs"])
+            h_data["is_hired"] = h_data["hired_count"] > 0
+
+    except Exception as e:
+        print("Error enriching hired jobs status:", e)
+
+    return portfolio_map
+
+@router.get("/students/{student_id}/profile")
+async def get_student_recruiter_profile(student_id: str):
+    """Direct profile endpoint for recruiters to view a student's full skill score,
+    active open source projects, total worked projects, and current hired jobs."""
+    try:
+        st_res = supabase.table("students").select("*").eq("id", student_id).execute()
+        if not st_res.data:
+            raise HTTPException(status_code=404, detail="Student not found")
+        student = st_res.data[0]
+
+        skills_res = supabase.table("student_skills").select("*").eq("student_id", student_id).execute()
+        skills = skills_res.data or []
+        hireability = calculate_hireability_index(skills)
+
+        college_name = None
+        if student.get("college_id"):
+            col_res = supabase.table("colleges").select("name").eq("id", student["college_id"]).execute()
+            if col_res.data:
+                college_name = col_res.data[0]["name"]
+
+        portfolio = _enrich_students_career_portfolio([student_id]).get(student_id, {
+            "open_source_projects": {"active_count": 0, "total_worked_count": 0, "active_projects": [], "completed_projects": []},
+            "hired_status": {"is_hired": False, "hired_count": 0, "hired_jobs": []}
+        })
+
+        return {
+            "student": student,
+            "college_name": college_name,
+            "skills": skills,
+            "hireability": hireability,
+            "open_source_projects": portfolio["open_source_projects"],
+            "hired_status": portfolio["hired_status"]
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/jobs/{auth_id}/{job_id}/applicants")
 async def get_job_applicants(auth_id: str, job_id: str):
     company = _assert_company(auth_id)
@@ -303,6 +509,9 @@ async def get_job_applicants(auth_id: str, job_id: str):
             colleges_res = supabase.table("colleges").select("id, name").in_("id", college_ids).execute()
             colleges_map = {c["id"]: c["name"] for c in colleges_res.data}
 
+        # Bulk fetch career portfolio: active open source projects, total worked count, and current hired jobs
+        portfolio_map = _enrich_students_career_portfolio(student_ids)
+
         enriched = []
         for app in apps.data:
             sid = str(app["student_id"])
@@ -315,13 +524,29 @@ async def get_job_applicants(auth_id: str, job_id: str):
             if isinstance(student_data, dict) and student_data.get("college_id"):
                 college_name = colleges_map.get(student_data["college_id"])
 
+            st_portfolio = portfolio_map.get(sid, {
+                "open_source_projects": {
+                    "active_count": 0,
+                    "total_worked_count": 0,
+                    "active_projects": [],
+                    "completed_projects": []
+                },
+                "hired_status": {
+                    "is_hired": False,
+                    "hired_count": 0,
+                    "hired_jobs": []
+                }
+            })
+
             enriched.append({
                 **app,
                 "student": student_data,
                 "students": student_data,  # backward compatibility for existing UI references
                 "college_name": college_name,
                 "skills": student_skills,
-                "hireability": hireability
+                "hireability": hireability,
+                "open_source_projects": st_portfolio["open_source_projects"],
+                "hired_status": st_portfolio["hired_status"]
             })
 
         return {"applicants": enriched, "job": job_meta}

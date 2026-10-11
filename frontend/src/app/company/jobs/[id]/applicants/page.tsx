@@ -3,10 +3,11 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { getJobApplicants, updateApplicationStatus, getApplicationMessages, sendApplicationMessage, getApplicationAssessment, assignApplicationAssessment, updateAssessmentCompanyResult, deleteApplicationMessage, autoShortlistJob } from '@/lib/companyApi';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, User, FileText, Check, X, Star, Mail, Phone, GraduationCap, ShieldCheck, CheckCircle2, Sparkles, ExternalLink, Award, MessageSquare, Send, ClipboardList, Link as LinkIcon, Image as ImageIcon, Trash2, Zap } from 'lucide-react';
+import { ArrowLeft, User, FileText, Check, X, Star, Mail, Phone, GraduationCap, ShieldCheck, CheckCircle2, Sparkles, ExternalLink, Award, MessageSquare, Send, ClipboardList, Link as LinkIcon, Image as ImageIcon, Trash2, Zap, Briefcase, GitPullRequest, Code2, Building2 } from 'lucide-react';
 import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
 import CreativeChatConsole from '@/components/chat/CreativeChatConsole';
+import StudentProfileModal from '@/components/dashboard/StudentProfileModal';
 
 const GithubIcon = ({ className = "w-3.5 h-3.5" }: { className?: string }) => (
   <svg className={className} fill="currentColor" viewBox="0 0 24 24">
@@ -32,6 +33,7 @@ export default function JobApplicantsPage() {
   const [jobMeta, setJobMeta] = useState<any>(null);
   const [filterTab, setFilterTab] = useState<'all' | 'shortlisted' | 'hired'>('all');
   const [isShortlisting, setIsShortlisting] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
 
   // Chat state
   const [chatOpen, setChatOpen] = useState(false);
@@ -340,7 +342,7 @@ export default function JobApplicantsPage() {
                     </span>
                   </div>
                   <p className="text-[11px] text-stone-500 mb-2 truncate">{(app.student || app.students)?.email}</p>
-                  <div className="flex items-center justify-between gap-1 text-xs">
+                  <div className="flex items-center justify-between gap-1 text-xs mb-2">
                     {app.hireability ? (
                       <span className="inline-flex items-center gap-1 font-bold text-emerald-800 bg-white border border-stone-200 px-2 py-0.5 rounded text-[11px]">
                         <Sparkles className="w-3 h-3 text-emerald-800" /> {app.hireability.score}
@@ -352,6 +354,30 @@ export default function JobApplicantsPage() {
                       <Star className="w-3 h-3 fill-current" />
                       <span>{app.match_score}%</span>
                     </div>
+                  </div>
+
+                  {/* Recruiter Insights: Open Source & Placement Badges */}
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-stone-100">
+                    {app.open_source_projects?.active_count > 0 ? (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-50 text-purple-800 border border-purple-200">
+                        <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" />
+                        {app.open_source_projects.active_count} Active OS
+                      </span>
+                    ) : (app.open_source_projects?.total_worked_count > 0) ? (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-stone-100 text-stone-700 border border-stone-200">
+                        {app.open_source_projects.total_worked_count} OS Worked
+                      </span>
+                    ) : null}
+
+                    {app.hired_status?.is_hired ? (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-900 border border-emerald-300">
+                        🎉 Placed
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-sky-50 text-sky-800 border border-sky-200">
+                        🟢 Available
+                      </span>
+                    )}
                   </div>
                 </button>
               ))
@@ -404,13 +430,21 @@ export default function JobApplicantsPage() {
                       </div>
 
                       <div className="flex items-center gap-2">
+                        <button 
+                          onClick={() => setShowProfileModal(true)}
+                          className="px-3 py-2 bg-stone-100 hover:bg-stone-200 border border-stone-200 text-stone-800 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs"
+                          title="Open Full Candidate Dossier"
+                        >
+                          <User className="w-3.5 h-3.5 text-stone-600" />
+                          <span>Full Dossier</span>
+                        </button>
                         {stu.github_url && (
-                          <a href={stu.github_url.startsWith('http') ? stu.github_url : `https://${stu.github_url}`} target="_blank" rel="noreferrer" className="p-2 border border-stone-200 hover:bg-stone-50 rounded-lg text-stone-700">
+                          <a href={stu.github_url.startsWith('http') ? stu.github_url : `https://${stu.github_url}`} target="_blank" rel="noreferrer" className="p-2 border border-stone-200 hover:bg-stone-50 rounded-lg text-stone-700" title="GitHub Profile">
                             <GithubIcon className="w-4 h-4" />
                           </a>
                         )}
                         {stu.linkedin_url && (
-                          <a href={stu.linkedin_url.startsWith('http') ? stu.linkedin_url : `https://${stu.linkedin_url}`} target="_blank" rel="noreferrer" className="p-2 border border-stone-200 hover:bg-stone-50 rounded-lg text-stone-700">
+                          <a href={stu.linkedin_url.startsWith('http') ? stu.linkedin_url : `https://${stu.linkedin_url}`} target="_blank" rel="noreferrer" className="p-2 border border-stone-200 hover:bg-stone-50 rounded-lg text-stone-700" title="LinkedIn Profile">
                             <LinkedinIcon className="w-4 h-4" />
                           </a>
                         )}
@@ -455,6 +489,151 @@ export default function JobApplicantsPage() {
                         </div>
                       </div>
                     </div>
+
+                    {/* RECRUITER DOSSIER: OPEN SOURCE PROJECTS & CURRENT HIRED JOBS */}
+                    {(() => {
+                      const os = selectedApplicant.open_source_projects || {
+                        active_count: 0,
+                        total_worked_count: 0,
+                        active_projects: [],
+                        completed_projects: []
+                      };
+                      const hired = selectedApplicant.hired_status || {
+                        is_hired: false,
+                        hired_count: 0,
+                        hired_jobs: []
+                      };
+
+                      return (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {/* Open Source Projects Card */}
+                          <div className="bg-white rounded-xl shadow-2xs border border-purple-200 p-5 flex flex-col justify-between relative overflow-hidden">
+                            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-600 to-indigo-600" />
+                            <div>
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-[10px] font-bold text-purple-900 uppercase tracking-wider flex items-center gap-1.5">
+                                  <GitPullRequest className="w-3.5 h-3.5 text-purple-700" /> Open Source Projects
+                                </span>
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-50 text-purple-800 border border-purple-200">
+                                  {os.total_worked_count} Worked
+                                </span>
+                              </div>
+
+                              <div className="flex items-baseline gap-2 mb-2">
+                                <span className="text-2xl font-bold text-stone-900 font-serif">
+                                  {os.active_count}
+                                </span>
+                                <span className="text-xs text-stone-600 font-medium flex items-center gap-1">
+                                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                  Currently Active & Contributing
+                                </span>
+                              </div>
+
+                              {os.active_projects && os.active_projects.length > 0 ? (
+                                <div className="space-y-2 mt-2">
+                                  {os.active_projects.map((proj: any, idx: number) => (
+                                    <div key={idx} className="bg-purple-50/50 border border-purple-200/80 rounded-lg p-2.5 flex flex-col gap-1">
+                                      <div className="flex items-center justify-between">
+                                        <h4 className="text-xs font-bold text-stone-900 truncate flex items-center gap-1.5">
+                                          <Code2 className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                                          {proj.title}
+                                        </h4>
+                                        <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                          {proj.role || 'Contributor'}
+                                        </span>
+                                      </div>
+                                      {proj.repo_url && (
+                                        <a 
+                                          href={proj.repo_url.startsWith('http') ? proj.repo_url : `https://${proj.repo_url}`} 
+                                          target="_blank" 
+                                          rel="noreferrer"
+                                          className="text-[10px] text-purple-700 hover:underline flex items-center gap-1 truncate"
+                                        >
+                                          <ExternalLink className="w-3 h-3 shrink-0" /> {proj.repo_url}
+                                        </a>
+                                      )}
+                                      {proj.tech_stack && (
+                                        <div className="flex flex-wrap gap-1 mt-0.5">
+                                          {(Array.isArray(proj.tech_stack) ? proj.tech_stack : [proj.tech_stack]).map((t: string, tidx: number) => (
+                                            <span key={tidx} className="text-[9px] font-mono px-1.5 py-0.2 bg-white text-stone-700 rounded border border-purple-200">
+                                              {t}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-xs text-stone-400 mt-2 italic bg-stone-50 p-2.5 rounded-lg border border-stone-200">
+                                  {os.total_worked_count > 0 
+                                    ? `${os.total_worked_count} completed project(s) on record. No currently active working branches.`
+                                    : "No active open source repositories on record."}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Current Hired Jobs Card */}
+                          <div className={`rounded-xl shadow-2xs border p-5 flex flex-col justify-between relative overflow-hidden ${
+                            hired.is_hired ? 'bg-emerald-50/40 border-emerald-300' : 'bg-white border-stone-200'
+                          }`}>
+                            <div className={`absolute top-0 left-0 right-0 h-1 ${
+                              hired.is_hired ? 'bg-gradient-to-r from-emerald-600 to-teal-600' : 'bg-gradient-to-r from-sky-500 to-emerald-500'
+                            }`} />
+                            <div>
+                              <div className="flex items-center justify-between mb-2">
+                                <span className={`text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${
+                                  hired.is_hired ? 'text-emerald-900' : 'text-stone-700'
+                                }`}>
+                                  <Briefcase className="w-3.5 h-3.5 text-emerald-800" /> Placement & Current Hires
+                                </span>
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                  hired.is_hired ? 'bg-emerald-100 text-emerald-900 border-emerald-300' : 'bg-stone-100 text-stone-700 border-stone-200'
+                                }`}>
+                                  {hired.is_hired ? `${hired.hired_count} Hired Job(s)` : '0 Competing Offers'}
+                                </span>
+                              </div>
+
+                              <div className="flex items-baseline gap-2 mb-2">
+                                <span className={`text-2xl font-bold font-serif ${hired.is_hired ? 'text-emerald-950' : 'text-stone-900'}`}>
+                                  {hired.is_hired ? 'Currently Placed' : 'Available for Placement'}
+                                </span>
+                              </div>
+
+                              {hired.is_hired ? (
+                                <div className="space-y-2 mt-2">
+                                  {hired.hired_jobs.map((job: any, idx: number) => (
+                                    <div key={idx} className="bg-white border border-emerald-200 rounded-lg p-2.5 shadow-2xs">
+                                      <div className="flex items-center justify-between mb-0.5">
+                                        <span className="text-xs font-bold text-stone-900 flex items-center gap-1.5">
+                                          <Building2 className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                                          {job.company_name}
+                                        </span>
+                                        <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800">
+                                          HIRED
+                                        </span>
+                                      </div>
+                                      <p className="text-[11px] font-medium text-stone-700">{job.job_title}</p>
+                                      {job.hired_at && (
+                                        <span className="text-[10px] text-stone-400 mt-0.5 block">
+                                          Placed: {new Date(job.hired_at).toLocaleDateString()}
+                                        </span>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="bg-sky-50 border border-sky-200 rounded-lg p-3 text-xs text-sky-900 flex items-center gap-2 mt-2">
+                                  <CheckCircle2 className="w-4 h-4 text-sky-700 shrink-0" />
+                                  <span>Zero competing commitments. Ready for immediate offer and employment.</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Detailed Skills Matrix */}
                     <div className="bg-white rounded-xl shadow-2xs border border-stone-200 p-5 space-y-3">
@@ -750,6 +929,28 @@ export default function JobApplicantsPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* FULL CANDIDATE PROFILE MODAL */}
+      {showProfileModal && selectedApplicant && (
+        <StudentProfileModal
+          data={{
+            student: selectedApplicant.student || selectedApplicant.students,
+            college_name: selectedApplicant.college_name,
+            skills: selectedApplicant.skills || [],
+            hireability: selectedApplicant.hireability,
+            open_source_projects: selectedApplicant.open_source_projects,
+            hired_status: selectedApplicant.hired_status,
+            extraDetails: {
+              resume_url: selectedApplicant.resume_url,
+              cover_letter: selectedApplicant.cover_letter,
+              expressed_at: selectedApplicant.created_at,
+              match_score: selectedApplicant.match_score,
+              status: selectedApplicant.status
+            }
+          }}
+          onClose={() => setShowProfileModal(false)}
+        />
       )}
     </div>
   );
