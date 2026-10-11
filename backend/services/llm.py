@@ -13,11 +13,22 @@ key_list = [k.strip() for k in keys_str.split(",") if k.strip()]
 _current_key_idx = 0
 client = Groq(api_key=key_list[_current_key_idx] if key_list else None)
 
+KNOWN_PROGRAMMABLE = {
+    "python", "c++", "cpp", "java", "javascript", "js", "typescript", "ts",
+    "docker", "html", "css", "c", "operating systems", "os", "dbms", "sql",
+    "react", "node.js", "nodejs", "fastapi", "django", "flask", "git",
+    "postgresql", "postgres", "mongodb", "rust", "go", "golang", "c#", "csharp",
+    "ruby", "php", "bash", "linux", "kubernetes", "k8s", "aws", "azure"
+}
+
 is_programmable_cache = {}
 
 def is_skill_programmable(skill_name: str) -> bool:
-    if skill_name in is_programmable_cache:
-        return is_programmable_cache[skill_name]
+    norm = (skill_name or "").strip().lower()
+    if norm in KNOWN_PROGRAMMABLE:
+        return True
+    if norm in is_programmable_cache:
+        return is_programmable_cache[norm]
     
     prompt = f"Does the technical skill '{skill_name}' involve writing syntax code (like Python, Java, SQL, React)? Answer exactly 'YES' or 'NO'."
     try:
@@ -28,7 +39,7 @@ def is_skill_programmable(skill_name: str) -> bool:
         )
         ans = res.choices[0].message.content.strip().upper()
         result = 'YES' in ans
-        is_programmable_cache[skill_name] = result
+        is_programmable_cache[norm] = result
         return result
     except Exception as e:
         print("Error checking if skill is programmable:", e)

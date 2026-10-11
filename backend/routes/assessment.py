@@ -397,7 +397,14 @@ def get_coding_question(req: GetCodingQuestionRequest):
         if not is_skill_programmable(req.skill_name):
             return {"is_programmable": False}
 
-        difficulty_level = 4 if req.difficulty_type == "basic" else 5
+        # Parse difficulty level cleanly
+        if str(req.difficulty_type) in ["1", "2", "3"]:
+            difficulty_level = 4
+        elif str(req.difficulty_type) in ["4", "5"]:
+            difficulty_level = int(req.difficulty_type)
+        else:
+            difficulty_level = 4 if str(req.difficulty_type).lower() == "basic" else 5
+
         selected_q = None
         seen_ids = set()
         seen_texts = set()
@@ -414,21 +421,27 @@ def get_coding_question(req: GetCodingQuestionRequest):
                             seen_texts = set(r.get("question_base_text", "").strip() for r in coding_texts_res.data if r.get("question_base_text"))
             except Exception as se:
                 print("Error loading student_seen_coding_questions:", se)
+        
+        # Fetch questions matching skill and difficulty
+        all_q_res = supabase.table("coding_questions").select("*").ilike("skill_name", req.skill_name).eq("difficulty_level", difficulty_level).execute()
+        if not (hasattr(all_q_res, 'data') and all_q_res.data):
+            # Fallback: check any difficulty for this skill
+            all_q_res = supabase.table("coding_questions").select("*").ilike("skill_name", req.skill_name).execute()
+        
+        if hasattr(all_q_res, 'data') and all_q_res.data:
+            unseen_qs = []
+            for q in all_q_res.data:
+                qid = str(q.get('id', ''))
+                qtxt = q.get('question_base_text', '').strip()
+                if qid in seen_ids or qtxt in seen_texts or is_duplicate_context(qtxt, seen_texts):
+                    continue
+                unseen_qs.append(q)
             
-            # Fetch all questions for this skill and level
-            all_q_res = supabase.table("coding_questions").select("*").eq("skill_name", req.skill_name).eq("difficulty_level", difficulty_level).execute()
-            
-            if hasattr(all_q_res, 'data') and all_q_res.data:
-                unseen_qs = []
-                for q in all_q_res.data:
-                    qid = str(q.get('id', ''))
-                    qtxt = q.get('question_base_text', '').strip()
-                    if qid in seen_ids or qtxt in seen_texts or is_duplicate_context(qtxt, seen_texts):
-                        continue
-                    unseen_qs.append(q)
-                
-                if unseen_qs:
-                    selected_q = random.choice(unseen_qs)
+            if unseen_qs:
+                selected_q = random.choice(unseen_qs)
+            elif all_q_res.data:
+                # If all have been seen, pick least used
+                selected_q = random.choice(all_q_res.data)
                 
         if not selected_q:
             print("No unseen coding questions available in DB. Generating a new one.")
