@@ -123,7 +123,7 @@ async def get_my_roadmaps(student_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/")
-async def get_roadmap(role_name: str, ecosystem: str, student_id: Optional[str] = None):
+async def get_roadmap(role_name: str, ecosystem: str, student_id: Optional[str] = None, background_tasks: BackgroundTasks = BackgroundTasks()):
     try:
         # Case insensitive match for both role and ecosystem
         res = supabase.table("career_paths") \
@@ -156,6 +156,11 @@ async def get_roadmap(role_name: str, ecosystem: str, student_id: Optional[str] 
             except Exception as e:
                 print(f"Failed to link existing roadmap to student: {e}")
                 
+        # Trigger progressive global resource pre-warming in batches of 3 for any missing nodes
+        all_skills = extract_roadmap_skills(roadmap.get("roadmap_json", {}))
+        if all_skills:
+            background_tasks.add_task(generate_roadmap_resources_progressive, all_skills, roadmap.get("role_name", role_name))
+            
         return {"roadmap": roadmap}
     except HTTPException:
         raise
@@ -166,15 +171,105 @@ async def get_roadmap(role_name: str, ecosystem: str, student_id: Optional[str] 
 async def get_generate_status(request_id: str):
     return generation_status.get(request_id, {"progress": 0, "message": "Initializing..."})
 
-def generate_resources_in_background(skills_to_process: list, role_name: str):
-    """Background task to pre-warm the cache by generating resources for top core skills."""
+# Track in-flight generation to prevent redundant concurrent LLM calls
+currently_generating_skills = set()
+
+def extract_roadmap_skills(roadmap_json: dict) -> list[dict]:
+    """Extract list of unique {skill_id: str, name: str} from all stages/nodes of roadmap."""
+    skills = []
+    seen = set()
+    stages = roadmap_json.get("stages", []) if isinstance(roadmap_json, dict) else []
+    for stage in stages:
+        for node in stage.get("nodes", []):
+            name = node.get("name") or node.get("skill")
+            if not name:
+                continue
+            skill_id = node.get("skill_id")
+            if not skill_id:
+                try:
+                    skill_id = get_or_create_canonical_skill(name)
+                    node["skill_id"] = skill_id
+                except Exception:
+                    skill_id = None
+                    
+            dedup_key = skill_id or name.lower().strip()
+            if dedup_key not in seen:
+                seen.add(dedup_key)
+                skills.append({
+                    "skill_id": skill_id,
+                    "name": name
+                })
+    return skills
+
+def generate_roadmap_resources_progressive(skills: list[dict], role_name: str, batch_size: int = 3):
+    """
+    Progressively generate and globally cache learning resources for roadmap nodes.
+    To prevent rate limits and huge LLM latency, processes nodes in chunks of 3 at a time.
+    Cached nodes are skipped so previously generated resources are immediately reused globally.
+    """
     from services.resource_engine import generate_resource_pack
-    for skill_name in skills_to_process:
-        try:
-            print(f"Background: Auto-generating resources for {skill_name} in context of {role_name}")
-            generate_resource_pack(skill_name, role_name)
-        except Exception as e:
-            print(f"Background: Failed to generate resources for {skill_name}: {e}")
+    import time
+    
+    if not skills:
+        return
+
+    # 1. Fetch currently cached skill IDs from Supabase in a single fast query
+    try:
+        cached_res = supabase.table("skill_resources").select("skill_id").execute()
+        cached_ids = {r["skill_id"] for r in (cached_res.data or []) if r.get("skill_id")}
+    except Exception as e:
+        print(f"[ResourceWorker] Warning fetching cache list: {e}")
+        cached_ids = set()
+
+    # 2. Filter out already cached skills and skills currently being generated
+    uncached = []
+    for s in skills:
+        sid = s.get("skill_id")
+        name = s.get("name")
+        if sid and sid in cached_ids:
+            continue
+        if sid and sid in currently_generating_skills:
+            continue
+        if name and name.lower() in currently_generating_skills:
+            continue
+        uncached.append(s)
+
+    if not uncached:
+        print(f"[ResourceWorker] All {len(skills)} nodes for '{role_name}' already have resources cached in Supabase.")
+        return
+
+    print(f"[ResourceWorker] '{role_name}': {len(uncached)}/{len(skills)} nodes missing resources. Starting progressive generation in batches of {batch_size}...")
+
+    # 3. Process in batches of 3
+    batches = [uncached[i:i + batch_size] for i in range(0, len(uncached), batch_size)]
+    for batch_num, batch in enumerate(batches, 1):
+        batch_names = [b.get("name") for b in batch]
+        print(f"[ResourceWorker] Starting Batch {batch_num}/{len(batches)} (3 nodes: {batch_names}) for '{role_name}'")
+        
+        for item in batch:
+            skill_identifier = item.get("skill_id") or item.get("name")
+            display_name = item.get("name")
+            if not skill_identifier:
+                continue
+                
+            currently_generating_skills.add(str(skill_identifier))
+            if display_name:
+                currently_generating_skills.add(display_name.lower())
+                
+            try:
+                generate_resource_pack(str(skill_identifier), role_name)
+            except Exception as err:
+                print(f"[ResourceWorker] Error generating resources for {display_name}: {err}")
+            finally:
+                currently_generating_skills.discard(str(skill_identifier))
+                if display_name:
+                    currently_generating_skills.discard(display_name.lower())
+                    
+        print(f"[ResourceWorker] Completed Batch {batch_num}/{len(batches)} for '{role_name}'. Stored globally in skill_resources.")
+        
+        # Pacing between batches to avoid Groq rate limits (3s pause)
+        if batch_num < len(batches):
+            time.sleep(3)
 
 def process_roadmap_generation_bg(req: GenerateRequest, is_update: bool, existing_id: str, matching_roadmap: dict, background_tasks: BackgroundTasks):
     req_id = req.request_id
@@ -277,9 +372,9 @@ def process_roadmap_generation_bg(req: GenerateRequest, is_update: bool, existin
             except Exception as e:
                 print(f"Failed to link new roadmap to student: {e}")
             
-        # 4. Trigger background task to auto-generate resources ONLY for the first 2 skills (Lazy Generation)
-        first_two_skills = chosen_skill_ids[:2]
-        background_tasks.add_task(generate_resources_in_background, first_two_skills, role_to_gen)
+        # 4. Trigger progressive background generation for ALL roadmap nodes in batches of 3
+        all_skills = extract_roadmap_skills(roadmap_json)
+        background_tasks.add_task(generate_roadmap_resources_progressive, all_skills, role_to_gen)
         
         update_status(100, "Done!")
         # ALSO save data in generation_status so polling frontend can retrieve it!
@@ -343,6 +438,12 @@ def generate_roadmap(req: GenerateRequest, background_tasks: BackgroundTasks):
                         }).execute()
                     except Exception as e:
                         print(f"Failed to link existing roadmap to student: {e}")
+                        
+                # Also ensure all nodes for this cached roadmap have resources progressively generated in batches of 3
+                all_skills = extract_roadmap_skills(roadmap.get("roadmap_json", {}))
+                if all_skills:
+                    background_tasks.add_task(generate_roadmap_resources_progressive, all_skills, roadmap.get("role_name", req.role_name))
+                    
                 return {"roadmap": roadmap, "message": "Already exists", "status": "cached"}
             else:
                 is_update = True
@@ -431,3 +532,21 @@ async def submit_milestone(req: MilestoneSubmitRequest):
     except Exception as e:
         print("Failed to submit milestone:", e)
         raise HTTPException(status_code=500, detail="Failed to submit project. Tables might not be created yet.")
+
+@router.post("/prewarm-resources")
+async def prewarm_roadmap_resources(req: dict, background_tasks: BackgroundTasks):
+    """Explicitly trigger progressive 3-node resource generation for a roadmap role."""
+    role_name = req.get("role_name")
+    if not role_name:
+        raise HTTPException(status_code=400, detail="role_name required")
+    res = supabase.table("career_paths").select("*").ilike("role_name", role_name).limit(1).execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Roadmap not found")
+    roadmap = res.data[0]
+    all_skills = extract_roadmap_skills(roadmap.get("roadmap_json", {}))
+    background_tasks.add_task(generate_roadmap_resources_progressive, all_skills, role_name)
+    return {
+        "status": "queued",
+        "total_nodes": len(all_skills),
+        "message": f"Pre-warming resources for {len(all_skills)} nodes in batches of 3"
+    }

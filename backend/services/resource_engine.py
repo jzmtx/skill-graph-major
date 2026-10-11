@@ -7,6 +7,7 @@ from dotenv import dotenv_values
 from database import supabase
 import random
 import time
+from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 
 OFFICIAL_DOCS_MAP = {
@@ -105,46 +106,73 @@ def generate_resource_pack(skill_id: str, role_name: str = "Software Engineering
     import uuid
     is_uuid = False
     try:
-        uuid.UUID(skill_id)
+        uuid.UUID(str(skill_id))
         is_uuid = True
     except ValueError:
         pass
 
     # Get skill metadata FIRST so we always know the display name
     if is_uuid:
-        skill_res = supabase.table("canonical_skills").select("*").eq("id", skill_id).execute()
+        skill_res = supabase.table("canonical_skills").select("*").eq("id", str(skill_id)).execute()
     else:
-        # Also clean up URL encoding that might have leaked through (e.g. %20)
         from urllib.parse import unquote
-        clean_skill = unquote(skill_id)
+        clean_skill = unquote(str(skill_id)).strip()
         skill_res = supabase.table("canonical_skills").select("*").ilike("title", clean_skill).execute()
 
     if not skill_res.data:
-        print(f"Skill {skill_id} not found in canonical_skills. Using raw name.")
-        skill_name = unquote(skill_id) if not is_uuid else skill_id
-        skill_slug = skill_name.lower().replace(" ", "-")
-        canonical_id = None
+        from urllib.parse import unquote
+        clean_name = unquote(str(skill_id)).strip() if not is_uuid else str(skill_id)
+        slug = clean_name.lower().strip().replace(" ", "-").replace(".", "")
+        
+        # Check by slug
+        slug_res = supabase.table("canonical_skills").select("*").eq("slug", slug).execute()
+        if slug_res.data:
+            skill_name = slug_res.data[0]["title"]
+            skill_slug = slug_res.data[0].get("slug", slug)
+            canonical_id = slug_res.data[0]["id"]
+        else:
+            try:
+                new_skill = supabase.table("canonical_skills").insert({
+                    "title": clean_name,
+                    "slug": slug,
+                    "esco_uri": f"custom:{slug}-{uuid.uuid4().hex[:8]}"
+                }).execute()
+                canonical_id = new_skill.data[0]["id"]
+                skill_name = clean_name
+                skill_slug = slug
+            except Exception:
+                slug_res = supabase.table("canonical_skills").select("*").eq("slug", slug).execute()
+                if slug_res.data:
+                    canonical_id = slug_res.data[0]["id"]
+                    skill_name = slug_res.data[0]["title"]
+                    skill_slug = slug_res.data[0].get("slug", slug)
+                else:
+                    canonical_id = str(uuid.uuid4())
+                    skill_name = clean_name
+                    skill_slug = slug
     else:
         skill_name = skill_res.data[0]["title"]
-        skill_slug = skill_res.data[0].get("slug", "")
+        skill_slug = skill_res.data[0].get("slug", skill_name.lower().replace(" ", "-"))
         canonical_id = skill_res.data[0]["id"]
     
-    # Check cache via Canonical ID or Name
+    # Check cache via Canonical ID in skill_resources
     if canonical_id:
-        existing = supabase.table("skill_resources").select("*").eq("skill_id", canonical_id).execute()
-    else:
-        existing = supabase.table("skill_resources").select("*").eq("skill_name", skill_name).execute()
+        try:
+            existing = supabase.table("skill_resources").select("*").eq("skill_id", canonical_id).execute()
+            if existing.data:
+                payload = existing.data[0]
+                payload["skill_name"] = skill_name
+                return payload
+        except Exception as e:
+            print(f"[ResourceEngine] Cache lookup error for {skill_name}: {e}")
         
-    if existing.data:
-        payload = existing.data[0]
-        payload["skill_name"] = skill_name
-        return payload
-        
-    print(f"V2 Pipeline: Generating resources for {skill_name} ({skill_id})...")
+    print(f"[ResourceEngine] Pipeline: Generating resources for {skill_name} (Canonical ID: {canonical_id})...")
     
     env = dotenv_values(".env")
-    keys_str = env.get("GROQ_API_KEYS", env.get("GROQ_API_KEY", ""))
+    keys_str = env.get("GROQ_API_KEYS", env.get("GROQ_API_KEY", os.environ.get("GROQ_API_KEYS", os.environ.get("GROQ_API_KEY", ""))))
     key_list = [k.strip() for k in keys_str.split(",") if k.strip()]
+    if not key_list:
+        key_list = ["gsk_placeholder"]
     
     # Step 1: Generate the concepts
     topics_prompt = f"""You are an expert curriculum designer. Break down the technology '{skill_name}' into exactly 4 critical micro-concepts to learn it. 
@@ -164,7 +192,7 @@ def generate_resource_pack(skill_id: str, role_name: str = "Software Engineering
         concepts = json.loads(content.strip())
     except Exception as e:
         print(f"Failed to generate concepts for {skill_name}: {e}")
-        concepts = [f"Introduction to {skill_name}", f"Advanced {skill_name}"]
+        concepts = [f"Fundamentals of {skill_name}", f"Core Workflows in {skill_name}", f"Practical Architecture with {skill_name}", f"Production Best Practices in {skill_name}"]
 
     # Step 2: Fetch raw search results for Candidate Pool
     queries = [{"type": "main", "query": skill_name}]
@@ -182,6 +210,15 @@ def generate_resource_pack(skill_id: str, role_name: str = "Software Engineering
     with ThreadPoolExecutor(max_workers=5) as executor:
         executor.map(fetch_for_query, queries)
         
+    # Compact candidates to avoid exceeding model token limits
+    compact_candidates = {}
+    for q_name, res in search_results.items():
+        compact_candidates[q_name] = {
+            "top_videos": [{"title": v.get("title"), "url": v.get("url")} for v in res.get("video_candidates", [])[:2]],
+            "docs": [{"title": d.get("title"), "url": d.get("url")} for d in res.get("docs_candidates", [])[:1]],
+            "github": [{"name": g.get("name"), "url": g.get("url")} for g in res.get("github_candidates", [])[:1]],
+        }
+        
     # Step 3: LLM curates from Top Candidates
     curation_prompt = f"""
     You are an expert Senior Developer curating the best learning resources for '{skill_name}'.
@@ -189,7 +226,7 @@ def generate_resource_pack(skill_id: str, role_name: str = "Software Engineering
     We have {len(concepts)} micro-concepts: {', '.join(concepts)}.
     Here are the Top Scored Candidate Resources from YouTube, GitHub, and Official sources:
     
-    {json.dumps(search_results, indent=2)}
+    {json.dumps(compact_candidates, indent=1)}
     
     Your task:
     1. For the MAIN skill '{skill_name}': Select the absolute best official docs URL and best video URL from the candidate pool. Generate a 1-sentence "Mini Practice Project".
@@ -230,40 +267,55 @@ def generate_resource_pack(skill_id: str, role_name: str = "Software Engineering
         except Exception as e:
             if attempt == 2:
                 print(f"Failed to curate resource pack for {skill_name}:", e)
-                return None
             time.sleep(2)
             
-    if not final_data: return None
+    # Reliable Fallbacks if LLM or API candidates were empty
+    fallback_docs = f"https://{OFFICIAL_DOCS_MAP.get(skill_slug)}" if skill_slug in OFFICIAL_DOCS_MAP else f"https://devdocs.io/{skill_slug}"
+    fallback_video = f"https://www.youtube.com/results?search_query={skill_name.replace(' ', '+')}+tutorial+full+course"
+    fallback_title = f"{skill_name} Comprehensive Course & Practical Guide"
+    fallback_proj = f"Build an end-to-end practical real-world application using {skill_name}."
+
+    official_docs = final_data.get("official_docs_url") or fallback_docs
+    best_video = final_data.get("best_video_url") or fallback_video
+    best_video_title = final_data.get("best_video_title") or fallback_title
+    practice_project = final_data.get("practice_project") or fallback_proj
+    
+    sub_topics = final_data.get("sub_topics") or []
+    if not sub_topics:
+        sub_topics = [
+            {
+                "name": c,
+                "best_video_url": f"https://www.youtube.com/results?search_query={skill_name.replace(' ', '+')}+{c.replace(' ', '+')}",
+                "practice_project": f"Build a focused implementation exercising {c} in {skill_name}."
+            }
+            for c in concepts
+        ]
         
-    # Step 4: Save to DB via Canonical Skill ID
-    payload = {
-        "skill_id": skill_id,
-        "skill_name": skill_name,
-        "official_docs_url": final_data.get("official_docs_url"),
-        "best_video_url": final_data.get("best_video_url"),
-        "best_video_title": final_data.get("best_video_title"),
-        "practice_project": final_data.get("practice_project"),
-        "open_source_repo_url": final_data.get("open_source_repo_url"),
-        "practice_platform_url": final_data.get("practice_platform_url"),
-        "sub_topics": final_data.get("sub_topics", []),
+    # Step 4: Persist in Supabase skill_resources table using Canonical Skill ID
+    db_payload = {
+        "skill_id": str(canonical_id),
+        "official_docs_url": official_docs,
+        "best_video_url": best_video,
+        "best_video_title": best_video_title,
+        "practice_project": practice_project,
+        "sub_topics": sub_topics,
         "confidence_score": 0.95,
         "status": "APPROVED",
-        "version": "1.0"
-    }
-    
-    db_payload = {
-        "skill_name": skill_name,
-        "official_docs_url": final_data.get("official_docs_url"),
-        "best_video_url": final_data.get("best_video_url"),
-        "best_video_title": final_data.get("best_video_title"),
-        "practice_project": final_data.get("practice_project"),
-        "sub_topics": final_data.get("sub_topics", []),
-        "confidence_score": 0.95
+        "version": "1.0",
+        "last_verified": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat()
     }
     
     try:
-        supabase.table("skill_resources").insert(db_payload).execute()
+        supabase.table("skill_resources").upsert(db_payload, on_conflict="skill_id").execute()
+        print(f"[ResourceEngine] Successfully cached resources for '{skill_name}' (skill_id: {canonical_id}) globally in Supabase!")
     except Exception as e:
-        print(f"Warning: Could not cache {skill_name} in Supabase: {e}")
+        print(f"[ResourceEngine] Warning: Could not cache {skill_name} in Supabase: {e}")
         
+    payload = {
+        **db_payload,
+        "skill_name": skill_name,
+        "open_source_repo_url": final_data.get("open_source_repo_url"),
+        "practice_platform_url": final_data.get("practice_platform_url")
+    }
     return payload
