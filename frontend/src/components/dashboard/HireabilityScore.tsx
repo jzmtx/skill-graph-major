@@ -44,9 +44,8 @@ interface HireabilityData {
 }
 
 export default function HireabilityScore({ studentIdProp }: { studentIdProp?: string }) {
-  const cachedInitial = getCachedData<HireabilityData>('student_hireability');
-  const [data, setData] = useState<HireabilityData | null>(() => cachedInitial || null);
-  const [loading, setLoading] = useState(() => !cachedInitial);
+  const [data, setData] = useState<HireabilityData | null>(null);
+  const [loading, setLoading] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
 
@@ -62,14 +61,21 @@ export default function HireabilityScore({ studentIdProp }: { studentIdProp?: st
   const rotateX = useTransform(y, [-200, 200], [1.5, -1.5]);
   const rotateY = useTransform(x, [-200, 200], [-1.5, 1.5]);
 
-  // Animated Counter (initialized immediately with cached score if present)
-  const count = useMotionValue(cachedInitial?.score || 300);
+  // Animated Counter
+  const count = useMotionValue(300);
   const rounded = useTransform(count, Math.round);
 
   useEffect(() => {
+    const cachedInitial = getCachedData<HireabilityData>('student_hireability');
+    if (cachedInitial) {
+      setData(cachedInitial);
+      setLoading(false);
+      count.set(cachedInitial.score || 300);
+    }
+
     const fetchScore = async () => {
       try {
-        const studentId = studentIdProp || localStorage.getItem("student_id");
+        const studentId = studentIdProp || (typeof window !== 'undefined' ? localStorage.getItem("student_id") : null);
         if (studentId) {
           const res = await getHireabilityScore(studentId);
           setData(res);

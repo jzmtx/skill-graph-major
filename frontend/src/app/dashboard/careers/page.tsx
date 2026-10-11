@@ -20,8 +20,8 @@ interface RawJob {
 }
 
 export default function CareersPage() {
-  const [jobs, setJobs] = useState<RawJob[]>(() => getCachedData<RawJob[]>('careers_raw_jds') || []);
-  const [loading, setLoading] = useState(() => !getCachedData<RawJob[]>('careers_raw_jds')?.length);
+  const [jobs, setJobs] = useState<RawJob[]>([]);
+  const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedRole, setSelectedRole] = useState<string>("All");
@@ -30,6 +30,12 @@ export default function CareersPage() {
   const [userSkills, setUserSkills] = useState<string[]>([]);
 
   useEffect(() => {
+    const cachedJobs = getCachedData<RawJob[]>('careers_raw_jds');
+    if (cachedJobs && cachedJobs.length > 0) {
+      setJobs(cachedJobs);
+      setLoading(false);
+    }
+
     const cached = typeof window !== 'undefined' ? localStorage.getItem('cached_skills') : null;
     if (cached) {
       try {

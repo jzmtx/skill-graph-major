@@ -11,10 +11,10 @@ import { SmartTopBarLoader, SmartListSkeleton } from '@/components/common/SmartL
 
 export default function StudentJobsPage() {
   const [activeTab, setActiveTab] = useState<'all' | 'eligible' | 'alumni'>('eligible');
-  const [allJobs, setAllJobs] = useState<any[]>(() => getCachedData<any[]>('jobs_all') || []);
-  const [eligibleJobs, setEligibleJobs] = useState<any[]>(() => getCachedData<any[]>('jobs_eligible') || []);
-  const [alumniOpportunities, setAlumniOpportunities] = useState<any[]>(() => getCachedData<any[]>('jobs_alumni') || []);
-  const [loading, setLoading] = useState(() => !getCachedData<any[]>('jobs_eligible')?.length);
+  const [allJobs, setAllJobs] = useState<any[]>([]);
+  const [eligibleJobs, setEligibleJobs] = useState<any[]>([]);
+  const [alumniOpportunities, setAlumniOpportunities] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   
   const [applyingJob, setApplyingJob] = useState<any | null>(null);
@@ -36,9 +36,22 @@ export default function StudentJobsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    const cachedAll = getCachedData<any[]>('jobs_all');
+    const cachedEligible = getCachedData<any[]>('jobs_eligible');
+    const cachedAlumni = getCachedData<any[]>('jobs_alumni');
+    if (cachedAll) setAllJobs(cachedAll);
+    if (cachedEligible && cachedEligible.length > 0) {
+      setEligibleJobs(cachedEligible);
+      setLoading(false);
+    }
+    if (cachedAlumni) setAlumniOpportunities(cachedAlumni);
+
     const load = async () => {
       const studentId = typeof window !== 'undefined' ? localStorage.getItem('student_id') : null;
-      if (!studentId) return;
+      if (!studentId) {
+        setLoading(false);
+        return;
+      }
       setSyncing(true);
       try {
         const [all, eligible, opps, applied] = await Promise.all([

@@ -12,22 +12,27 @@ import { getCachedData, setCachedData } from "@/lib/cache";
 import { SmartTopBarLoader } from "@/components/common/SmartLoader";
 
 export default function RoadmapsPage() {
-  const cachedInitialRoadmaps = getCachedData<any[]>('my_roadmaps');
-  const [step, setStep] = useState<"list" | "role" | "ecosystem" | "generating" | "roadmap">(() => {
-    return cachedInitialRoadmaps && cachedInitialRoadmaps.length > 0 ? "list" : "role";
-  });
+  const [step, setStep] = useState<"list" | "role" | "ecosystem" | "generating" | "roadmap">("role");
   const [selectedRole, setSelectedRole] = useState<string>("Full Stack Developer");
   const [selectedEcosystem, setSelectedEcosystem] = useState<string | null>(null);
   const [roadmap, setRoadmap] = useState<any>(null);
   const [analytics, setAnalytics] = useState<any>(null);
   const [currentRequestId, setCurrentRequestId] = useState<string>("");
   
-  const [myRoadmaps, setMyRoadmaps] = useState<any[]>(() => cachedInitialRoadmaps || []);
-  const [loadingList, setLoadingList] = useState(() => !cachedInitialRoadmaps?.length);
+  const [myRoadmaps, setMyRoadmaps] = useState<any[]>([]);
+  const [loadingList, setLoadingList] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [weeklyHours, setWeeklyHours] = useState<number>(20);
 
   useEffect(() => {
+    // 1. Immediately hydrate from cache on client mount (safe after initial SSR hydration)
+    const cachedInitialRoadmaps = getCachedData<any[]>('my_roadmaps');
+    if (cachedInitialRoadmaps && cachedInitialRoadmaps.length > 0) {
+      setMyRoadmaps(cachedInitialRoadmaps);
+      setStep("list");
+      setLoadingList(false);
+    }
+
     const fetchMyRoadmaps = async () => {
       const studentId = typeof window !== 'undefined' ? localStorage.getItem("student_id") : null;
       if (!studentId) {

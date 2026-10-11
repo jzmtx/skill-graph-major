@@ -19,13 +19,19 @@ import { getCachedData, setCachedData } from '@/lib/cache';
 import { SmartTopBarLoader, SmartListSkeleton } from '@/components/common/SmartLoader';
 
 export default function StudentVerificationPage() {
-  const [skills, setSkills] = useState<any[]>(() => getCachedData<any[]>('student_skills') || []);
-  const [loading, setLoading] = useState(() => !getCachedData<any[]>('student_skills')?.length);
+  const [skills, setSkills] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<'all' | 'level0' | 'level1' | 'level2'>('all');
 
   useEffect(() => {
+    const cachedSkills = getCachedData<any[]>('student_skills');
+    if (cachedSkills && cachedSkills.length > 0) {
+      setSkills(cachedSkills);
+      setLoading(false);
+    }
+
     const fetchSkills = async () => {
       const studentId = typeof window !== 'undefined' ? localStorage.getItem('student_id') : null;
       if (!studentId) {

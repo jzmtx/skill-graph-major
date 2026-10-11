@@ -58,9 +58,9 @@ const GithubIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
 
 export default function StudentOpenSourcePage() {
   const [activeTab, setActiveTab] = useState<'explore' | 'my_teams'>('explore');
-  const [projects, setProjects] = useState<OpenSourceProject[]>(() => getCachedData<OpenSourceProject[]>('os_projects') || []);
-  const [myApplications, setMyApplications] = useState<any[]>(() => getCachedData<any[]>('os_my_apps') || []);
-  const [loading, setLoading] = useState(() => !getCachedData<OpenSourceProject[]>('os_projects')?.length);
+  const [projects, setProjects] = useState<OpenSourceProject[]>([]);
+  const [myApplications, setMyApplications] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
@@ -102,6 +102,16 @@ export default function StudentOpenSourcePage() {
   const [studentId, setStudentId] = useState<string | null>(null);
 
   useEffect(() => {
+    const cachedProjects = getCachedData<OpenSourceProject[]>('os_projects');
+    const cachedApps = getCachedData<any[]>('os_my_apps');
+    if (cachedProjects && cachedProjects.length > 0) {
+      setProjects(cachedProjects);
+      setLoading(false);
+    }
+    if (cachedApps) {
+      setMyApplications(cachedApps);
+    }
+
     const sId = typeof window !== 'undefined' ? localStorage.getItem('student_id') : null;
     setStudentId(sId);
     loadData(sId);

@@ -21,10 +21,10 @@ interface UnifiedApplication {
 }
 
 export default function JobOffersPage() {
-  const [applications, setApplications] = useState<UnifiedApplication[]>(() => getCachedData<UnifiedApplication[]>('job_offers_apps') || []);
-  const [loading, setLoading] = useState(() => !getCachedData<UnifiedApplication[]>('job_offers_apps')?.length);
+  const [applications, setApplications] = useState<UnifiedApplication[]>([]);
+  const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  const [assessments, setAssessments] = useState<Record<string, any>>(() => getCachedData<Record<string, any>>('job_offers_assmts') || {});
+  const [assessments, setAssessments] = useState<Record<string, any>>({});
   
   // Chat state
   const [chatApp, setChatApp] = useState<UnifiedApplication | null>(null);
@@ -35,6 +35,16 @@ export default function JobOffersPage() {
   const [isChatModalOpen, setIsChatModalOpen] = useState(false);
 
   useEffect(() => {
+    const cachedApps = getCachedData<UnifiedApplication[]>('job_offers_apps');
+    const cachedAssmts = getCachedData<Record<string, any>>('job_offers_assmts');
+    if (cachedApps && cachedApps.length > 0) {
+      setApplications(cachedApps);
+      setLoading(false);
+    }
+    if (cachedAssmts) {
+      setAssessments(cachedAssmts);
+    }
+
     const studentId = typeof window !== 'undefined' ? localStorage.getItem('student_id') : null;
     if (!studentId) {
       setLoading(false);

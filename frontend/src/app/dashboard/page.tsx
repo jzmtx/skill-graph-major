@@ -43,19 +43,19 @@ import { SmartTopBarLoader, SmartDashboardSkeleton } from '@/components/common/S
 import { getCachedData, setCachedData } from '@/lib/cache';
 
 export default function DashboardPage() {
-  const [skills, setSkills] = useState<any[]>(() => getCachedData<any[]>('student_skills') || []);
+  const [skills, setSkills] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [addingSkill, setAddingSkill] = useState(false);
   const [customSkill, setCustomSkill] = useState("");
-  const [invitations, setInvitations] = useState<any[]>(() => getCachedData<any[]>('student_invs') || []);
+  const [invitations, setInvitations] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
-  const [appliedJobsCount, setAppliedJobsCount] = useState<number>(() => getCachedData<number>('student_apps_count') || 0);
+  const [appliedJobsCount, setAppliedJobsCount] = useState<number>(0);
   
-  // Student profile state (synchronously loaded from instant cache)
-  const [studentProfile, setStudentProfile] = useState<any>(() => getCachedData<any>('student_profile') || null);
-  const [collegeName, setCollegeName] = useState<string>(() => getCachedData<string>('student_college') || "");
-  const [hireabilityData, setHireabilityData] = useState<any>(() => getCachedData<any>('student_hireability') || null);
+  // Student profile state
+  const [studentProfile, setStudentProfile] = useState<any>(null);
+  const [collegeName, setCollegeName] = useState<string>("");
+  const [hireabilityData, setHireabilityData] = useState<any>(null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isGLIModalOpen, setIsGLIModalOpen] = useState(false);
 
@@ -123,12 +123,21 @@ export default function DashboardPage() {
         const studentId = typeof window !== 'undefined' ? localStorage.getItem('student_id') : null;
         const githubUrl = typeof window !== 'undefined' ? localStorage.getItem('student_github') : null;
         
-        // Fast optimistic cache initialization
+        // Fast optimistic cache initialization on mount
         const cachedSkills = getCachedData<any[]>('student_skills');
-        if (cachedSkills && cachedSkills.length > 0) {
-          setSkills(cachedSkills);
-          setLoading(false);
-        }
+        const cachedProfile = getCachedData<any>('student_profile');
+        const cachedCollege = getCachedData<string>('student_college');
+        const cachedInvs = getCachedData<any[]>('student_invs');
+        const cachedAppsCount = getCachedData<number>('student_apps_count');
+        const cachedHScore = getCachedData<any>('student_hireability');
+
+        if (cachedSkills && cachedSkills.length > 0) setSkills(cachedSkills);
+        if (cachedProfile) setStudentProfile(cachedProfile);
+        if (cachedCollege) setCollegeName(cachedCollege);
+        if (cachedInvs) setInvitations(cachedInvs);
+        if (cachedAppsCount) setAppliedJobsCount(cachedAppsCount);
+        if (cachedHScore) setHireabilityData(cachedHScore);
+        if (cachedSkills?.length || cachedProfile) setLoading(false);
         
         if (!studentId) {
           setLoading(false);
