@@ -703,15 +703,22 @@ export default function AlumniDashboardPage() {
       <CreativeChatConsole
         isOpen={Boolean(chatStudent)}
         onClose={() => setChatStudent(null)}
+        chatType="personal"
         title={`Advising: ${chatStudent?.student_name || 'Student'}`}
         subtitle={`Opportunity: ${chatStudent?.opp_title || 'Alumni Mentorship'}`}
         recipientRole="Candidate Student"
-        contextTag="Alumni Advisory Stream"
+        contextTag="Direct Message"
         messages={messages}
         currentUserId={alumni?.id}
         currentUserType="alumni"
         loading={loadingMsgs}
         sending={sendingMsg}
+        onRefresh={async () => {
+          if (chatStudent) {
+            const msgs = await getAlumniMessages(chatStudent.opp_id, chatStudent.student_id);
+            setMessages(msgs || []);
+          }
+        }}
         customPrompts={[
           {
             label: "Review Code & Architecture",

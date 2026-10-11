@@ -581,15 +581,25 @@ export default function StudentJobsPage() {
       <CreativeChatConsole
         isOpen={Boolean(chatOpp)}
         onClose={() => setChatOpp(null)}
+        chatType="personal"
         title={chatOpp?.opp_title || 'Alumni Conversation'}
         subtitle="Alumni Mentorship & Placement Direct Channel"
         recipientRole="Verified Alumni Advisor"
-        contextTag="Mentorship Frequency"
+        contextTag="Direct Message"
         messages={messages}
         currentUserId={typeof window !== 'undefined' ? localStorage.getItem('student_id') : null}
         currentUserType="student"
         loading={loadingMsgs}
         sending={sendingMsg}
+        onRefresh={async () => {
+          if (chatOpp) {
+            const studentId = typeof window !== 'undefined' ? localStorage.getItem('student_id') : null;
+            if (studentId) {
+              const msgs = await getAlumniMessages(chatOpp.opp_id, studentId);
+              setMessages(msgs || []);
+            }
+          }
+        }}
         onSendMessage={async (msg) => {
           if (!chatOpp) return;
           const studentId = typeof window !== 'undefined' ? localStorage.getItem('student_id') : null;

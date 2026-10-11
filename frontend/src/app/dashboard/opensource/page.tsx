@@ -1135,15 +1135,24 @@ export default function StudentOpenSourcePage() {
       <CreativeChatConsole
         isOpen={Boolean(chatProject)}
         onClose={() => setChatProject(null)}
+        chatType="group"
+        memberCount={chatProject?.max_contributors || 4}
+        channelTopic={chatProject?.tech_stack ? (Array.isArray(chatProject.tech_stack) ? chatProject.tech_stack.join(', ') : chatProject.tech_stack) : 'Collaborative Milestone Stream'}
         title={`${chatProject?.title || 'Open Source'} Team Channel`}
         subtitle="Collaborative Engineering & Architecture Dispatch"
-        recipientRole="Project Maintainers & Contributors"
-        contextTag="OpenSource Stream"
+        recipientRole="Maintainers & Contributors"
+        contextTag="Team Channel"
         messages={messages}
         currentUserId={studentId}
         currentUserType="student"
         loading={loadingMsgs}
         sending={sendingMsg}
+        onRefresh={async () => {
+          if (chatProject) {
+            const msgs = await getProjectMessages(chatProject.id);
+            setMessages(msgs || []);
+          }
+        }}
         onSendMessage={async (msg) => {
           if (!chatProject || !studentId) return;
           const sName = typeof window !== 'undefined' ? localStorage.getItem('student_name') || 'Student' : 'Student';

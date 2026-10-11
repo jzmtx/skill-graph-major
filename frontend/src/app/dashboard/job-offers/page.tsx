@@ -392,6 +392,7 @@ export default function JobOffersPage() {
           setIsChatModalOpen(false);
           setChatApp(null);
         }}
+        chatType={chatApp?.type === 'opensource' ? 'group' : 'personal'}
         title={`${chatApp?.title || 'Dialogue'} @ ${chatApp?.companyName || 'Institutional Contact'}`}
         subtitle="Recruitment Pipeline & Direct Institutional Communication"
         recipientRole={
@@ -409,6 +410,21 @@ export default function JobOffersPage() {
         currentUserType="student"
         loading={loadingMsgs}
         sending={sendingMsg}
+        onRefresh={async () => {
+          if (chatApp) {
+            const studentId = typeof window !== 'undefined' ? localStorage.getItem('student_id') || '' : '';
+            if (chatApp.type === 'job') {
+              const msgs = await getApplicationMessages(chatApp.id);
+              setMessages(msgs || []);
+            } else if (chatApp.type === 'opensource') {
+              const msgs = await getOpenSourceApplicationMessages(chatApp.id);
+              setMessages(msgs || []);
+            } else if (chatApp.type === 'alumni_opp') {
+              const msgs = await getAlumniMessages(chatApp.id, studentId);
+              setMessages(msgs || []);
+            }
+          }
+        }}
         onSendMessage={handleSendCreativeMessage}
         onDeleteMessage={handleDeleteMessage}
       />

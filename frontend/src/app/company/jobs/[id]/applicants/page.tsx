@@ -623,15 +623,22 @@ export default function JobApplicantsPage() {
       <CreativeChatConsole
         isOpen={chatOpen && Boolean(selectedApplicant)}
         onClose={() => setChatOpen(false)}
+        chatType="personal"
         title={`Candidate: ${(selectedApplicant?.student || selectedApplicant?.students)?.name || 'Applicant'}`}
         subtitle={`Application Docket #${selectedApplicant?.id?.slice(0, 8)}`}
         recipientRole="Candidate Student"
-        contextTag="Corporate Recruiting Stream"
+        contextTag="Direct Message"
         messages={messages}
         currentUserId={typeof window !== 'undefined' ? localStorage.getItem('company_id') : null}
         currentUserType="company"
         loading={loadingMsgs}
         sending={sendingMsg}
+        onRefresh={async () => {
+          if (selectedApplicant) {
+            const msgs = await getApplicationMessages(selectedApplicant.id);
+            setMessages(msgs || []);
+          }
+        }}
         customPrompts={[
           {
             label: "Technical Interview Invitation",

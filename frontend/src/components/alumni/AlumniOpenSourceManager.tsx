@@ -136,8 +136,24 @@ export default function AlumniOpenSourceManager({ alumniId, collegeName, alumniN
   useEffect(() => {
     if (selectedProject && modalTab === 'chat') {
       loadMessages(selectedProject.id);
+      const poll = setInterval(() => {
+        loadMessages(selectedProject.id);
+      }, 2500);
+      return () => clearInterval(poll);
     }
   }, [selectedProject, modalTab]);
+
+  useEffect(() => {
+    if (chatApplication) {
+      const poll = setInterval(async () => {
+        try {
+          const msgs = await getOpenSourceApplicationMessages(chatApplication.application_id);
+          setAppMessages(msgs);
+        } catch {}
+      }, 2500);
+      return () => clearInterval(poll);
+    }
+  }, [chatApplication]);
 
   const loadMessages = async (projectId: string) => {
     try {
