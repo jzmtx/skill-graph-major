@@ -1,17 +1,17 @@
-from groq_models import GROQ_PRIMARY, GROQ_FAST
+from groq_models import GROQ_PRIMARY, GROQ_FAST, GROQ_FALLBACK_CHAIN
 import os
 from groq import Groq
 from dotenv import load_dotenv, dotenv_values
 import json
+import random
 
 load_dotenv()
 
-from dotenv import dotenv_values
-import random
 env_vars = dotenv_values(".env")
 keys_str = env_vars.get("GROQ_API_KEYS", env_vars.get("GROQ_API_KEY", ""))
 key_list = [k.strip() for k in keys_str.split(",") if k.strip()]
-client = Groq(api_key=random.choice(key_list) if key_list else None)
+_current_key_idx = 0
+client = Groq(api_key=key_list[_current_key_idx] if key_list else None)
 
 is_programmable_cache = {}
 
@@ -35,32 +35,64 @@ def is_skill_programmable(skill_name: str) -> bool:
         return True # Default to True to preserve original behavior if error
 
 def call_groq_with_retries(**kwargs):
-    global client
+    global client, _current_key_idx
     import time
-    max_retries = 3
+    from groq import Groq
+    
+    current_kwargs = dict(kwargs)
+    requested_model = current_kwargs.get("model", GROQ_PRIMARY)
+    
+    # Candidate models in order: requested model first, then remainder of fallback chain
+    model_candidates = [requested_model]
+    for fb in GROQ_FALLBACK_CHAIN:
+        if fb not in model_candidates:
+            model_candidates.append(fb)
+            
+    model_idx = 0
+    max_retries = 6
+    last_exception = None
+    
     for attempt in range(max_retries):
         try:
-            return client.chat.completions.create(**kwargs)
+            current_kwargs["model"] = model_candidates[model_idx % len(model_candidates)]
+            return client.chat.completions.create(**current_kwargs)
         except Exception as e:
+            last_exception = e
             error_str = str(e).lower()
-            if attempt == max_retries - 1:
-                raise e
-                
-            print(f"Groq API Error {e}. Re-initializing client to clear dead sockets. Retrying ({attempt+1}/{max_retries})...")
-            # Always recreate the client on error to flush dead httpx sockets (Fixes WinError 10035)
-            from groq import Groq
-            if '429' in error_str or 'rate limit' in error_str or '500' in error_str or '503' in error_str:
-                if key_list and len(key_list) > 1:
-                    available_keys = [k for k in key_list if k != client.api_key]
-                    if available_keys:
-                        new_key = random.choice(available_keys)
-                        client = Groq(api_key=new_key)
-                        time.sleep(2)
-                        continue
+            current_model_used = current_kwargs.get('model')
+            print(f"Groq API Error on model '{current_model_used}': {e}. Retrying ({attempt+1}/{max_retries})...")
             
-            # If not a rate limit, just recreate with the same key to flush connection pool
+            # Case 1: JSON schema validation error (400 json_validate_failed)
+            # Remove response_format so Groq does not reject the response; Python json.loads handles parsing
+            if 'json_validate_failed' in error_str or ('400' in error_str and 'json' in error_str):
+                if 'response_format' in current_kwargs:
+                    print("Bypassing strict json_object response_format on retry...")
+                    current_kwargs.pop('response_format', None)
+                    time.sleep(0.3)
+                    continue
+            
+            # Case 2: Rate limit (429), token limit (otpm/tpm), or temporary server error (500/503)
+            if '429' in error_str or 'rate limit' in error_str or 'token' in error_str or '500' in error_str or '503' in error_str:
+                # Rotate API key quickly
+                if key_list and len(key_list) > 1:
+                    _current_key_idx = (_current_key_idx + 1) % len(key_list)
+                    next_key = key_list[_current_key_idx]
+                    client = Groq(api_key=next_key)
+                    print(f"Quick-rotated Groq API key to slot {_current_key_idx+1}/{len(key_list)}.")
+                
+                # Advance model fallback if it's a rate limit or token limit
+                model_idx += 1
+                next_model = model_candidates[model_idx % len(model_candidates)]
+                print(f"Switched model candidate to '{next_model}' to bypass rate limits.")
+                time.sleep(0.4)
+                continue
+            
+            # Flush connection pool for standard connection resets
             client = Groq(api_key=client.api_key)
-            time.sleep(2)
+            time.sleep(0.4)
+            
+    if last_exception:
+        raise last_exception
 
 
 def verify_questions(skill_name: str, questions: list) -> list:
@@ -157,26 +189,24 @@ def generate_questions(skill_name: str, count: int = 5, seen_topics: list = None
     {seen_context}
     {topic_context}
     
-    Output strictly as a JSON array of objects with the following keys:
-    - "question_base_text": The complete question string.
-    - "code_snippet": The code snippet required for the question. If no code is needed, use an empty string "".
-    - "options": An array of EXACTLY 4 distinct strings (the multiple choices). You MUST provide exactly 4 options. Do not provide 3 or 5.
-    - "correct_answer": The exact string of the correct option. MUST be exactly one of the strings in the "options" array.
-    - "difficulty": Must be EXACTLY the number {target_difficulty}.
-    - "topic": A sub-topic string (e.g., "Hooks" for React, "ORM" for Django).
+    Output strictly as a valid JSON object with a single key "questions" containing a list of question objects:
+    {{
+      "questions": [
+        {{
+          "question_base_text": "What is the purpose of useEffect in React?",
+          "code_snippet": "",
+          "options": ["Handling side effects", "Defining state", "Routing", "Styling components"],
+          "correct_answer": "Handling side effects",
+          "difficulty": {target_difficulty},
+          "topic": "Hooks"
+        }}
+      ]
+    }}
     
-    Example format:
-    [
-      {{
-        "question_base_text": "What is the purpose of useEffect in React?",
-        "options": ["Handling side effects", "Defining state", "Routing", "Styling components"],
-        "correct_answer": "Handling side effects",
-        "difficulty": 2,
-        "topic": "Hooks"
-      }}
-    ]
-    
-    Return ONLY the valid JSON array. Do not include markdown formatting like ```json.
+    IMPORTANT RULES:
+    - Every question MUST have an "options" array of EXACTLY 4 distinct choices.
+    - "correct_answer" must match one of the 4 choices verbatim.
+    - Return ONLY the valid JSON object without markdown fences.
     """
     
     try:
@@ -189,16 +219,17 @@ def generate_questions(skill_name: str, count: int = 5, seen_topics: list = None
         
         raw_content = response.choices[0].message.content
         
-        # Groq with JSON mode expects an object, so we wrap the array in the prompt ideally, 
-        # but let's parse it manually if it returns an array.
         try:
             data = json.loads(raw_content)
             qs = []
             if isinstance(data, dict):
-                for k, v in data.items():
-                    if isinstance(v, list):
-                        qs = v
-                        break
+                if "questions" in data and isinstance(data["questions"], list):
+                    qs = data["questions"]
+                else:
+                    for k, v in data.items():
+                        if isinstance(v, list):
+                            qs = v
+                            break
                 if not qs:
                     qs = [data]
             elif isinstance(data, list):
@@ -229,10 +260,15 @@ def generate_questions(skill_name: str, count: int = 5, seen_topics: list = None
             
         data = json.loads(raw_content)
         if isinstance(data, dict):
+            if "questions" in data and isinstance(data["questions"], list):
+                return verify_questions(skill_name, data["questions"])
             for k, v in data.items():
                 if isinstance(v, list):
-                    return v
-        return data
+                    return verify_questions(skill_name, v)
+            return verify_questions(skill_name, [data])
+        elif isinstance(data, list):
+            return verify_questions(skill_name, data)
+        return []
     except Exception as e:
         with open("groq_error.txt", "a") as f:
             f.write(f"FALLBACK ERROR: {str(e)}\n")

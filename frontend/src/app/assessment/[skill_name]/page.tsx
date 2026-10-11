@@ -39,7 +39,13 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
   const [isFinished, setIsFinished] = useState(false);
   const [finalPassed, setFinalPassed] = useState(false);
   const [analytics, setAnalytics] = useState<string | null>(null);
-  const [history, setHistory] = useState<{topic: string, is_correct: boolean, difficulty: number}[]>([]);
+  const [history, setHistory] = useState<{
+    topic: string;
+    is_correct: boolean;
+    difficulty: number;
+    points_asked?: number;
+    points_earned?: number;
+  }[]>([]);
   const [studentCode, setStudentCode] = useState<string>('');
   const [executionOutput, setExecutionOutput] = useState<string | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
@@ -360,13 +366,23 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
       
       setEvaluationPhase('fetching');
       
+      const ptsAsked = isCurrentItemCoding ? 50 : (difficulty * 10);
       const topic = question.topic || (isCurrentItemCoding ? "Coding" : "General");
-      const newHistory = [...history, { topic, is_correct: isCorrect, difficulty: isCurrentItemCoding ? 5 : difficulty }];
+      const newHistory = [
+        ...history, 
+        { 
+          topic, 
+          is_correct: isCorrect, 
+          difficulty: isCurrentItemCoding ? 5 : difficulty,
+          points_asked: ptsAsked,
+          points_earned: isCorrect ? ptsAsked : 0
+        }
+      ];
       setHistory(newHistory);
       
       let newScore = score;
       if (isCorrect) {
-        newScore += (isCurrentItemCoding ? 50 : difficulty * 10);
+        newScore += ptsAsked;
         setScore(newScore);
       }
       
@@ -569,9 +585,16 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
   // COMPLETION SCREEN
   // ==========================================
   if (isFinished && !loading) {
+    const questionsAskedCount = history.length;
+    const totalMarksAsked = history.reduce((sum, h) => sum + (h.points_asked || (h.difficulty * 10)), 0);
+    const correctCount = history.filter(h => h.is_correct).length;
+    const incorrectCount = history.filter(h => !h.is_correct).length;
+    const accuracyRate = questionsAskedCount > 0 ? Math.round((correctCount / questionsAskedCount) * 100) : 0;
+    const marksEfficiency = totalMarksAsked > 0 ? Math.round((score / totalMarksAsked) * 100) : 0;
+
     return (
-      <div className="min-h-screen bg-stone-50 flex items-center justify-center p-4">
-        <div className="w-full max-w-lg bg-white rounded-xl border border-stone-200 shadow-sm p-8 text-center animate-in zoom-in-95 duration-200">
+      <div className="min-h-screen bg-stone-50 flex items-center justify-center p-4 py-8">
+        <div className="w-full max-w-xl bg-white rounded-2xl border border-stone-200 shadow-sm p-6 sm:p-8 text-center animate-in zoom-in-95 duration-200">
           <div className="flex justify-center mb-4">
             {finalPassed ? (
               <div className="w-16 h-16 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full flex items-center justify-center">
@@ -590,7 +613,7 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
             <span className="text-3xl font-black text-emerald-800">{score}</span>
             <span className="text-stone-400 font-medium"> / 600 pts</span>
             <span className="text-xs text-stone-500 block mt-1 font-medium">
-              Overall Result: {Math.round((score / 600) * 100)}% ({finalPassed ? 'Passed >= 60%' : 'Needs Improvement'})
+              Overall Verification: {Math.round((score / 600) * 100)}% ({finalPassed ? 'Passed >= 60%' : 'Needs Improvement'})
             </span>
           </div>
 
@@ -599,6 +622,110 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
               ? `Congratulations! You scored high enough to achieve Level 1 verification in ${skillName}. Your Global Learner Index (GLI) has updated.`
               : `Baseline established for ${skillName}. Practice further and re-attempt to advance verification.`}
           </p>
+
+          {/* Marks & Questions Breakdown Grid */}
+          <div className="grid grid-cols-2 gap-3 mb-5 text-left">
+            <div className="bg-stone-50 border border-stone-200 rounded-xl p-3.5">
+              <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider block mb-1">
+                Marks Scored / Asked
+              </span>
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-xl font-black text-stone-900">{score}</span>
+                <span className="text-xs font-semibold text-stone-500">/ {totalMarksAsked} pts</span>
+              </div>
+              <span className="text-[11px] text-emerald-800 font-semibold block mt-0.5">
+                {marksEfficiency}% marks conversion
+              </span>
+            </div>
+
+            <div className="bg-stone-50 border border-stone-200 rounded-xl p-3.5">
+              <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider block mb-1">
+                Questions Answered
+              </span>
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-xl font-black text-stone-900">{questionsAskedCount}</span>
+                <span className="text-xs font-semibold text-stone-500">/ 12 items</span>
+              </div>
+              <span className="text-[11px] text-stone-600 font-medium block mt-0.5">
+                {correctCount} correct • {incorrectCount} missed
+              </span>
+            </div>
+
+            <div className="bg-stone-50 border border-stone-200 rounded-xl p-3.5">
+              <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider block mb-1">
+                Accuracy Rate
+              </span>
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-xl font-black text-stone-900">{accuracyRate}%</span>
+              </div>
+              <span className="text-[11px] text-stone-500 font-medium block mt-0.5">
+                On presented items
+              </span>
+            </div>
+
+            <div className="bg-stone-50 border border-stone-200 rounded-xl p-3.5">
+              <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider block mb-1">
+                Passing Benchmark
+              </span>
+              <div className="flex items-baseline gap-1.5">
+                <span className={`text-xl font-black ${finalPassed ? 'text-emerald-800' : 'text-stone-800'}`}>
+                  {Math.round((score / 600) * 100)}%
+                </span>
+                <span className="text-xs font-semibold text-stone-500">/ 600 max</span>
+              </div>
+              <span className={`text-[11px] font-semibold block mt-0.5 ${finalPassed ? 'text-emerald-700' : 'text-amber-700'}`}>
+                {finalPassed ? 'Passed threshold' : 'Req: 60% (360 pts)'}
+              </span>
+            </div>
+          </div>
+
+          {/* Item-by-Item Performance Breakdown */}
+          {history.length > 0 && (
+            <div className="bg-stone-50 border border-stone-200 rounded-xl p-3.5 mb-5 text-left">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-stone-800 flex items-center gap-1.5">
+                  <Target className="w-3.5 h-3.5 text-emerald-800" />
+                  Item-by-Item Question Review
+                </span>
+                <span className="text-[11px] text-stone-500 font-medium">
+                  {correctCount} / {history.length} solved
+                </span>
+              </div>
+              <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
+                {history.map((item, idx) => {
+                  const ptsAsked = item.points_asked || (item.difficulty * 10);
+                  const ptsEarned = item.is_correct ? ptsAsked : 0;
+                  return (
+                    <div 
+                      key={idx}
+                      className="flex items-center justify-between text-xs py-1.5 px-2.5 rounded-lg bg-white border border-stone-200/80"
+                    >
+                      <div className="flex items-center gap-2 truncate pr-2">
+                        <span className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 text-[10px] font-bold ${
+                          item.is_correct 
+                            ? 'bg-emerald-100 text-emerald-800' 
+                            : 'bg-stone-200 text-stone-600'
+                        }`}>
+                          {item.is_correct ? '✓' : '✗'}
+                        </span>
+                        <span className="font-medium text-stone-800 truncate">
+                          Q{idx + 1}: {item.topic}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-stone-100 text-stone-600 border border-stone-200">
+                          {item.topic === 'Coding' ? 'Coding' : `Lvl ${item.difficulty}`}
+                        </span>
+                        <span className={`text-[11px] font-bold ${item.is_correct ? 'text-emerald-800' : 'text-stone-400'}`}>
+                          {ptsEarned} / {ptsAsked} pts
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Proctoring Integrity Summary */}
           <div className="bg-stone-50 border border-stone-200 rounded-lg p-3.5 mb-5 text-left">

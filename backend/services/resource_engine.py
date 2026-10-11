@@ -178,10 +178,10 @@ def generate_resource_pack(skill_id: str, role_name: str = "Software Engineering
     topics_prompt = f"""You are an expert curriculum designer. Break down the technology '{skill_name}' into exactly 4 critical micro-concepts to learn it. 
     Return ONLY a JSON array of strings. Example: ["Hooks", "Context API", "State Management", "Routing"]"""
     
+    from services.llm import call_groq_with_retries
     concepts = []
     try:
-        groq_client = Groq(api_key=random.choice(key_list))
-        res = groq_client.chat.completions.create(
+        res = call_groq_with_retries(
             messages=[{"role": "user", "content": topics_prompt}],
             model=GROQ_FAST,
             temperature=0.2
@@ -252,22 +252,17 @@ def generate_resource_pack(skill_id: str, role_name: str = "Software Engineering
     """
     
     final_data = {}
-    for attempt in range(3):
-        groq_client = Groq(api_key=random.choice(key_list))
-        try:
-            completion = groq_client.chat.completions.create(
-                messages=[{"role": "user", "content": curation_prompt}],
-                model=GROQ_PRIMARY,
-                temperature=0.2,
-                response_format={"type": "json_object"}
-            )
-            raw = completion.choices[0].message.content.strip()
-            final_data = json.loads(raw)
-            break
-        except Exception as e:
-            if attempt == 2:
-                print(f"Failed to curate resource pack for {skill_name}:", e)
-            time.sleep(2)
+    try:
+        completion = call_groq_with_retries(
+            messages=[{"role": "user", "content": curation_prompt}],
+            model=GROQ_PRIMARY,
+            temperature=0.2,
+            response_format={"type": "json_object"}
+        )
+        raw = completion.choices[0].message.content.strip()
+        final_data = json.loads(raw)
+    except Exception as e:
+        print(f"Failed to curate resource pack for {skill_name}:", e)
             
     # Reliable Fallbacks if LLM or API candidates were empty
     fallback_docs = f"https://{OFFICIAL_DOCS_MAP.get(skill_slug)}" if skill_slug in OFFICIAL_DOCS_MAP else f"https://devdocs.io/{skill_slug}"

@@ -301,10 +301,9 @@ def generate_roadmap_from_ecosystem(ecosystem_data: dict, weekly_hours: int = 20
     Return raw JSON. Do not output markdown code blocks.
     """
     
-    groq_client = Groq(api_key=random.choice(key_list))
-    
+    from services.llm import call_groq_with_retries
     try:
-        response = groq_client.chat.completions.create(
+        response = call_groq_with_retries(
             messages=[{"role": "user", "content": prompt}],
             model=GROQ_FAST,
             temperature=0.2,
