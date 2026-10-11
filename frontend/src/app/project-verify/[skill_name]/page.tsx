@@ -11,6 +11,7 @@ import {
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Editor } from '@monaco-editor/react';
+import { AiInterviewerAvatar } from '@/components/common/AiInterviewerAvatar';
 
 export default function ProjectVerificationPage({ params }: { params: Promise<{ skill_name: string }> }) {
   const router = useRouter();
@@ -660,79 +661,38 @@ export default function ProjectVerificationPage({ params }: { params: Promise<{ 
             {/* Step 3: Speech-to-Speech Virtual Technical Interview */}
             {step === 3 && questions.length > 0 && (
               <div className="animate-in fade-in duration-300">
-                {/* Virtual Interviewer Studio Header */}
-                <div className="bg-stone-900 text-white rounded-2xl p-5 mb-6 relative overflow-hidden shadow-sm">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="flex items-center gap-3.5">
-                      {/* Animated Avatar / Audio Orb */}
-                      <div className="relative">
-                        <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${
-                          isAiSpeaking 
-                            ? 'bg-emerald-500 shadow-lg shadow-emerald-500/40 animate-pulse' 
-                            : isListening 
-                            ? 'bg-rose-500 shadow-lg shadow-rose-500/40 animate-bounce' 
-                            : 'bg-stone-700'
-                        }`}>
-                          <Brain className="w-6 h-6 text-white" />
-                        </div>
-                        {isAiSpeaking && (
-                          <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
-                          </span>
-                        )}
-                      </div>
+                {/* Animated Virtual AI Interviewer Studio */}
+                <AiInterviewerAvatar
+                  isAiSpeaking={isAiSpeaking}
+                  isListening={isListening}
+                  currentQuestionText={questions[currentQuestionIndex]?.text || ''}
+                  onReplayAudio={() => speakQuestion(questions[currentQuestionIndex]?.text)}
+                  voiceMode={voiceMode}
+                  onToggleVoiceMode={() => {
+                    const newMode = !voiceMode;
+                    setVoiceMode(newMode);
+                    if (!newMode && typeof window !== 'undefined') {
+                      window.speechSynthesis.cancel();
+                      setIsAiSpeaking(false);
+                    }
+                  }}
+                />
 
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-bold text-sm tracking-tight">AI Senior Engineering Assessor</h3>
-                          <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800">
-                            Oral Defense
-                          </span>
-                        </div>
-                        <p className="text-xs text-stone-400 mt-0.5 flex items-center gap-1.5">
-                          {isAiSpeaking ? (
-                            <span className="text-emerald-400 font-semibold flex items-center gap-1">
-                              <Radio className="w-3.5 h-3.5 animate-pulse" /> Speaking question...
-                            </span>
-                          ) : isListening ? (
-                            <span className="text-rose-400 font-semibold flex items-center gap-1">
-                              <Mic className="w-3.5 h-3.5 animate-pulse" /> Listening to your answer...
-                            </span>
-                          ) : (
-                            <span>Auditing your repository telemetry & architecture</span>
-                          )}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Speech Controls */}
-                    <div className="flex items-center gap-2 self-end sm:self-center">
-                      <button
-                        onClick={() => speakQuestion(questions[currentQuestionIndex].text)}
-                        title="Replay Question Audio"
-                        className="p-2 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-white transition-colors"
-                      >
-                        <RotateCcw className="w-4 h-4" />
-                      </button>
-                      <div className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-stone-800 text-stone-300">
-                        Q{currentQuestionIndex + 1} of {questions.length}
-                      </div>
-                    </div>
+                <div className="flex items-center justify-between mb-3 px-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">
+                      Question {currentQuestionIndex + 1} of {questions.length}
+                    </span>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
+                      {questions[currentQuestionIndex]?.type === 'coding' ? 'Live Coding' : 'Oral Defense'}
+                    </span>
                   </div>
-
-                  {/* Sound Wave Animation Visualizer */}
-                  {(isAiSpeaking || isListening) && (
-                    <div className="mt-4 pt-3 border-t border-stone-800 flex items-center justify-center gap-1 h-6">
-                      <span className="w-1 bg-emerald-400 rounded-full animate-bounce h-3"></span>
-                      <span className="w-1 bg-emerald-400 rounded-full animate-bounce h-5 [animation-delay:0.1s]"></span>
-                      <span className="w-1 bg-emerald-400 rounded-full animate-bounce h-4 [animation-delay:0.2s]"></span>
-                      <span className="w-1 bg-emerald-400 rounded-full animate-bounce h-6 [animation-delay:0.15s]"></span>
-                      <span className="w-1 bg-emerald-400 rounded-full animate-bounce h-2 [animation-delay:0.3s]"></span>
-                      <span className="w-1 bg-emerald-400 rounded-full animate-bounce h-5 [animation-delay:0.25s]"></span>
-                      <span className="w-1 bg-emerald-400 rounded-full animate-bounce h-3 [animation-delay:0.05s]"></span>
-                    </div>
-                  )}
+                  <button
+                    onClick={() => speakQuestion(questions[currentQuestionIndex]?.text)}
+                    className="text-xs text-stone-500 hover:text-emerald-800 font-medium flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" /> Replay Audio
+                  </button>
                 </div>
 
                 {/* Question Box */}

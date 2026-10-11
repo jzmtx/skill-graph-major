@@ -667,6 +667,152 @@ def generate_project_idea(skill_name: str) -> str:
     except Exception as e:
         return f"Build a comprehensive, full-stack application using {skill_name} that includes authentication, a database, and a complex domain logic feature (like real-time updates or advanced data processing)."
 
+def get_calibrated_defense_questions(skill_name: str, repo_name: str = "", project_abstract: str = "") -> list:
+    """Generate high-rigor, skill-specific oral defense questions tailored to the project."""
+    skill_lower = skill_name.lower()
+    repo_ctx = f" in your project ({repo_name})" if repo_name else " in your project"
+    
+    if "docker" in skill_lower or "container" in skill_lower:
+        return [
+            {
+                "id": 1,
+                "type": "conceptual",
+                "text": f"In your project's Docker architecture{repo_ctx}, walk me through your base image selection (e.g., alpine vs. debian/distroless) and how you structured the build layers to maximize Docker cache efficiency."
+            },
+            {
+                "id": 2,
+                "type": "conceptual",
+                "text": f"How does your container setup handle persistent data storage and volume mounts versus ephemeral container storage? What happens to application state and database files when a container restarts?"
+            },
+            {
+                "id": 3,
+                "type": "conceptual",
+                "text": f"Explain the networking configuration in your Docker environment: how does the web application container discover and communicate with other services (like databases or caches) across custom Docker networks?"
+            },
+            {
+                "id": 4,
+                "type": "conceptual",
+                "text": f"What security hardening practices did you implement in your Docker configuration (e.g., executing as a non-root USER, avoiding sensitive environment variables in image layers, using .dockerignore)?"
+            },
+            {
+                "id": 5,
+                "type": "coding",
+                "text": f"Write an optimized, production-grade multi-stage Dockerfile for this web application that separates dependency installation/build from a minimal, non-root runtime container."
+            }
+        ]
+    elif "kubernetes" in skill_lower or "k8s" in skill_lower:
+        return [
+            {
+                "id": 1,
+                "type": "conceptual",
+                "text": f"Walk me through your Kubernetes workload architecture{repo_ctx}: why did you choose Deployments vs StatefulSets, and how do readiness and liveness probes manage traffic routing?"
+            },
+            {
+                "id": 2,
+                "type": "conceptual",
+                "text": f"How do you inject configuration and sensitive credentials into your pods (ConfigMaps, Secrets, External Secrets), and what happens when those values are rotated?"
+            },
+            {
+                "id": 3,
+                "type": "conceptual",
+                "text": f"How is ingress and service routing configured for your services, and how do you prevent cascading failures across service boundaries?"
+            },
+            {
+                "id": 4,
+                "type": "conceptual",
+                "text": f"Explain your strategy for Pod resource requests and limits (CPU/Memory) and how Horizontal Pod Autoscalers (HPA) determine when to scale up under traffic."
+            },
+            {
+                "id": 5,
+                "type": "coding",
+                "text": f"Write a complete Kubernetes Deployment manifest including container spec, resource limits, readiness probe, and environment variables referencing a Secret."
+            }
+        ]
+    elif "react" in skill_lower or "next" in skill_lower or "frontend" in skill_lower:
+        return [
+            {
+                "id": 1,
+                "type": "conceptual",
+                "text": f"Explain how component boundaries, server components (RSC) vs client components ('use client'), and state management are orchestrated across your application{repo_ctx}."
+            },
+            {
+                "id": 2,
+                "type": "conceptual",
+                "text": f"What render optimization strategies (memoization, dynamic imports, bundle code-splitting, layout streaming) did you implement to achieve high Core Web Vitals?"
+            },
+            {
+                "id": 3,
+                "type": "conceptual",
+                "text": f"How do you handle asynchronous data synchronization, loading/error boundaries, and hydration mismatches across client-server transitions?"
+            },
+            {
+                "id": 4,
+                "type": "conceptual",
+                "text": f"Walk me through how user authentication tokens, route protection middleware, and persistent session state are handled across navigation cycles."
+            },
+            {
+                "id": 5,
+                "type": "coding",
+                "text": f"Write a custom React hook (e.g. `useDebounce`, `useApi`, or custom state hook) with complete cleanup and error handling for this application."
+            }
+        ]
+    elif "python" in skill_lower or "fastapi" in skill_lower or "django" in skill_lower or "flask" in skill_lower:
+        return [
+            {
+                "id": 1,
+                "type": "conceptual",
+                "text": f"In your Python backend architecture{repo_ctx}, explain how request routing, asynchronous concurrency (async/await event loop), and dependency injection are structured."
+            },
+            {
+                "id": 2,
+                "type": "conceptual",
+                "text": f"How did you design database transactions, ORM query efficiency (avoiding N+1 queries), and connection pooling for concurrent requests?"
+            },
+            {
+                "id": 3,
+                "type": "conceptual",
+                "text": f"Explain your error handling and validation architecture: how are Pydantic schemas or serialization models structured to prevent invalid inputs from reaching core services?"
+            },
+            {
+                "id": 4,
+                "type": "conceptual",
+                "text": f"What testing, logging, and environment configuration management patterns did you implement for production readiness?"
+            },
+            {
+                "id": 5,
+                "type": "coding",
+                "text": f"Write a clean, modular Python middleware or async service function implementing rate limiting, authentication verification, or error interception."
+            }
+        ]
+    else:
+        return [
+            {
+                "id": 1,
+                "type": "conceptual",
+                "text": f"Walk me through the concrete implementation of {skill_name} in your project{repo_ctx}: which specific modules, config files, or components directly depend on it?"
+            },
+            {
+                "id": 2,
+                "type": "conceptual",
+                "text": f"What was the most difficult technical trade-off or architectural choice you made when applying {skill_name} to this codebase?"
+            },
+            {
+                "id": 3,
+                "type": "conceptual",
+                "text": f"Describe a specific failure scenario, edge case, or bug in your {skill_name} implementation and how you resolved or guarded against it."
+            },
+            {
+                "id": 4,
+                "type": "conceptual",
+                "text": f"If an engineer joined your team tomorrow to refactor the {skill_name} component of this repository, what technical debt or bottleneck should they address first?"
+            },
+            {
+                "id": 5,
+                "type": "coding",
+                "text": f"Write a clean, production-grade function, configuration, or utility demonstrating advanced proficiency in {skill_name} for this application."
+            }
+        ]
+
 def analyze_github_repo(github_url: str, skill_name: str, project_abstract: str) -> dict:
     import urllib.request
     import re
@@ -680,56 +826,83 @@ def analyze_github_repo(github_url: str, skill_name: str, project_abstract: str)
     username, repo = match.group(1), match.group(2)
     repo = repo.replace('.git', '').strip('/')
     
-    # 2. Fetch README via GitHub API
-    api_url = f"https://api.github.com/repos/{username}/{repo}/readme"
+    def try_fetch_raw(filename: str) -> str:
+        for branch in ['main', 'master']:
+            try:
+                raw_url = f"https://raw.githubusercontent.com/{username}/{repo}/{branch}/{filename}"
+                req = urllib.request.Request(raw_url, headers={'User-Agent': 'SkillGraph-App'})
+                with urllib.request.urlopen(req, timeout=4) as response:
+                    if response.status == 200:
+                        content = response.read().decode('utf-8')
+                        return content
+            except Exception:
+                pass
+        return ""
+
+    # 2. Fetch README via GitHub API or Raw Fallback
     readme_content = ""
+    api_url = f"https://api.github.com/repos/{username}/{repo}/readme"
     try:
         req = urllib.request.Request(api_url, headers={'User-Agent': 'SkillGraph-App'})
-        with urllib.request.urlopen(req) as response:
+        with urllib.request.urlopen(req, timeout=5) as response:
             if response.status == 200:
                 data = json.loads(response.read().decode())
                 if 'content' in data:
                     readme_content = base64.b64decode(data['content']).decode('utf-8')
     except Exception as e:
-        print("Failed to fetch README via API:", e)
-        # Try raw fallback
-        try:
-            raw_url = f"https://raw.githubusercontent.com/{username}/{repo}/main/README.md"
-            req = urllib.request.Request(raw_url, headers={'User-Agent': 'SkillGraph-App'})
-            with urllib.request.urlopen(req) as response:
-                if response.status == 200:
-                    readme_content = response.read().decode('utf-8')
-        except Exception:
-            try:
-                raw_url = f"https://raw.githubusercontent.com/{username}/{repo}/master/README.md"
-                req = urllib.request.Request(raw_url, headers={'User-Agent': 'SkillGraph-App'})
-                with urllib.request.urlopen(req) as response:
-                    if response.status == 200:
-                        readme_content = response.read().decode('utf-8')
-            except Exception:
-                pass
+        readme_content = try_fetch_raw("README.md")
+        if not readme_content:
+            readme_content = try_fetch_raw("readme.md")
                 
     if not readme_content:
-        print(f"[AnalyzeRepo] README not found for {username}/{repo}, using project abstract as contextual baseline.")
         readme_content = f"Repository: {repo} by {username}.\nCandidate's Project Abstract:\n{project_abstract}"
         
-    # 3. Analyze with Local LLM (Ollama) or Groq Fallback
-    prompt = f"""
-    You are a Senior Engineering Assessor.
-    We are verifying a candidate's Level 2 proficiency in '{skill_name}'.
-    They submitted a GitHub repository for evaluation.
+    # 3. Proactively inspect skill-specific codebase files
+    additional_context = []
+    skill_lower = skill_name.lower()
     
-    Repository Abstract provided by user:
+    if "docker" in skill_lower or "container" in skill_lower:
+        for f in ['Dockerfile', 'docker-compose.yml', 'docker-compose.yaml', '.dockerignore', 'compose.yaml']:
+            content = try_fetch_raw(f)
+            if content:
+                additional_context.append(f"--- Detected {f} ---\n{content[:1500]}")
+    elif "python" in skill_lower:
+        for f in ['requirements.txt', 'pyproject.toml', 'main.py', 'app.py']:
+            content = try_fetch_raw(f)
+            if content:
+                additional_context.append(f"--- Detected {f} ---\n{content[:1000]}")
+    elif "react" in skill_lower or "node" in skill_lower or "next" in skill_lower:
+        for f in ['package.json', 'next.config.js', 'next.config.mjs']:
+            content = try_fetch_raw(f)
+            if content:
+                additional_context.append(f"--- Detected {f} ---\n{content[:1000]}")
+
+    extra_code_text = "\n\n".join(additional_context)
+        
+    # 4. Formulate strictly skill-grounded prompt
+    prompt = f"""
+    You are a Senior Engineering Assessor conducting an oral defense for Level 2 verification in the skill: '{skill_name}'.
+    The candidate has submitted a GitHub repository: '{repo}' by '{username}'.
+    
+    Target Skill to Validate: '{skill_name}'
+    
+    Candidate's Project Abstract:
     {project_abstract}
     
-    Repository README / Code context:
-    {readme_content[:3000]}
+    Repository README:
+    {readme_content[:2500]}
     
-    Evaluate this repository. Does it look like a valid project that uses '{skill_name}'? 
-    If yes, generate exactly 5 highly specific, difficult anti-plagiarism interview questions about the code they likely wrote based on this README. 
-    The questions must be designed to catch someone who just cloned the repo without understanding it.
-    - 4 questions should be "conceptual" (architectural choices, edge cases, interactions between files).
-    - 1 question MUST be "coding" (ask them to write a specific, small snippet of code extending or modifying a feature mentioned in the repo).
+    Detected Code & Configuration Files in Repository:
+    {extra_code_text if extra_code_text else "No extra config files detected; use abstract and project details."}
+    
+    CRITICAL MANDATE:
+    You are verifying the candidate's deep mastery of '{skill_name}' in THIS specific codebase.
+    DO NOT ask generic web development questions or generic scaling questions (e.g., "scaling to 100k users").
+    EVERY SINGLE QUESTION must rigorously test '{skill_name}' as used in this project:
+    - How {skill_name} is configured, structured, and executed in this project.
+    - Trade-offs made in the {skill_name} setup (e.g., image sizes, caching, volume mounts, networking, security, dependencies).
+    - Edge cases, errors, and failure recovery specific to {skill_name}.
+    - Question 5 MUST be a "coding" challenge asking the candidate to write or optimize concrete {skill_name} code (e.g., Dockerfile multi-stage build, docker-compose service, configuration snippet) specifically for this application.
     
     Return strictly a JSON object:
     {{
@@ -739,27 +912,27 @@ def analyze_github_repo(github_url: str, skill_name: str, project_abstract: str)
             {{
                 "id": 1,
                 "type": "conceptual",
-                "text": "Your conceptual question here"
+                "text": "Your conceptual question directly testing {skill_name} in this codebase"
             }},
             {{
                 "id": 2,
                 "type": "conceptual",
-                "text": "Your conceptual question here"
+                "text": "Your conceptual question directly testing {skill_name} in this codebase"
             }},
             {{
                 "id": 3,
                 "type": "conceptual",
-                "text": "Your conceptual question here"
+                "text": "Your conceptual question directly testing {skill_name} in this codebase"
             }},
             {{
                 "id": 4,
                 "type": "conceptual",
-                "text": "Your conceptual question here"
+                "text": "Your conceptual question directly testing {skill_name} in this codebase"
             }},
             {{
                 "id": 5,
                 "type": "coding",
-                "text": "Write a snippet that..."
+                "text": "Write a snippet in {skill_name} that..."
             }}
         ]
     }}
@@ -782,16 +955,16 @@ def analyze_github_repo(github_url: str, skill_name: str, project_abstract: str)
                     "stream": False,
                     "options": {"temperature": 0.2}
                 },
-                timeout=12
+                timeout=30
             )
             if resp.status_code == 200:
                 raw_response = resp.json().get("response", "{}")
                 data = json.loads(raw_response)
-                print(f"[AnalyzeRepo] Generated 5 interview questions using local Ollama model '{ollama_model}'!")
+                print(f"[AnalyzeRepo] Generated 5 skill-specific questions using local Ollama model '{ollama_model}'!")
         except Exception as oe:
             print(f"[AnalyzeRepo] Local Ollama call bypassed ({oe}), falling back to Groq...")
 
-    if not data or not data.get("questions"):
+    if not data or not data.get("questions") or len(data.get("questions", [])) < 5:
         try:
             res = call_groq_with_retries(
                 model=GROQ_PRIMARY,
@@ -801,28 +974,16 @@ def analyze_github_repo(github_url: str, skill_name: str, project_abstract: str)
             )
             data = json.loads(res.choices[0].message.content)
         except Exception as e:
-            print("[AnalyzeRepo] LLM call error, using guaranteed calibrated fallback questions:", e)
+            print(f"[AnalyzeRepo] LLM call error, using calibrated {skill_name} questions:", e)
             data = {
                 "passed_checks": True,
-                "feedback": "Repository verified. Oral defense questions prepared.",
-                "questions": [
-                    {"id": 1, "type": "conceptual", "text": f"Walk me through the high-level architecture of your project and where {skill_name} is used."},
-                    {"id": 2, "type": "conceptual", "text": f"What was the most challenging technical tradeoff or bug you encountered while building this with {skill_name}?"},
-                    {"id": 3, "type": "conceptual", "text": f"How did you handle error handling, edge cases, and data persistence in this codebase?"},
-                    {"id": 4, "type": "conceptual", "text": f"If this application scaled to 100,000 active users, what bottleneck would emerge first and how would you optimize it?"},
-                    {"id": 5, "type": "coding", "text": f"Write a clean, modular helper function or middleware in {skill_name} extending the core feature of your project."}
-                ]
+                "feedback": f"Repository verified. Oral defense calibrated for {skill_name}.",
+                "questions": get_calibrated_defense_questions(skill_name, repo, project_abstract)
             }
 
     data["passed_checks"] = True
-    if "questions" not in data or not data["questions"]:
-        data["questions"] = [
-            {"id": 1, "type": "conceptual", "text": f"Walk me through the high-level architecture of your project and where {skill_name} is used."},
-            {"id": 2, "type": "conceptual", "text": f"What was the most challenging technical tradeoff or bug you encountered while building this with {skill_name}?"},
-            {"id": 3, "type": "conceptual", "text": f"How did you handle error handling, edge cases, and data persistence in this codebase?"},
-            {"id": 4, "type": "conceptual", "text": f"If this application scaled to 100,000 active users, what bottleneck would emerge first and how would you optimize it?"},
-            {"id": 5, "type": "coding", "text": f"Write a clean, modular helper function or middleware in {skill_name} extending the core feature of your project."}
-        ]
+    if "questions" not in data or not data["questions"] or len(data["questions"]) < 5:
+        data["questions"] = get_calibrated_defense_questions(skill_name, repo, project_abstract)
     return data
 
 def generate_explanation_fast(skill_name: str, question_text: str, options: list, correct_answer: str) -> str:

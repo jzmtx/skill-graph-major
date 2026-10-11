@@ -151,3 +151,87 @@
     max-width: 100% !important;
   }
 }
+
+/* AI Interviewer Avatar Animations */
+@keyframes avatarBlink {
+  0%, 94%, 100% {
+    transform: scaleY(1);
+  }
+  97% {
+    transform: scaleY(0.08);
+  }
+}
+
+@keyframes avatarSpeakLip {
+  0%, 100% {
+    transform: scaleY(0.25) scaleX(0.85);
+  }
+  20% {
+    transform: scaleY(1.4) scaleX(1.15);
+  }
+  40% {
+    transform: scaleY(0.4) scaleX(0.9);
+  }
+  60% {
+    transform: scaleY(1.8) scaleX(1.25);
+  }
+  80% {
+    transform: scaleY(0.7) scaleX(1.0);
+  }
+}
+
+@keyframes avatarHeadBreathing {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-2.5px) rotate(0.4deg);
+  }
+}
+
+@keyframes avatarListeningTilt {
+  0%, 100% {
+    transform: translateY(0px) rotate(-1.8deg);
+  }
+  50% {
+    transform: translateY(-1.5px) rotate(-2.6deg);
+  }
+}
+
+@keyframes avatarGaze {
+  0%, 100% {
+    transform: translateX(0px);
+  }
+  30% {
+    transform: translateX(1.5px);
+  }
+  70% {
+    transform: translateX(-1.5px);
+  }
+}
+
+.animate-avatar-blink {
+  animation: avatarBlink 4.2s infinite ease-in-out;
+  transform-origin: center;
+}
+
+.animate-avatar-speak {
+  animation: avatarSpeakLip 0.28s infinite ease-in-out;
+  transform-origin: center;
+}
+
+.animate-avatar-head-idle {
+  animation: avatarHeadBreathing 4s infinite ease-in-out;
+  transform-origin: bottom center;
+}
+
+.animate-avatar-head-listen {
+  animation: avatarListeningTilt 2.5s infinite ease-in-out;
+  transform-origin: bottom center;
+}
+
+.animate-avatar-gaze {
+  animation: avatarGaze 6s infinite ease-in-out;
+  transform-origin: center;
+}
+

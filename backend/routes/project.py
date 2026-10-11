@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from typing import List, Optional
 from database import supabase
-from services.llm import analyze_github_repo, client
+from services.llm import analyze_github_repo, get_calibrated_defense_questions, client
 import json
 import uuid
 from datetime import datetime, timezone
@@ -41,13 +41,7 @@ def process_async_repo_audit(interview_id: str, github_url: str, skill_name: str
         analysis_result = analyze_github_repo(github_url, skill_name, project_abstract)
         questions = analysis_result.get("questions") or []
         if not questions:
-            questions = [
-                {"id": 1, "type": "conceptual", "text": f"Walk me through the high-level architecture of your project and where {skill_name} is used."},
-                {"id": 2, "type": "conceptual", "text": f"What was the most challenging technical tradeoff or bug you encountered while building this with {skill_name}?"},
-                {"id": 3, "type": "conceptual", "text": f"How did you handle error handling, edge cases, and data persistence in this codebase?"},
-                {"id": 4, "type": "conceptual", "text": f"If this application scaled to 100,000 active users, what bottleneck would emerge first and how would you optimize it?"},
-                {"id": 5, "type": "coding", "text": f"Write a clean, modular helper function or middleware in {skill_name} extending the core feature of your project."}
-            ]
+            questions = get_calibrated_defense_questions(skill_name, github_url, project_abstract)
         scheduled_interviews[interview_id]["status"] = "READY"
         scheduled_interviews[interview_id]["questions"] = questions
         scheduled_interviews[interview_id]["ready_at"] = datetime.now(timezone.utc).isoformat()
@@ -55,13 +49,7 @@ def process_async_repo_audit(interview_id: str, github_url: str, skill_name: str
     except Exception as e:
         print(f"[AsyncInterview] Error in background audit for {interview_id}: {e}")
         scheduled_interviews[interview_id]["status"] = "READY"
-        scheduled_interviews[interview_id]["questions"] = [
-            {"id": 1, "type": "conceptual", "text": f"Walk me through the high-level architecture of your project and where {skill_name} is used."},
-            {"id": 2, "type": "conceptual", "text": f"What was the most challenging technical tradeoff or bug you encountered while building this with {skill_name}?"},
-            {"id": 3, "type": "conceptual", "text": f"How did you handle error handling, edge cases, and data persistence in this codebase?"},
-            {"id": 4, "type": "conceptual", "text": f"If this application scaled to 100,000 active users, what bottleneck would emerge first and how would you optimize it?"},
-            {"id": 5, "type": "coding", "text": f"Write a clean, modular helper function or middleware in {skill_name} extending the core feature of your project."}
-        ]
+        scheduled_interviews[interview_id]["questions"] = get_calibrated_defense_questions(skill_name, github_url, project_abstract)
 
 @router.post("/schedule-interview")
 async def schedule_interview(req: ScheduleInterviewRequest, background_tasks: BackgroundTasks):
@@ -132,13 +120,7 @@ async def verify_repo(req: VerifyRepoRequest):
         # Fallback questions so student is never blocked
         return {
             "message": "Repository analyzed and oral defense calibrated.",
-            "questions": [
-                {"id": 1, "type": "conceptual", "text": f"Walk me through the high-level architecture of your project and where {req.skill_name} is used."},
-                {"id": 2, "type": "conceptual", "text": f"What was the most challenging technical tradeoff or bug you encountered while building this with {req.skill_name}?"},
-                {"id": 3, "type": "conceptual", "text": f"How did you handle error handling, edge cases, and data persistence in this codebase?"},
-                {"id": 4, "type": "conceptual", "text": f"If this application scaled to 100,000 active users, what bottleneck would emerge first and how would you optimize it?"},
-                {"id": 5, "type": "coding", "text": f"Write a clean, modular helper function or middleware in {req.skill_name} extending the core feature of your project."}
-            ]
+            "questions": get_calibrated_defense_questions(req.skill_name, req.github_url, req.project_abstract)
         }
 
 @router.post("/submit-interview")
