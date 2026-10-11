@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, BackgroundTasks
 from database import supabase
 from models import GitHubExtractRequest
 import urllib.request
@@ -6,6 +6,7 @@ import json
 import re
 from pydantic import BaseModel
 from services.hireability import calculate_hireability_index
+from routes.assessment import ensure_skill_questions_stocked
 
 router = APIRouter()
 
@@ -21,7 +22,7 @@ def extract_github_username(url: str) -> str:
     return ""
 
 @router.post("/extract")
-def extract_skills_from_github(req: GitHubExtractRequest):
+def extract_skills_from_github(req: GitHubExtractRequest, background_tasks: BackgroundTasks):
     username = extract_github_username(req.github_url)
     if not username:
         raise HTTPException(status_code=400, detail="Invalid GitHub URL")
@@ -83,6 +84,12 @@ def extract_skills_from_github(req: GitHubExtractRequest):
                 skills_added += 1
         except Exception as e:
             continue
+    # Stock questions across all levels for discovered skills in background
+    for lang in languages:
+        try:
+            background_tasks.add_task(ensure_skill_questions_stocked, lang, 5, req.student_id)
+        except Exception:
+            pass
             
     return {"message": "Extraction complete", "skills_added": skills_added, "languages": list(languages)}
 
@@ -104,8 +111,12 @@ def get_hireability_score(student_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/add")
-def add_manual_skill(req: ManualSkillAddRequest):
+def add_manual_skill(req: ManualSkillAddRequest, background_tasks: BackgroundTasks):
     try:
+        # Stock questions for this skill across levels 1-5 in background immediately
+        cleaned_skill = req.skill_name.strip()
+        background_tasks.add_task(ensure_skill_questions_stocked, cleaned_skill, 5, req.student_id)
+
         # Check if it already exists
         existing = supabase.table('student_skills').select('id').eq('student_id', req.student_id).ilike('skill_name', req.skill_name).execute()
         if existing.data:
@@ -114,7 +125,7 @@ def add_manual_skill(req: ManualSkillAddRequest):
         # Insert new skill
         new_skill = {
             "student_id": req.student_id,
-            "skill_name": req.skill_name.strip(),
+            "skill_name": cleaned_skill,
             "source": "manual",
             "verification_level": 0,
             "skill_score": 0

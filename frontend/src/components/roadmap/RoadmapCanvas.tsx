@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { BookOpen, PlayCircle, Target, CheckCircle2, ChevronDown, Lock, Star, SplitSquareHorizontal, Briefcase, Trophy, Code2, FlaskConical, Award } from "lucide-react";
 import Link from "next/link";
+import { prewarmAssessment } from "@/lib/api";
 
 // ─── Main Roadmap Canvas ──────────────────────────────────────────────────
 export default function RoadmapCanvas({ roadmapData: rawRoadmapData }: { roadmapData: any }) {
@@ -377,8 +378,18 @@ function NodeCard({ node, type = "core", compact = false, isExpandedOverride = f
                   </a>
                 )}
                 
-                <Link href={`/assessment/${encodeURIComponent(title)}`}
-                  className="flex items-center justify-center gap-1 text-xs font-semibold text-emerald-800 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3.5 py-1.5 rounded-lg transition-colors ml-auto shadow-2xs">
+                <Link 
+                  href={`/assessment/${encodeURIComponent(title)}`}
+                  onMouseEnter={() => {
+                    const studentId = typeof window !== 'undefined' ? localStorage.getItem('student_id') : null;
+                    prewarmAssessment({ skill_name: title, student_id: studentId });
+                  }}
+                  onClick={() => {
+                    const studentId = typeof window !== 'undefined' ? localStorage.getItem('student_id') : null;
+                    prewarmAssessment({ skill_name: title, student_id: studentId });
+                  }}
+                  className="flex items-center justify-center gap-1 text-xs font-semibold text-emerald-800 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3.5 py-1.5 rounded-lg transition-colors ml-auto shadow-2xs"
+                >
                   <CheckCircle2 className="w-3.5 h-3.5" /> Assess & Verify
                 </Link>
               </div>
@@ -409,7 +420,18 @@ function StageMilestoneCard({ stageName }: { stageName: string }) {
       </p>
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <Link href={`/assessment/${encodeURIComponent(stageName + " Cumulative")}`} className="flex flex-col items-start gap-1 p-3.5 bg-stone-50 border border-stone-200 rounded-lg hover:border-emerald-700 hover:bg-white transition-all shadow-2xs">
+        <Link 
+          href={`/assessment/${encodeURIComponent(stageName + " Cumulative")}`} 
+          onMouseEnter={() => {
+            const studentId = typeof window !== 'undefined' ? localStorage.getItem('student_id') : null;
+            prewarmAssessment({ skill_name: stageName + " Cumulative", student_id: studentId });
+          }}
+          onClick={() => {
+            const studentId = typeof window !== 'undefined' ? localStorage.getItem('student_id') : null;
+            prewarmAssessment({ skill_name: stageName + " Cumulative", student_id: studentId });
+          }}
+          className="flex flex-col items-start gap-1 p-3.5 bg-stone-50 border border-stone-200 rounded-lg hover:border-emerald-700 hover:bg-white transition-all shadow-2xs"
+        >
           <div className="flex items-center gap-1.5 text-stone-900 font-bold text-xs">
             <Target className="w-3.5 h-3.5 text-emerald-800" /> Stage Assessment
           </div>

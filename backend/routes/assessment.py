@@ -27,21 +27,31 @@ class SubmitAnswerRequest(BaseModel):
     skill_name: str
     question_id: str
     selected_option: str
-    current_difficulty: int
+class PrewarmRequest(BaseModel):
+    skill_name: str
+    student_id: Optional[str] = None
 
-def speculative_pregeneration_task(skill_name: str, current_difficulty: int, student_id: Optional[str] = None):
+active_stocking_skills: set = set()
+
+def ensure_skill_questions_stocked(skill_name: str, min_per_level: int = 5, student_id: Optional[str] = None):
     """
-    Speculatively pre-generates unseen candidate questions for adjacent possible next ranks
-    (difficulty - 1, difficulty, difficulty + 1) in the background while the student is answering.
-    Ensures that when the student submits, candidate questions are already validated, deduplicated,
-    and cached in the database.
+    Checks all difficulty levels (1 through 5) for a given skill.
+    If any level has fewer than min_per_level questions available in the database,
+    it automatically generates, deduplicates, and caches verified questions in the background.
+    Also ensures coding questions exist if the skill is programmable.
+    Zero latency impact on students.
     """
+    norm_skill = (skill_name or "").strip()
+    if not norm_skill:
+        return
+    norm_key = norm_skill.lower()
+    if norm_key in active_stocking_skills:
+        print(f"[Stocking] Already actively stocking questions for '{norm_skill}'. Skipping duplicate task.")
+        return
+    
+    active_stocking_skills.add(norm_key)
     try:
-        target_diffs = list(set([
-            max(1, current_difficulty - 1),
-            current_difficulty,
-            min(5, current_difficulty + 1)
-        ]))
+        print(f"[Stocking] Checking question inventory for '{norm_skill}' across Levels 1-5 (min {min_per_level}/level)...")
         
         seen_ids = set()
         seen_texts = set()
@@ -61,75 +71,120 @@ def speculative_pregeneration_task(skill_name: str, current_difficulty: int, stu
                                     seen_texts.add(t)
                                     seen_fingerprints.add(generate_canonical_fingerprint(t))
             except Exception as se:
-                print(f"[Speculative] Error fetching student history: {se}")
+                print(f"[Stocking] Error fetching student history: {se}")
 
-        for target_diff in target_diffs:
-            # Check how many unseen questions exist in DB for this skill and target difficulty
-            db_res = supabase.table("questions").select("id, question_base_text").eq("skill_name", skill_name).eq("difficulty_level", target_diff).execute()
-            
-            unseen_count = 0
-            if hasattr(db_res, 'data') and db_res.data:
-                for q in db_res.data:
-                    qid = str(q.get("id"))
-                    qtxt = q.get("question_base_text", "").strip()
-                    if qid not in seen_ids and qtxt not in seen_texts and not is_duplicate_context(qtxt, seen_texts):
-                        unseen_count += 1
-            
-            # If fewer than 2 unseen questions are ready in the DB, pre-generate a fresh batch of questions
-            if unseen_count < 2:
-                print(f"[Speculative] Cache low for {skill_name} Rank {target_diff} (unseen={unseen_count}). Generating in background...")
-                new_qs = generate_questions(skill_name, count=5, target_difficulty=target_diff)
-                insert_data = []
-                for q in new_qs:
-                    raw_opts = q.get("options", [])
-                    opts = [str(opt).strip() for opt in raw_opts]
-                    correct_ans = str(q.get("correct_answer", opts[0] if opts else "")).strip()
-                    opts = list(dict.fromkeys(opts))
-                    if opts and correct_ans not in opts:
-                        opts[-1] = correct_ans
-                        opts = list(dict.fromkeys(opts))
-                    
-                    padding_options = ["None of the above", "All of the above", "Error", "Compilation failed", "Undefined"]
-                    pad_idx = 0
-                    while len(opts) < 4:
-                        pad = padding_options[pad_idx % len(padding_options)]
-                        if pad not in opts and pad != correct_ans:
-                            opts.append(pad)
-                        pad_idx += 1
-                    
-                    q_text = q.get("question_base_text", "Error parsing question")
-                    code_snip = q.get("code_snippet", "")
-                    q_text_lower = q_text.lower()
-                    if not code_snip and ("following" in q_text_lower or "output" in q_text_lower):
-                        continue
-                    if code_snip:
-                        q_text += f"\n\n```python\n{code_snip}\n```"
-                    
-                    clean_txt = q_text.strip()
-                    if clean_txt in seen_texts:
-                        continue
-                    q_fp = generate_canonical_fingerprint(clean_txt)
-                    if q_fp in seen_fingerprints:
-                        continue
-                    if is_duplicate_context(clean_txt, seen_texts):
-                        continue
-                    
-                    topic = q.get("topic", "General")
-                    insert_data.append({
-                        "skill_name": skill_name,
-                        "difficulty_level": target_diff,
-                        "question_base_text": clean_txt,
-                        "options_json": {"choices": opts, "topic": topic, "fingerprint": q_fp},
-                        "correct_answer": correct_ans
-                    })
-                    seen_texts.add(clean_txt)
-                    seen_fingerprints.add(q_fp)
+        # Check all 5 difficulty levels for this skill
+        for target_diff in [1, 2, 3, 4, 5]:
+            try:
+                db_res = supabase.table("questions").select("id, question_base_text").ilike("skill_name", norm_skill).eq("difficulty_level", target_diff).execute()
                 
-                if insert_data:
-                    supabase.table("questions").insert(insert_data).execute()
-                    print(f"[Speculative] Successfully pre-generated and stored {len(insert_data)} questions for {skill_name} Rank {target_diff}")
+                unseen_count = 0
+                if hasattr(db_res, 'data') and db_res.data:
+                    for q in db_res.data:
+                        qid = str(q.get("id"))
+                        qtxt = q.get("question_base_text", "").strip()
+                        if qid not in seen_ids and qtxt not in seen_texts and not is_duplicate_context(qtxt, seen_texts):
+                            unseen_count += 1
+                
+                if unseen_count < min_per_level:
+                    needed = min_per_level - unseen_count
+                    batch_to_generate = max(needed, 3)
+                    print(f"[Stocking] Level {target_diff} low for '{norm_skill}' (unseen={unseen_count}, min={min_per_level}). Generating {batch_to_generate} questions in background...")
+                    
+                    new_qs = generate_questions(norm_skill, count=batch_to_generate, target_difficulty=target_diff)
+                    insert_data = []
+                    for q in new_qs:
+                        raw_opts = q.get("options", [])
+                        opts = [str(opt).strip() for opt in raw_opts]
+                        correct_ans = str(q.get("correct_answer", opts[0] if opts else "")).strip()
+                        opts = list(dict.fromkeys(opts))
+                        if opts and correct_ans not in opts:
+                            opts[-1] = correct_ans
+                            opts = list(dict.fromkeys(opts))
+                        
+                        padding_options = ["None of the above", "All of the above", "Error", "Compilation failed", "Undefined"]
+                        pad_idx = 0
+                        while len(opts) < 4:
+                            pad = padding_options[pad_idx % len(padding_options)]
+                            if pad not in opts and pad != correct_ans:
+                                opts.append(pad)
+                            pad_idx += 1
+                        
+                        q_text = q.get("question_base_text", "Error parsing question")
+                        code_snip = q.get("code_snippet", "")
+                        q_text_lower = q_text.lower()
+                        if not code_snip and ("following" in q_text_lower or "output" in q_text_lower):
+                            continue
+                        if code_snip:
+                            q_text += f"\n\n```python\n{code_snip}\n```"
+                        
+                        clean_txt = q_text.strip()
+                        if clean_txt in seen_texts:
+                            continue
+                        q_fp = generate_canonical_fingerprint(clean_txt)
+                        if q_fp in seen_fingerprints:
+                            continue
+                        if is_duplicate_context(clean_txt, seen_texts):
+                            continue
+                        
+                        topic = q.get("topic", "General")
+                        insert_data.append({
+                            "skill_name": norm_skill,
+                            "difficulty_level": target_diff,
+                            "question_base_text": clean_txt,
+                            "options_json": {"choices": opts, "topic": topic, "fingerprint": q_fp},
+                            "correct_answer": correct_ans
+                        })
+                        seen_texts.add(clean_txt)
+                        seen_fingerprints.add(q_fp)
+                    
+                    if insert_data:
+                        supabase.table("questions").insert(insert_data).execute()
+                        print(f"[Stocking] Successfully pre-generated and stored {len(insert_data)} questions for '{norm_skill}' Level {target_diff}")
+            except Exception as level_err:
+                print(f"[Stocking] Error stocking Level {target_diff} for '{norm_skill}': {level_err}")
+                continue
+
+        # Check and stock coding questions if the skill is programmable
+        if is_skill_programmable(norm_skill):
+            try:
+                cq_res = supabase.table("coding_questions").select("id, difficulty_level").ilike("skill_name", norm_skill).execute()
+                cq_count = len(cq_res.data or [])
+                if cq_count < 2:
+                    print(f"[Stocking] Coding questions low for '{norm_skill}' ({cq_count}/2). Generating sandboxes in background...")
+                    for diff_type, target_lvl in [("basic", 4), ("conceptual", 5)]:
+                        q_data = generate_coding_questions(norm_skill, diff_type)
+                        q_text = q_data.get("question_base_text", f"Write a practical program demonstrating {norm_skill}.")
+                        starter = q_data.get("starter_code", "// Starter code\n")
+                        correct_ans = str(q_data.get("correct_answer", ""))
+                        topic = q_data.get("topic", "Coding")
+                        supabase.table("coding_questions").insert({
+                            "skill_name": norm_skill,
+                            "difficulty_level": target_lvl,
+                            "question_base_text": q_text,
+                            "starter_code": starter,
+                            "correct_answer": correct_ans,
+                            "topic": topic
+                        }).execute()
+                    print(f"[Stocking] Successfully pre-generated coding sandboxes for '{norm_skill}'")
+            except Exception as cq_err:
+                print(f"[Stocking] Error stocking coding questions for '{norm_skill}': {cq_err}")
+
     except Exception as e:
-        print(f"[Speculative] Background pregeneration task encountered an error: {e}")
+        print(f"[Stocking] Global stocking task encountered an error for '{norm_skill}': {e}")
+    finally:
+        active_stocking_skills.discard(norm_key)
+
+def speculative_pregeneration_task(skill_name: str, current_difficulty: int, student_id: Optional[str] = None):
+    """
+    Backwards-compatible wrapper delegating to ensure_skill_questions_stocked.
+    """
+    ensure_skill_questions_stocked(skill_name, min_per_level=5, student_id=student_id)
+
+@router.post("/prewarm")
+def prewarm_skill_assessment(req: PrewarmRequest, background_tasks: BackgroundTasks):
+    background_tasks.add_task(ensure_skill_questions_stocked, req.skill_name, 5, req.student_id)
+    return {"status": "ok", "message": f"Prewarming question pool for {req.skill_name}"}
 
 @router.post("/get-question")
 def get_adaptive_question(req: GetQuestionRequest, background_tasks: BackgroundTasks):

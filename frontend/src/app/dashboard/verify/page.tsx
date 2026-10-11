@@ -14,7 +14,7 @@ import {
   Layers,
   ChevronRight
 } from 'lucide-react';
-import { getMySkills } from '@/lib/api';
+import { getMySkills, prewarmAssessment } from '@/lib/api';
 import { getCachedData, setCachedData } from '@/lib/cache';
 import { SmartTopBarLoader, SmartListSkeleton } from '@/components/common/SmartLoader';
 
@@ -240,6 +240,14 @@ export default function StudentVerificationPage() {
                 <div className="pt-3 border-t border-stone-100 flex items-center gap-2 mt-2">
                   <Link 
                     href={`/assessment/${encodeURIComponent(s.skill_name)}`}
+                    onMouseEnter={() => {
+                      const studentId = typeof window !== 'undefined' ? localStorage.getItem('student_id') : null;
+                      prewarmAssessment({ skill_name: s.skill_name, student_id: studentId });
+                    }}
+                    onClick={() => {
+                      const studentId = typeof window !== 'undefined' ? localStorage.getItem('student_id') : null;
+                      prewarmAssessment({ skill_name: s.skill_name, student_id: studentId });
+                    }}
                     className="flex-1 text-center py-2 px-3 bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-semibold rounded-lg transition-colors"
                   >
                     {isLevel1 || isLevel2 ? 'Retake L1 Test' : 'Start L1 Exam'}

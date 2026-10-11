@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, use, useRef } from 'react';
-import { getAdaptiveQuestion, submitAnswer, completeAssessment, getCodingQuestion, evaluateCode, simulateCode, reportQuestion } from '@/lib/api';
+import { getAdaptiveQuestion, submitAnswer, completeAssessment, getCodingQuestion, evaluateCode, simulateCode, reportQuestion, prewarmAssessment } from '@/lib/api';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github.css';
@@ -19,6 +19,13 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
   const unwrappedParams = use(params);
   const skillName = decodeURIComponent(unwrappedParams.skill_name);
   
+  // Proactively prewarm and background-stock questions across all levels 1-5 as soon as page loads
+  useEffect(() => {
+    if (!skillName) return;
+    const studentId = typeof window !== 'undefined' ? localStorage.getItem('student_id') : null;
+    prewarmAssessment({ skill_name: skillName, student_id: studentId });
+  }, [skillName]);
+
   // Initial Student Agreement & Instructions Screen
   const [hasAcceptedRules, setHasAcceptedRules] = useState(false);
   const [acknowledgedPolicy, setAcknowledgedPolicy] = useState(false);

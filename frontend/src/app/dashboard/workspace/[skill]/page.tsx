@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { getWorkspaceResources } from "@/lib/api";
+import { getWorkspaceResources, prewarmAssessment } from "@/lib/api";
 import { BookOpen, PlayCircle, Code2, ArrowLeft, Loader2, Target, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -146,6 +146,14 @@ export default function WorkspacePage() {
           <div className="pt-6 space-y-2">
             <Link
               href={`/assessment/${encodeURIComponent(skillName)}`}
+              onMouseEnter={() => {
+                const studentId = typeof window !== 'undefined' ? localStorage.getItem('student_id') : null;
+                prewarmAssessment({ skill_name: skillName, student_id: studentId });
+              }}
+              onClick={() => {
+                const studentId = typeof window !== 'undefined' ? localStorage.getItem('student_id') : null;
+                prewarmAssessment({ skill_name: skillName, student_id: studentId });
+              }}
               className="w-full flex items-center justify-center gap-1.5 bg-emerald-800 hover:bg-emerald-900 text-white font-semibold py-2.5 rounded-lg text-xs transition-all shadow-2xs"
             >
               Take Assessment <Target className="w-3.5 h-3.5" />

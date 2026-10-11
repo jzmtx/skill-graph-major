@@ -60,6 +60,16 @@ export const getStudentProfile = async (student_id: string) => {
 };
 
 // --- Assessment APIs ---
+export const prewarmAssessment = async (data: { skill_name: string; student_id?: string | null }) => {
+  try {
+    const response = await api.post('/api/assessment/prewarm', data);
+    return response.data;
+  } catch {
+    // Non-blocking background prewarming
+    return null;
+  }
+};
+
 export const getAdaptiveQuestion = async (data: Record<string, unknown>) => {
   const response = await api.post('/api/assessment/get-question', data);
   return response.data;

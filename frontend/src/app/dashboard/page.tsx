@@ -32,7 +32,8 @@ import {
   getStudentInvitations, 
   acceptStudentInvitation,
   getStudentProfile,
-  getHireabilityScore
+  getHireabilityScore,
+  prewarmAssessment
 } from '@/lib/api';
 import { getAppliedJobs } from '@/lib/companyApi';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -95,6 +96,7 @@ export default function DashboardPage() {
     setAddingSkill(true);
     try {
       await addSkill({ student_id: studentId, skill_name: targetSkill });
+      prewarmAssessment({ skill_name: targetSkill, student_id: studentId });
       setCustomSkill("");
       await fetchSkills();
     } catch (e) {
@@ -625,7 +627,18 @@ export default function DashboardPage() {
 
                       <div className="pt-2 border-t border-stone-200 flex items-center justify-between gap-2">
                         {isLevel0 && (
-                          <Link href={`/assessment/${encodeURIComponent(s.skill_name)}`} className="w-full">
+                          <Link 
+                            href={`/assessment/${encodeURIComponent(s.skill_name)}`} 
+                            className="w-full"
+                            onMouseEnter={() => {
+                              const studentId = typeof window !== 'undefined' ? localStorage.getItem('student_id') : null;
+                              prewarmAssessment({ skill_name: s.skill_name, student_id: studentId });
+                            }}
+                            onClick={() => {
+                              const studentId = typeof window !== 'undefined' ? localStorage.getItem('student_id') : null;
+                              prewarmAssessment({ skill_name: s.skill_name, student_id: studentId });
+                            }}
+                          >
                             <button className="w-full text-xs font-semibold py-1.5 px-3 rounded-lg bg-emerald-800 hover:bg-emerald-900 text-white transition-colors flex items-center justify-center gap-1.5 shadow-2xs">
                               <span>Take Adaptive Exam</span>
                               <ArrowRight className="w-3 h-3" />
@@ -728,7 +741,17 @@ export default function DashboardPage() {
 
           <div className="shrink-0">
             {skills.length > 0 ? (
-              <Link href={`/assessment/${encodeURIComponent(skills[0].skill_name)}`}>
+              <Link 
+                href={`/assessment/${encodeURIComponent(skills[0].skill_name)}`}
+                onMouseEnter={() => {
+                  const studentId = typeof window !== 'undefined' ? localStorage.getItem('student_id') : null;
+                  prewarmAssessment({ skill_name: skills[0].skill_name, student_id: studentId });
+                }}
+                onClick={() => {
+                  const studentId = typeof window !== 'undefined' ? localStorage.getItem('student_id') : null;
+                  prewarmAssessment({ skill_name: skills[0].skill_name, student_id: studentId });
+                }}
+              >
                 <button className="flex items-center gap-2 bg-emerald-800 hover:bg-emerald-900 text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-2xs">
                   <span>Assess {skills[0].skill_name}</span>
                   <ArrowRight className="w-4 h-4" />
