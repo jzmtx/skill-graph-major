@@ -127,6 +127,16 @@ export const reportQuestion = async (data: { question_id: string, student_id: st
 };
 
 // --- Project Verification APIs ---
+export const scheduleProjectInterview = async (data: Record<string, unknown>) => {
+  const response = await api.post('/api/project/schedule-interview', data);
+  return response.data;
+};
+
+export const getInterviewStatus = async (interview_id: string) => {
+  const response = await api.get(`/api/project/interview-status/${interview_id}`);
+  return response.data;
+};
+
 export const verifyProjectRepo = async (data: Record<string, unknown>) => {
   const response = await api.post('/api/project/verify-repo', data);
   return response.data;

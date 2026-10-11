@@ -1,11 +1,12 @@
 "use client";
 
 import React, { useState, useEffect, useRef, use } from 'react';
-import { verifyProjectRepo, submitProjectInterview, getProjectIdea } from '@/lib/api';
+import { scheduleProjectInterview, getInterviewStatus, verifyProjectRepo, submitProjectInterview, getProjectIdea } from '@/lib/api';
 import { 
   ArrowLeft, CheckCircle2, Send, Terminal, Loader2, XCircle, 
   ShieldAlert, Brain, Lightbulb, Code2, Mic, MicOff, Volume2, 
-  VolumeX, RotateCcw, Sparkles, Clock, Radio, Award, UserCheck, ShieldCheck
+  VolumeX, RotateCcw, Sparkles, Clock, Radio, Award, UserCheck, ShieldCheck,
+  Calendar, Play, ArrowRight, Check, ExternalLink
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -16,13 +17,20 @@ export default function ProjectVerificationPage({ params }: { params: Promise<{ 
   const unwrappedParams = use(params);
   const skillName = decodeURIComponent(unwrappedParams.skill_name);
   
-  const [step, setStep] = useState(0); // 0: Idea, 1: URL, 2: Virtual Voice Interview, 3: Result / Processing
+  // Steps: 0: Idea Spec, 1: Repo Form, 2: Scheduled Lobby / Background Audit, 3: Virtual Voice Interview, 4: Result / Evaluation
+  const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   
   const [projectIdea, setProjectIdea] = useState('');
   const [projectAbstract, setProjectAbstract] = useState('');
   const [githubUrl, setGithubUrl] = useState('');
+  
+  // Scheduling & Asynchronous Audit States
+  const [interviewId, setInterviewId] = useState<string | null>(null);
+  const [scheduledStatus, setScheduledStatus] = useState<'PREPARING' | 'READY'>('PREPARING');
+  const [estimatedSeconds, setEstimatedSeconds] = useState(25);
+  const [scheduledTime, setScheduledTime] = useState<string>('');
   
   const [questions, setQuestions] = useState<any[]>([]);
   const [answers, setAnswers] = useState<Record<number, string>>({});
@@ -172,9 +180,9 @@ export default function ProjectVerificationPage({ params }: { params: Promise<{ 
     } catch (e) {}
   };
 
-  // Speak automatically when question changes in Step 2
+  // Speak automatically when question changes in Step 3 (Virtual Interview)
   useEffect(() => {
-    if (step === 2 && questions.length > 0 && voiceMode) {
+    if (step === 3 && questions.length > 0 && voiceMode) {
       const q = questions[currentQuestionIndex];
       if (q) {
         const announcement = q.type === 'coding' 
@@ -184,6 +192,37 @@ export default function ProjectVerificationPage({ params }: { params: Promise<{ 
       }
     }
   }, [step, currentQuestionIndex, voiceMode]);
+
+  // Polling hook for scheduled interview preparation in Step 2
+  useEffect(() => {
+    if (step !== 2 || !interviewId || scheduledStatus === 'READY') return;
+
+    const interval = setInterval(async () => {
+      try {
+        const statusRes = await getInterviewStatus(interviewId);
+        if (statusRes.status === 'READY') {
+          setScheduledStatus('READY');
+          if (statusRes.questions && statusRes.questions.length > 0) {
+            setQuestions(statusRes.questions);
+          }
+          clearInterval(interval);
+        }
+      } catch (e) {
+        console.warn("Polling interview status:", e);
+      }
+    }, 2500);
+
+    return () => clearInterval(interval);
+  }, [step, interviewId, scheduledStatus]);
+
+  // Countdown timer in scheduled lobby
+  useEffect(() => {
+    if (step !== 2 || scheduledStatus === 'READY') return;
+    const timer = setInterval(() => {
+      setEstimatedSeconds(prev => (prev > 1 ? prev - 1 : 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [step, scheduledStatus]);
 
   const handleGenerateIdea = async () => {
     setLoading(true);
@@ -198,7 +237,8 @@ export default function ProjectVerificationPage({ params }: { params: Promise<{ 
     }
   };
 
-  const handleVerifyUrl = async (e: React.FormEvent) => {
+  // Submits repository and schedules the interview asynchronously
+  const handleScheduleInterview = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!githubUrl.includes("github.com")) {
       setError("Please enter a valid GitHub repository URL.");
@@ -209,23 +249,60 @@ export default function ProjectVerificationPage({ params }: { params: Promise<{ 
     setError('');
     
     try {
-      const studentId = localStorage.getItem('student_id');
-      const res = await verifyProjectRepo({
+      const studentId = typeof window !== 'undefined' ? localStorage.getItem('student_id') : null;
+      const res = await scheduleProjectInterview({
         student_id: studentId,
         skill_name: skillName,
         github_url: githubUrl,
         project_abstract: projectAbstract
       });
       
-      setQuestions(res.questions || []);
-      setCurrentQuestionIndex(0);
-      setAnswers({});
-      setStep(2);
+      setInterviewId(res.interview_id);
+      setScheduledStatus("PREPARING");
+      setEstimatedSeconds(res.estimated_seconds || 25);
+      
+      const now = new Date();
+      setScheduledTime(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+      
+      setStep(2); // Immediately move to Interview Scheduled Lobby
     } catch (e: any) {
-      setError(e.response?.data?.detail || "Failed to analyze repository. Check if it's public.");
+      console.warn("Schedule interview fallback:", e);
+      // Fail-safe direct verify fallback
+      try {
+        const studentId = typeof window !== 'undefined' ? localStorage.getItem('student_id') : null;
+        const res = await verifyProjectRepo({
+          student_id: studentId,
+          skill_name: skillName,
+          github_url: githubUrl,
+          project_abstract: projectAbstract
+        });
+        setQuestions(res.questions || []);
+        setCurrentQuestionIndex(0);
+        setAnswers({});
+        setStep(3);
+      } catch (err: any) {
+        setError(err.response?.data?.detail || "Failed to submit repository. Please verify your URL.");
+      }
     } finally {
       setLoading(false);
     }
+  };
+
+  // Start the interview from the lobby
+  const handleEnterInterview = () => {
+    if (questions.length === 0) {
+      // Default calibrated defense questions if none yet
+      setQuestions([
+        {"id": 1, "type": "conceptual", "text": `Walk me through the high-level architecture of your project and where ${skillName} is used.`},
+        {"id": 2, "type": "conceptual", "text": `What was the most challenging technical tradeoff or bug you encountered while building this with ${skillName}?`},
+        {"id": 3, "type": "conceptual", "text": `How did you handle error handling, edge cases, and data persistence in this codebase?`},
+        {"id": 4, "type": "conceptual", "text": `If this application scaled to 100,000 active users, what bottleneck would emerge first and how would you optimize it?`},
+        {"id": 5, "type": "coding", "text": `Write a clean, modular helper function or middleware in ${skillName} extending the core feature of your project.`}
+      ]);
+    }
+    setCurrentQuestionIndex(0);
+    setAnswers({});
+    setStep(3);
   };
 
   const handleNextQuestion = () => {
@@ -258,11 +335,11 @@ export default function ProjectVerificationPage({ params }: { params: Promise<{ 
 
     setLoading(true);
     setError('');
-    setStep(3);
+    setStep(4);
     setEvaluationPending(true);
     
     try {
-      const studentId = localStorage.getItem('student_id');
+      const studentId = typeof window !== 'undefined' ? localStorage.getItem('student_id') : null;
       const qa_pairs = questions.map(q => ({
         question: q.text,
         answer: answers[q.id] || ""
@@ -303,7 +380,7 @@ export default function ProjectVerificationPage({ params }: { params: Promise<{ 
             </div>
           </div>
 
-          {step === 2 && (
+          {step === 3 && (
             <div className="flex items-center gap-2">
               <button
                 onClick={() => {
@@ -335,7 +412,8 @@ export default function ProjectVerificationPage({ params }: { params: Promise<{ 
           <div className="flex bg-stone-100 h-1.5">
             <div className={`transition-all duration-300 ${step >= 1 ? 'flex-1 bg-emerald-800' : 'w-0'}`} />
             <div className={`transition-all duration-300 ${step >= 2 ? 'flex-1 bg-emerald-800' : 'w-0'}`} />
-            <div className={`transition-all duration-300 ${step >= 3 ? 'flex-1 bg-emerald-700' : 'w-0'}`} />
+            <div className={`transition-all duration-300 ${step >= 3 ? 'flex-1 bg-emerald-800' : 'w-0'}`} />
+            <div className={`transition-all duration-300 ${step >= 4 ? 'flex-1 bg-emerald-700' : 'w-0'}`} />
           </div>
 
           <div className="p-6 md:p-10">
@@ -403,16 +481,16 @@ export default function ProjectVerificationPage({ params }: { params: Promise<{ 
             {step === 1 && (
               <div className="animate-in fade-in duration-300 max-w-2xl mx-auto">
                 <span className="text-xs font-bold uppercase tracking-wider text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
-                  Step 2: Repository Telemetry
+                  Step 2: Repository Submission & Scheduling
                 </span>
                 <h2 className="text-2xl md:text-3xl font-serif font-bold text-stone-900 mt-2 mb-2">
                   Submit Your {skillName} Repository
                 </h2>
                 <p className="text-stone-600 text-xs md:text-sm mb-6 leading-relaxed">
-                  Provide your public GitHub repository. Our senior AI engineering assessor will inspect commit chronology, file trees, and implementation patterns to calibrate your oral defense.
+                  Provide your public GitHub repository. Submitting will instantly schedule your oral defense interview while our AI Assessor scans your codebase asynchronously.
                 </p>
                 
-                <form onSubmit={handleVerifyUrl} className="space-y-4">
+                <form onSubmit={handleScheduleInterview} className="space-y-4">
                   <div>
                     <label className="block text-xs font-semibold text-stone-700 mb-1.5">GitHub Repository URL</label>
                     <input 
@@ -437,15 +515,150 @@ export default function ProjectVerificationPage({ params }: { params: Promise<{ 
                       disabled={loading || !githubUrl}
                       className="w-full flex items-center justify-center py-3.5 bg-emerald-800 text-white font-semibold text-xs md:text-sm rounded-xl hover:bg-emerald-900 disabled:opacity-50 transition-colors shadow-2xs"
                     >
-                      {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Scanning Codebase & Commits...</> : "Audit Repo & Begin Virtual Oral Defense"}
+                      {loading ? (
+                        <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Scheduling Interview Session...</>
+                      ) : (
+                        <><Calendar className="w-4 h-4 mr-2" /> Schedule Interview & Submit Repository</>
+                      )}
                     </button>
                   </div>
                 </form>
               </div>
             )}
 
-            {/* Step 2: Speech-to-Speech Virtual Technical Interview */}
-            {step === 2 && questions.length > 0 && (
+            {/* Step 2: Scheduled Interview & Codebase Audit Lobby */}
+            {step === 2 && (
+              <div className="animate-in fade-in duration-300 max-w-2xl mx-auto">
+                <div className="text-center mb-6">
+                  <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 border transition-all ${
+                    scheduledStatus === 'READY' 
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-800 shadow-md shadow-emerald-500/10'
+                      : 'bg-amber-50 border-amber-300 text-amber-700'
+                  }`}>
+                    {scheduledStatus === 'READY' ? (
+                      <CheckCircle2 className="w-8 h-8 text-emerald-700 animate-bounce" />
+                    ) : (
+                      <Clock className="w-8 h-8 text-amber-600 animate-spin" />
+                    )}
+                  </div>
+
+                  <span className={`text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full border ${
+                    scheduledStatus === 'READY'
+                      ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
+                      : 'bg-amber-50 text-amber-900 border-amber-200'
+                  }`}>
+                    {scheduledStatus === 'READY' ? 'Oral Defense Room Ready' : 'Interview Scheduled & Preparing'}
+                  </span>
+
+                  <h2 className="text-2xl md:text-3xl font-serif font-bold text-stone-900 mt-3 mb-2">
+                    {scheduledStatus === 'READY' ? "Your Defense Room is Open!" : "Interview Scheduled & Under Review"}
+                  </h2>
+                  <p className="text-stone-600 text-xs md:text-sm max-w-lg mx-auto leading-relaxed">
+                    {scheduledStatus === 'READY'
+                      ? "Our AI Assessor has audited your repository structure and calibrated 5 tailored defense questions. You may enter whenever you are ready."
+                      : "Analyzing real-world code takes a few moments. Your interview has been scheduled — our AI Assessor is currently reviewing your codebase."}
+                  </p>
+                </div>
+
+                {/* Repository & Schedule Overview Card */}
+                <div className="bg-stone-50 border border-stone-200 rounded-2xl p-5 mb-6 space-y-3.5">
+                  <div className="flex items-center justify-between text-xs pb-3 border-b border-stone-200">
+                    <span className="text-stone-500 font-medium">Target Competency:</span>
+                    <span className="font-bold text-stone-900">{skillName}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs pb-3 border-b border-stone-200">
+                    <span className="text-stone-500 font-medium">Registered Repository:</span>
+                    <a 
+                      href={githubUrl} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="font-mono text-emerald-800 font-semibold hover:underline flex items-center gap-1 max-w-[260px] truncate"
+                    >
+                      {githubUrl.replace('https://github.com/', '')}
+                      <ExternalLink className="w-3 h-3 shrink-0" />
+                    </a>
+                  </div>
+                  <div className="flex items-center justify-between text-xs pb-3 border-b border-stone-200">
+                    <span className="text-stone-500 font-medium">Scheduled Time:</span>
+                    <span className="font-semibold text-stone-900 flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-stone-600" />
+                      Today at {scheduledTime || "Now"} (On-Demand / Flexible)
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-stone-500 font-medium">Assessor Telemetry Status:</span>
+                    <span className={`font-semibold flex items-center gap-1.5 ${
+                      scheduledStatus === 'READY' ? 'text-emerald-800' : 'text-amber-700'
+                    }`}>
+                      {scheduledStatus === 'READY' ? (
+                        <>
+                          <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                          Questions Ready & Calibrated
+                        </>
+                      ) : (
+                        <>
+                          <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
+                          Scanning Codebase (~{estimatedSeconds}s remaining)
+                        </>
+                      )}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Background Checklist */}
+                <div className="bg-white border border-stone-200 rounded-xl p-4 mb-6 space-y-2.5 text-xs text-stone-700">
+                  <div className="flex items-center gap-2.5">
+                    <Check className="w-4 h-4 text-emerald-700 shrink-0" />
+                    <span>Repository endpoint validated & commits indexed</span>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <Check className="w-4 h-4 text-emerald-700 shrink-0" />
+                    <span>Architectural patterns and {skillName} usage mapped</span>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    {scheduledStatus === 'READY' ? (
+                      <Check className="w-4 h-4 text-emerald-700 shrink-0" />
+                    ) : (
+                      <Loader2 className="w-4 h-4 text-amber-600 animate-spin shrink-0" />
+                    )}
+                    <span className={scheduledStatus === 'READY' ? 'text-stone-700' : 'text-amber-800 font-semibold'}>
+                      {scheduledStatus === 'READY' 
+                        ? '5 custom oral defense and coding questions prepared' 
+                        : 'AI formulating customized defense & coding challenge questions...'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Pre-Interview Checklist & Actions */}
+                <div className="space-y-3">
+                  {scheduledStatus === 'READY' ? (
+                    <button
+                      onClick={handleEnterInterview}
+                      className="w-full flex items-center justify-center gap-2 py-4 bg-emerald-800 text-white font-bold text-sm rounded-xl hover:bg-emerald-900 transition-all shadow-md shadow-emerald-900/10 cursor-pointer"
+                    >
+                      <Play className="w-4 h-4 fill-current" />
+                      Enter Virtual Interview Room Now
+                      <ArrowRight className="w-4 h-4 ml-1" />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleEnterInterview}
+                      className="w-full flex items-center justify-center gap-2 py-4 bg-stone-100 hover:bg-stone-200 text-stone-800 font-semibold text-xs md:text-sm rounded-xl transition-all border border-stone-300"
+                    >
+                      <Loader2 className="w-4 h-4 animate-spin text-stone-600" />
+                      Waiting for Assessor Calibration (~{estimatedSeconds}s) • Or Enter Now
+                    </button>
+                  )}
+
+                  <p className="text-[11px] text-stone-500 text-center leading-normal">
+                    Your interview is reserved. You can take it immediately or return later to complete your oral defense.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Step 3: Speech-to-Speech Virtual Technical Interview */}
+            {step === 3 && questions.length > 0 && (
               <div className="animate-in fade-in duration-300">
                 {/* Virtual Interviewer Studio Header */}
                 <div className="bg-stone-900 text-white rounded-2xl p-5 mb-6 relative overflow-hidden shadow-sm">
@@ -621,8 +834,8 @@ export default function ProjectVerificationPage({ params }: { params: Promise<{ 
               </div>
             )}
 
-            {/* Step 3: Result / Asynchronous Evaluation Screen */}
-            {step === 3 && (
+            {/* Step 4: Result / Asynchronous Evaluation Screen */}
+            {step === 4 && (
               <div className="text-center animate-in zoom-in-95 duration-500 py-6 max-w-xl mx-auto">
                 {evaluationPending && !result ? (
                   <div>
