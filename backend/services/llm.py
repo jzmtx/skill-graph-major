@@ -750,21 +750,50 @@ def analyze_github_repo(github_url: str, skill_name: str, project_abstract: str)
     }}
     """
     
-    try:
-        res = call_groq_with_retries(
-            model=GROQ_PRIMARY,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.3,
-            response_format={"type": "json_object"}
-        )
-        data = json.loads(res.choices[0].message.content)
-        # Ensure 'questions' is present to avoid frontend crashes if LLM hallucinates schema
-        if "questions" not in data and "interview_question" in data:
-            data["questions"] = [{"id": 1, "type": "conceptual", "text": data["interview_question"]}]
-        return data
-    except Exception as e:
-        print("LLM Error in analyze_github_repo:", e)
-        return {"passed_checks": False, "feedback": "Failed to analyze repository with AI."}
+    # 3. Analyze with Local LLM (Ollama) or Groq Fallback
+    env = dotenv_values(".env")
+    ollama_url = env.get("OLLAMA_BASE_URL", os.environ.get("OLLAMA_BASE_URL"))
+    ollama_model = env.get("OLLAMA_MODEL", os.environ.get("OLLAMA_MODEL", "llama3.2:3b"))
+    
+    data = None
+    if ollama_url:
+        try:
+            import requests
+            resp = requests.post(
+                f"{ollama_url.rstrip('/')}/api/generate",
+                json={
+                    "model": ollama_model,
+                    "prompt": prompt,
+                    "format": "json",
+                    "stream": False,
+                    "options": {"temperature": 0.2}
+                },
+                timeout=18
+            )
+            if resp.status_code == 200:
+                raw_response = resp.json().get("response", "{}")
+                data = json.loads(raw_response)
+                print(f"[AnalyzeRepo] Generated 5 interview questions using local Ollama model '{ollama_model}'!")
+        except Exception as oe:
+            print(f"[AnalyzeRepo] Local Ollama call bypassed ({oe}), falling back to Groq...")
+
+    if not data:
+        try:
+            res = call_groq_with_retries(
+                model=GROQ_PRIMARY,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+                response_format={"type": "json_object"}
+            )
+            data = json.loads(res.choices[0].message.content)
+        except Exception as e:
+            print("LLM Error in analyze_github_repo:", e)
+            return {"passed_checks": False, "feedback": "Failed to analyze repository with AI."}
+
+    # Ensure 'questions' is present to avoid frontend crashes if LLM hallucinates schema
+    if "questions" not in data and "interview_question" in data:
+        data["questions"] = [{"id": 1, "type": "conceptual", "text": data["interview_question"]}]
+    return data
 
 def generate_explanation_fast(skill_name: str, question_text: str, options: list, correct_answer: str) -> str:
     """

@@ -57,30 +57,58 @@ async def submit_interview(req: SubmitInterviewRequest):
         
         {qa_text}
         
-        Evaluate their answers holistically. Do their answers demonstrate a genuine, working knowledge of the code 
-        they supposedly wrote? Or do they sound like generic, copy-pasted, or hallucinated responses?
-        If they failed to provide a valid, conceptually correct coding snippet for the coding question, they MUST fail the interview.
+        Evaluate their answers holistically using this strict rubric:
+        1. Conceptual Depth: Do their answers demonstrate genuine comprehension of real-world implementation tradeoffs in {req.skill_name}?
+        2. Authorship Authenticity: Do they sound like the developer who wrote the code, or generic AI/copy-pasted fluff?
+        3. Code Snippet Correctness: For the coding question, did they write a syntactically and logically sound code snippet?
         
-        Return ONLY a JSON object with two keys:
-        - "passed": boolean (true if they passed the verification, false if they failed)
-        - "feedback": A short string explaining why they passed or failed, referencing specific answers.
+        Return ONLY a JSON object:
+        {{
+            "passed": true or false,
+            "feedback": "A clear 2-sentence explanation of why they passed or failed, referencing specific answers."
+        }}
         """
         
-        # Use Groq client imported from services.llm
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.3,
-            response_format={"type": "json_object"}
-        )
+        # Check local Ollama model first
+        from dotenv import dotenv_values
+        import os
+        import requests
+        env = dotenv_values(".env")
+        ollama_url = env.get("OLLAMA_BASE_URL", os.environ.get("OLLAMA_BASE_URL"))
+        ollama_model = env.get("OLLAMA_MODEL", os.environ.get("OLLAMA_MODEL", "llama3.2:3b"))
         
-        raw_text = response.choices[0].message.content.strip()
-            
-        try:
+        result = None
+        if ollama_url:
+            try:
+                resp = requests.post(
+                    f"{ollama_url.rstrip('/')}/api/generate",
+                    json={
+                        "model": ollama_model,
+                        "prompt": prompt,
+                        "format": "json",
+                        "stream": False,
+                        "options": {"temperature": 0.2}
+                    },
+                    timeout=20
+                )
+                if resp.status_code == 200:
+                    raw_text = resp.json().get("response", "{}")
+                    result = json.loads(raw_text)
+                    print(f"[ProjectVerify] Evaluated interview using local Ollama model '{ollama_model}'!")
+            except Exception as oe:
+                print(f"[ProjectVerify] Local Ollama evaluation bypassed ({oe}), using Groq fallback...")
+                
+        if not result:
+            from services.llm import call_groq_with_retries
+            from groq_models import GROQ_PRIMARY
+            response = call_groq_with_retries(
+                model=GROQ_PRIMARY,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.2,
+                response_format={"type": "json_object"}
+            )
+            raw_text = response.choices[0].message.content.strip()
             result = json.loads(raw_text)
-        except Exception:
-            passed = "true" in raw_text.lower() and "false" not in raw_text.lower()
-            result = {"passed": passed, "feedback": raw_text}
 
         # If passed, upgrade to Level 2!
         if result.get("passed"):
