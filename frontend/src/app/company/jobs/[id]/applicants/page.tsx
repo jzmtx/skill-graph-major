@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useEffect, useState, useRef } from 'react';
-import { getJobApplicants, updateApplicationStatus, getApplicationMessages, sendApplicationMessage, getApplicationAssessment, assignApplicationAssessment, updateAssessmentCompanyResult, deleteApplicationMessage } from '@/lib/companyApi';
+import { getJobApplicants, updateApplicationStatus, getApplicationMessages, sendApplicationMessage, getApplicationAssessment, assignApplicationAssessment, updateAssessmentCompanyResult, deleteApplicationMessage, autoShortlistJob } from '@/lib/companyApi';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, User, FileText, Check, X, Star, Mail, Phone, GraduationCap, ShieldCheck, CheckCircle2, Sparkles, ExternalLink, Award, MessageSquare, Send, ClipboardList, Link as LinkIcon, Image as ImageIcon, Trash2 } from 'lucide-react';
+import { ArrowLeft, User, FileText, Check, X, Star, Mail, Phone, GraduationCap, ShieldCheck, CheckCircle2, Sparkles, ExternalLink, Award, MessageSquare, Send, ClipboardList, Link as LinkIcon, Image as ImageIcon, Trash2, Zap } from 'lucide-react';
 import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
 import CreativeChatConsole from '@/components/chat/CreativeChatConsole';
@@ -29,6 +29,9 @@ export default function JobApplicantsPage() {
   const [error, setError] = useState('');
   const [applicants, setApplicants] = useState<any[]>([]);
   const [selectedApplicant, setSelectedApplicant] = useState<any>(null);
+  const [jobMeta, setJobMeta] = useState<any>(null);
+  const [filterTab, setFilterTab] = useState<'all' | 'shortlisted' | 'hired'>('all');
+  const [isShortlisting, setIsShortlisting] = useState(false);
 
   // Chat state
   const [chatOpen, setChatOpen] = useState(false);
@@ -49,11 +52,14 @@ export default function JobApplicantsPage() {
 
   const fetchApplicants = async (authId: string) => {
     try {
-      const data = await getJobApplicants(authId, jobId);
+      const res = await getJobApplicants(authId, jobId);
+      const data = Array.isArray(res) ? res : (res?.applicants || []);
+      const jobData = res?.job || null;
       if (data && typeof window !== 'undefined') {
         localStorage.setItem(`cached_applicants_${jobId}`, JSON.stringify(data));
       }
       setApplicants(data || []);
+      if (jobData) setJobMeta(jobData);
       
       setSelectedApplicant((prev: any) => {
         if (!prev && data && data.length > 0) return data[0];
@@ -67,6 +73,21 @@ export default function JobApplicantsPage() {
       setError('Failed to load candidate dossiers.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRunAutoShortlist = async () => {
+    const authId = typeof window !== 'undefined' ? localStorage.getItem('company_auth_id') : null;
+    if (!authId) return;
+    setIsShortlisting(true);
+    try {
+      const res = await autoShortlistJob(authId, jobId);
+      alert(res.message || 'AI ATS screening completed successfully!');
+      await fetchApplicants(authId);
+    } catch (e: any) {
+      alert(e.response?.data?.detail || 'Failed to auto-shortlist applicants');
+    } finally {
+      setIsShortlisting(false);
     }
   };
 
@@ -207,29 +228,97 @@ export default function JobApplicantsPage() {
   if (loading) return <div className="min-h-screen bg-stone-50 flex items-center justify-center text-xs text-stone-500">Loading candidate dossiers...</div>;
   if (error) return <div className="min-h-screen bg-stone-50 flex items-center justify-center text-xs text-red-700">{error}</div>;
 
+  const filteredApplicants = applicants.filter(app => {
+    if (filterTab === 'shortlisted') return app.status === 'shortlisted';
+    if (filterTab === 'hired') return app.status === 'hired';
+    return true;
+  });
+
   return (
     <div className="min-h-screen bg-stone-50 flex flex-col h-screen overflow-hidden">
       {/* Top Header */}
-      <div className="bg-white border-b border-stone-200 px-6 py-3.5 flex items-center justify-between shrink-0 shadow-2xs">
-        <Link href="/company/dashboard" className="flex items-center gap-1.5 text-xs font-semibold text-stone-600 hover:text-stone-900">
-          <ArrowLeft className="w-3.5 h-3.5" /> Back to Dashboard
-        </Link>
-        <div className="text-xs font-bold text-stone-700 bg-stone-100 border border-stone-200 px-3 py-1 rounded-md">
-          {applicants.length} Candidates in Pipeline
+      <div className="bg-white border-b border-stone-200 px-6 py-3 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shrink-0 shadow-2xs">
+        <div className="flex flex-wrap items-center gap-3">
+          <Link href="/company/dashboard" className="flex items-center gap-1.5 text-xs font-semibold text-stone-600 hover:text-stone-900">
+            <ArrowLeft className="w-3.5 h-3.5" /> Back to Dashboard
+          </Link>
+          {jobMeta && (
+            <div className="flex flex-wrap items-center gap-2 pl-3 border-l border-stone-200 text-xs">
+              <span className="font-bold text-stone-900">{jobMeta.title}</span>
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-stone-100 text-stone-700">
+                👥 {jobMeta.vacancies || 1} {jobMeta.vacancies === 1 ? 'Vacancy' : 'Vacancies'}
+              </span>
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                ⭐ Shortlist Quota: {jobMeta.max_shortlist_count || ((jobMeta.vacancies || 1) * 2)}
+              </span>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2">
+          {jobMeta?.deadline && (
+            <span className={`px-2.5 py-1 rounded text-xs font-semibold border ${
+              jobMeta.is_deadline_passed 
+                ? 'bg-amber-50 text-amber-900 border-amber-200' 
+                : 'bg-stone-50 text-stone-600 border-stone-200'
+            }`}>
+              {jobMeta.is_deadline_passed ? '⚠️ Reg Closed: ' : '📅 Closes: '} {jobMeta.deadline}
+            </span>
+          )}
+          <button
+            onClick={handleRunAutoShortlist}
+            disabled={isShortlisting}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors disabled:opacity-50"
+          >
+            <Zap className="w-3.5 h-3.5 fill-current" />
+            {isShortlisting ? 'Screening...' : `Run AI ATS Shortlist (Top ${jobMeta?.max_shortlist_count || 2})`}
+          </button>
         </div>
       </div>
+
+      {/* Info Banner when registration closed */}
+      {jobMeta?.is_deadline_passed && (
+        <div className="bg-amber-50/80 border-b border-amber-200 px-6 py-2.5 flex items-center justify-between text-xs text-amber-950 shrink-0">
+          <div className="flex items-center gap-2 font-medium">
+            <CheckCircle2 className="w-4 h-4 text-emerald-800 shrink-0" />
+            <span>
+              <strong>Registration Closed:</strong> AI ATS screening evaluates candidates by verified competency score. The top {jobMeta.max_shortlist_count || 2} applicants (2x of {jobMeta.vacancies || 1} vacancies) are shortlisted for further assessment and interviews.
+            </span>
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-1 overflow-hidden">
         {/* Left Sidebar: Applicant List */}
         <div className="w-1/3 bg-white border-r border-stone-200 flex flex-col h-full overflow-hidden">
-          <div className="p-3.5 border-b border-stone-200 bg-stone-50">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-stone-700">Candidates</h2>
+          <div className="p-3 border-b border-stone-200 bg-stone-50 flex items-center justify-between">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-stone-700">Candidates ({filteredApplicants.length})</h2>
+            <div className="flex items-center gap-1 text-[10px] font-semibold">
+              <button
+                onClick={() => setFilterTab('all')}
+                className={`px-2 py-0.5 rounded transition-colors ${filterTab === 'all' ? 'bg-white text-stone-900 shadow-2xs font-bold border border-stone-200' : 'text-stone-500 hover:text-stone-800'}`}
+              >
+                All
+              </button>
+              <button
+                onClick={() => setFilterTab('shortlisted')}
+                className={`px-2 py-0.5 rounded transition-colors flex items-center gap-0.5 ${filterTab === 'shortlisted' ? 'bg-amber-50 text-amber-900 shadow-2xs font-bold border border-amber-200' : 'text-stone-500 hover:text-stone-800'}`}
+              >
+                <Star className="w-2.5 h-2.5 text-amber-600 fill-current" /> Shortlisted ({applicants.filter(a => a.status === 'shortlisted').length})
+              </button>
+              <button
+                onClick={() => setFilterTab('hired')}
+                className={`px-2 py-0.5 rounded transition-colors ${filterTab === 'hired' ? 'bg-emerald-50 text-emerald-900 shadow-2xs font-bold border border-emerald-200' : 'text-stone-500 hover:text-stone-800'}`}
+              >
+                Hired ({applicants.filter(a => a.status === 'hired').length})
+              </button>
+            </div>
           </div>
           <div className="flex-1 overflow-y-auto p-3 space-y-2">
-            {applicants.length === 0 ? (
-              <p className="text-center text-xs text-stone-400 mt-8">No applications submitted yet.</p>
+            {filteredApplicants.length === 0 ? (
+              <p className="text-center text-xs text-stone-400 mt-8">No applicants found in this view.</p>
             ) : (
-              applicants.map(app => (
+              filteredApplicants.map(app => (
                 <button
                   key={app.id}
                   onClick={() => setSelectedApplicant(app)}
@@ -247,7 +336,7 @@ export default function JobApplicantsPage() {
                       app.status === 'hired' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
                       'bg-stone-100 text-stone-700 border-stone-200'
                     }`}>
-                      {app.status}
+                      {app.status === 'shortlisted' ? '⭐ Shortlisted' : app.status}
                     </span>
                   </div>
                   <p className="text-[11px] text-stone-500 mb-2 truncate">{(app.student || app.students)?.email}</p>

@@ -29,7 +29,7 @@ export const getCompanyJobs = async (auth_id: string) => {
 
 export const getJobApplicants = async (auth_id: string, job_id: string) => {
   const response = await api.get(`/api/company/jobs/${auth_id}/${job_id}/applicants`);
-  return response.data.applicants;
+  return response.data;
 };
 
 export const updateApplicationStatus = async (auth_id: string, app_id: string, status: string) => {
@@ -67,9 +67,15 @@ export const updateAssessmentCompanyResult = async (app_id: string, result: stri
   return response.data;
 };
 
+export const autoShortlistJob = async (auth_id: string, job_id: string) => {
+  const response = await api.post(`/api/company/jobs/${auth_id}/${job_id}/auto-shortlist`);
+  return response.data;
+};
+
 // --- Student Job Board ---
-export const getAllJobs = async () => {
-  const response = await api.get('/api/company/student/jobs/all');
+export const getAllJobs = async (student_id?: string) => {
+  const url = student_id ? `/api/company/student/jobs/all?student_id=${student_id}` : '/api/company/student/jobs/all';
+  const response = await api.get(url);
   return response.data.jobs;
 };
 

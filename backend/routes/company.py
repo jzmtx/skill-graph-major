@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List, Dict
+from datetime import datetime, timezone
 from database import supabase
 from services.hireability import calculate_hireability_index
 from cachetools import TTLCache
@@ -33,6 +34,9 @@ class JobPostingCreate(BaseModel):
     title: str
     description: str
     required_skills: List[RequiredSkill]
+    vacancies: Optional[int] = 1
+    max_shortlist_count: Optional[int] = None
+    deadline: Optional[str] = None
 
 class JobApplicationCreate(BaseModel):
     student_id: str
@@ -167,15 +171,66 @@ def _assert_company(auth_id: str):
 # Company ATS Endpoints
 # ============================================================
 
+def _extract_job_meta(job: dict) -> dict:
+    """Extracts vacancies, max_shortlist_count, deadline from JSONB metadata and returns cleaned job dict."""
+    skills = job.get("required_skills") or []
+    meta = None
+    clean_skills = []
+    for s in skills:
+        if isinstance(s, dict) and s.get("_meta"):
+            meta = s
+        else:
+            clean_skills.append(s)
+            
+    vacancies = int(meta.get("vacancies", 1)) if meta and meta.get("vacancies") is not None else int(job.get("vacancies") or 1)
+    default_shortlist = vacancies * 2
+    max_shortlist = int(meta.get("max_shortlist_count", default_shortlist)) if meta and meta.get("max_shortlist_count") is not None else int(job.get("max_shortlist_count") or default_shortlist)
+    deadline = (meta.get("deadline") or job.get("deadline") or "") if meta else (job.get("deadline") or "")
+    
+    is_deadline_passed = False
+    if deadline:
+        try:
+            d_str = str(deadline).strip()
+            if "T" in d_str:
+                d_time = datetime.fromisoformat(d_str.replace("Z", "+00:00"))
+            else:
+                d_time = datetime.strptime(d_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            now = datetime.now(timezone.utc)
+            if now > d_time:
+                is_deadline_passed = True
+        except Exception:
+            pass
+            
+    job_copy = dict(job)
+    job_copy["required_skills"] = clean_skills
+    job_copy["vacancies"] = vacancies
+    job_copy["max_shortlist_count"] = max_shortlist
+    job_copy["deadline"] = deadline
+    job_copy["is_deadline_passed"] = is_deadline_passed
+    return job_copy
+
 @router.post("/jobs/{auth_id}")
 async def post_job(auth_id: str, payload: JobPostingCreate):
     company = _assert_company(auth_id)
     try:
+        vacancies = payload.vacancies or 1
+        max_shortlist = payload.max_shortlist_count if payload.max_shortlist_count is not None else (vacancies * 2)
+        deadline = payload.deadline or ""
+        
+        # Build skills list with embedded metadata entry
+        skills_payload = [s.dict() for s in payload.required_skills]
+        skills_payload.append({
+            "_meta": True,
+            "vacancies": vacancies,
+            "max_shortlist_count": max_shortlist,
+            "deadline": deadline
+        })
+
         result = supabase.table("job_postings").insert({
             "company_id": company["id"],
             "title": payload.title,
             "description": payload.description,
-            "required_skills": [s.dict() for s in payload.required_skills],
+            "required_skills": skills_payload,
             "status": "open"
         }).execute()
         
@@ -183,7 +238,7 @@ async def post_job(auth_id: str, payload: JobPostingCreate):
         if "all_open_jobs" in jobs_cache:
             del jobs_cache["all_open_jobs"]
             
-        return result.data[0]
+        return _extract_job_meta(result.data[0])
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -192,7 +247,8 @@ async def get_company_jobs(auth_id: str):
     company = _assert_company(auth_id)
     try:
         jobs = supabase.table("job_postings").select("*, job_applications(count)").eq("company_id", company["id"]).order("created_at", desc=True).execute()
-        return {"jobs": jobs.data}
+        enriched = [_extract_job_meta(j) for j in jobs.data]
+        return {"jobs": enriched}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -201,15 +257,26 @@ async def get_job_applicants(auth_id: str, job_id: str):
     company = _assert_company(auth_id)
     try:
         # Verify job belongs to company
-        job = supabase.table("job_postings").select("id").eq("id", job_id).eq("company_id", company["id"]).execute()
-        if not job.data:
+        job_res = supabase.table("job_postings").select("*").eq("id", job_id).eq("company_id", company["id"]).execute()
+        if not job_res.data:
             raise HTTPException(status_code=404, detail="Job not found")
+        job_meta = _extract_job_meta(job_res.data[0])
 
         # Fetch applications for this job
         apps = supabase.table("job_applications").select("*").eq("job_id", job_id).order("match_score", desc=True).execute()
 
         if not apps.data:
-            return {"applicants": []}
+            return {"applicants": [], "job": job_meta}
+
+        # If registration has closed, auto-shortlist the top candidates if not already done
+        max_shortlist = job_meta.get("max_shortlist_count", 2)
+        if job_meta.get("is_deadline_passed") and apps.data:
+            shortlisted_any = any(a.get("status") in ["shortlisted", "hired"] for a in apps.data)
+            if not shortlisted_any:
+                top_apps = apps.data[:max_shortlist]
+                for a in top_apps:
+                    supabase.table("job_applications").update({"status": "shortlisted"}).eq("id", a["id"]).execute()
+                    a["status"] = "shortlisted"
 
         student_ids = [app["student_id"] for app in apps.data]
 
@@ -256,7 +323,43 @@ async def get_job_applicants(auth_id: str, job_id: str):
                 "hireability": hireability
             })
 
-        return {"applicants": enriched}
+        return {"applicants": enriched, "job": job_meta}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/jobs/{auth_id}/{job_id}/auto-shortlist")
+async def auto_shortlist_job(auth_id: str, job_id: str):
+    company = _assert_company(auth_id)
+    try:
+        job_res = supabase.table("job_postings").select("*").eq("id", job_id).eq("company_id", company["id"]).execute()
+        if not job_res.data:
+            raise HTTPException(status_code=404, detail="Job not found")
+        job_meta = _extract_job_meta(job_res.data[0])
+        max_shortlist = job_meta.get("max_shortlist_count", 2)
+
+        apps = supabase.table("job_applications").select("*").eq("job_id", job_id).order("match_score", desc=True).execute()
+        if not apps.data:
+            return {"message": "No applicants to shortlist", "shortlisted_count": 0}
+
+        shortlisted_count = 0
+        for i, a in enumerate(apps.data):
+            if i < max_shortlist:
+                if a.get("status") in ["applied", "shortlisted"]:
+                    supabase.table("job_applications").update({"status": "shortlisted"}).eq("id", a["id"]).execute()
+                    shortlisted_count += 1
+
+        return {
+            "message": f"AI ATS Screening shortlisted top {min(len(apps.data), max_shortlist)} applicants based on score.",
+            "vacancies": job_meta.get("vacancies", 1),
+            "max_shortlist_count": max_shortlist,
+            "shortlisted_count": shortlisted_count
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:
@@ -447,16 +550,44 @@ def _calculate_match_score(student_skills: list, required_skills: list) -> int:
     return min(100, score)
 
 @router.get("/student/jobs/all")
-async def get_all_jobs():
+async def get_all_jobs(student_id: Optional[str] = None):
     try:
-        cache_key = "all_open_jobs"
-        if cache_key in jobs_cache:
-            return {"jobs": jobs_cache[cache_key]}
-            
         jobs = supabase.table("job_postings").select("*, companies(name)").eq("status", "open").order("created_at", desc=True).execute()
         
-        jobs_cache[cache_key] = jobs.data
-        return {"jobs": jobs.data}
+        student_skills = []
+        if student_id:
+            skills_req = supabase.table("student_skills").select("*").eq("student_id", student_id).execute()
+            student_skills = skills_req.data or []
+
+        enriched = []
+        for j in jobs.data:
+            j_meta = _extract_job_meta(j)
+            clean_reqs = j_meta.get("required_skills", [])
+            
+            if student_id:
+                score = _calculate_match_score(student_skills, clean_reqs)
+                j_meta["match_score"] = score
+                # Student is eligible only if match_score >= 50
+                j_meta["is_eligible"] = bool(score >= 50)
+                
+                # Check which requirements are missing
+                missing = []
+                st_map = {s["skill_name"].lower(): s.get("verification_level", 0) for s in student_skills}
+                for req in clean_reqs:
+                    r_name = req.get("skill_name", "")
+                    r_lvl = req.get("level", 1)
+                    cand_lvl = st_map.get(r_name.lower(), 0)
+                    if cand_lvl < r_lvl:
+                        missing.append(f"{r_name} (Requires Level {r_lvl}, You: Level {cand_lvl})")
+                j_meta["missing_requirements"] = missing
+            else:
+                j_meta["match_score"] = 0
+                j_meta["is_eligible"] = True
+                j_meta["missing_requirements"] = []
+
+            enriched.append(j_meta)
+
+        return {"jobs": enriched}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -471,8 +602,8 @@ async def get_student_applications(student_id: str):
             
         # Fetch job postings and companies manually to avoid relation issues
         job_ids = list(set([app["job_id"] for app in apps.data]))
-        jobs_res = supabase.table("job_postings").select("id, title, company_id").in_("id", job_ids).execute()
-        jobs_map = {job["id"]: job for job in jobs_res.data}
+        jobs_res = supabase.table("job_postings").select("id, title, company_id, required_skills").in_("id", job_ids).execute()
+        jobs_map = {job["id"]: _extract_job_meta(job) for job in jobs_res.data}
         
         company_ids = list(set([job["company_id"] for job in jobs_res.data if job.get("company_id")]))
         companies_map = {}
@@ -487,6 +618,9 @@ async def get_student_applications(student_id: str):
                 comp_name = companies_map.get(job.get("company_id"))
                 app["job_postings"] = {
                     "title": job["title"],
+                    "vacancies": job.get("vacancies", 1),
+                    "deadline": job.get("deadline", ""),
+                    "is_deadline_passed": job.get("is_deadline_passed", False),
                     "companies": {"name": comp_name} if comp_name else None
                 }
             else:
@@ -503,18 +637,22 @@ async def get_eligible_jobs(student_id: str):
     try:
         # 1. Fetch student skills
         skills_req = supabase.table("student_skills").select("*").eq("student_id", student_id).execute()
-        student_skills = skills_req.data
+        student_skills = skills_req.data or []
 
         # 2. Fetch all open jobs
         jobs_req = supabase.table("job_postings").select("*, companies(name)").eq("status", "open").execute()
         
-        # 3. Calculate match score for each job
+        # 3. Calculate match score and filter by eligibility
         eligible_jobs = []
         for job in jobs_req.data:
-            score = _calculate_match_score(student_skills, job.get("required_skills", []))
-            job["match_score"] = score
+            j_meta = _extract_job_meta(job)
+            clean_reqs = j_meta.get("required_skills", [])
+            score = _calculate_match_score(student_skills, clean_reqs)
+            j_meta["match_score"] = score
+            j_meta["is_eligible"] = bool(score >= 50)
+            
             if score >= 50: # Threshold for eligibility
-                eligible_jobs.append(job)
+                eligible_jobs.append(j_meta)
                 
         # Sort by match score desc
         eligible_jobs.sort(key=lambda x: x["match_score"], reverse=True)
@@ -525,13 +663,30 @@ async def get_eligible_jobs(student_id: str):
 @router.post("/student/jobs/{job_id}/apply")
 async def apply_to_job(job_id: str, payload: JobApplicationCreate):
     try:
-        # Calculate match score again for the application record
-        job = supabase.table("job_postings").select("required_skills").eq("id", job_id).execute()
-        if not job.data:
+        job_res = supabase.table("job_postings").select("*").eq("id", job_id).execute()
+        if not job_res.data:
             raise HTTPException(status_code=404, detail="Job not found")
             
+        j_meta = _extract_job_meta(job_res.data[0])
+        clean_reqs = j_meta.get("required_skills", [])
+
+        # 1. Check if registration date has closed
+        if j_meta.get("is_deadline_passed"):
+            deadline_val = j_meta.get("deadline") or "the closing date"
+            raise HTTPException(
+                status_code=400,
+                detail=f"Registration closed for this position on {deadline_val}. Applications are no longer accepted."
+            )
+
+        # 2. Check student eligibility
         skills_req = supabase.table("student_skills").select("*").eq("student_id", payload.student_id).execute()
-        score = _calculate_match_score(skills_req.data, job.data[0].get("required_skills", []))
+        score = _calculate_match_score(skills_req.data or [], clean_reqs)
+
+        if score < 50:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Ineligible to apply: Your verified competency match score is {score}% (minimum 50% required). Please complete Level 1/Level 2 skill assessments to qualify."
+            )
 
         result = supabase.table("job_applications").insert({
             "job_id": job_id,
@@ -548,6 +703,8 @@ async def apply_to_job(job_id: str, payload: JobApplicationCreate):
             del jobs_cache[cache_key]
 
         return {"message": "Application submitted successfully!", "application": result.data[0]}
+    except HTTPException:
+        raise
     except Exception as e:
         if "duplicate key value" in str(e):
             raise HTTPException(status_code=400, detail="You have already applied for this job.")

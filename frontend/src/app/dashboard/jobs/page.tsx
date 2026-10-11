@@ -55,7 +55,7 @@ export default function StudentJobsPage() {
       setSyncing(true);
       try {
         const [all, eligible, opps, applied] = await Promise.all([
-          getAllJobs(),
+          getAllJobs(studentId),
           getEligibleJobs(studentId),
           getOpportunitiesForStudent(studentId).catch(() => []),
           getAppliedJobs(studentId).catch(() => [])
@@ -124,27 +124,94 @@ export default function StudentJobsPage() {
 
   const renderJobCard = (job: any, isEligibleTab: boolean) => {
     const isApplied = appliedJobs.has(job.id);
+    const isDeadlinePassed = Boolean(job.is_deadline_passed);
+    const isEligible = job.is_eligible !== undefined ? Boolean(job.is_eligible) : (job.match_score >= 50);
     
     return (
       <div key={job.id} className="bg-white rounded-xl border border-stone-200 p-6 shadow-sm hover:border-emerald-700 transition-all relative overflow-hidden">
-        {isEligibleTab && (
-          <div className="absolute top-0 right-0 px-3 py-1 bg-emerald-50 text-emerald-800 border-b border-l border-emerald-200 font-bold text-[11px] rounded-bl-lg flex items-center gap-1">
-            <Zap className="w-3 h-3 fill-current" /> {job.match_score}% MATCH
-          </div>
-        )}
+        {/* Top Right Badges */}
+        <div className="absolute top-0 right-0 flex items-center">
+          {isDeadlinePassed ? (
+            <div className="px-3 py-1 bg-amber-50 text-amber-900 border-b border-l border-amber-200 font-bold text-[11px] rounded-bl-lg">
+              Registration Closed
+            </div>
+          ) : isEligible ? (
+            <div className="px-3 py-1 bg-emerald-50 text-emerald-800 border-b border-l border-emerald-200 font-bold text-[11px] rounded-bl-lg flex items-center gap-1">
+              <Zap className="w-3 h-3 fill-current" /> {job.match_score || 0}% MATCH • ELIGIBLE
+            </div>
+          ) : (
+            <div className="px-3 py-1 bg-stone-100 text-stone-600 border-b border-l border-stone-200 font-bold text-[11px] rounded-bl-lg">
+              {job.match_score || 0}% Match • Ineligible
+            </div>
+          )}
+        </div>
         
-        <div className="flex justify-between items-start mb-3">
+        <div className="flex justify-between items-start mb-2 pr-32">
           <div>
             <h3 className="text-lg font-bold text-stone-900">{job.title}</h3>
-            <div className="flex items-center gap-2 text-stone-500 mt-0.5 text-xs font-medium">
-              <Building2 className="w-3.5 h-3.5" /> {job.companies?.name || 'Enterprise Employer'}
+            <div className="flex flex-wrap items-center gap-2 text-stone-500 mt-0.5 text-xs font-medium">
+              <span className="flex items-center gap-1 text-stone-700"><Building2 className="w-3.5 h-3.5" /> {job.companies?.name || 'Enterprise Employer'}</span>
+              <span>•</span>
+              <span className="font-semibold text-stone-800">👥 {job.vacancies || 1} {job.vacancies === 1 ? 'Opening' : 'Openings'}</span>
+              {job.deadline && (
+                <>
+                  <span>•</span>
+                  <span>📅 Closes: {job.deadline}</span>
+                </>
+              )}
             </div>
           </div>
-          <div className="mt-0.5">
+        </div>
+
+        <p className="text-xs text-stone-600 mb-3 line-clamp-2 leading-relaxed">{job.description}</p>
+
+        {/* Ineligibility Warning if student does not meet benchmark */}
+        {!isEligible && (
+          <div className="mb-4 p-2.5 bg-amber-50/70 border border-amber-200 rounded-lg text-[11px] text-amber-950">
+            <span className="font-bold text-amber-900">Ineligible to Apply: </span>
+            <span>
+              Your verified competency match score is {job.match_score || 0}% (minimum 50% required).
+              {job.missing_requirements && job.missing_requirements.length > 0 && (
+                <span className="block mt-0.5 text-stone-600">
+                  Required: {job.missing_requirements.join(', ')}
+                </span>
+              )}
+            </span>
+          </div>
+        )}
+
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-stone-100">
+          <div>
+            <h4 className="text-[10px] font-bold text-stone-500 uppercase tracking-wider mb-1.5">Required Competencies</h4>
+            <div className="flex flex-wrap gap-1.5">
+              {job.required_skills?.map((s: any, idx: number) => (
+                <span key={idx} className="px-2.5 py-0.5 bg-stone-100 text-stone-700 text-xs font-medium rounded border border-stone-200">
+                  {s.skill_name} {s.level ? `(L${s.level})` : ''}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div className="shrink-0 self-end sm:self-auto">
             {isApplied ? (
               <span className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-800 text-xs font-semibold rounded-lg border border-emerald-200">
                 <CheckCircle2 className="w-3.5 h-3.5" /> Applied
               </span>
+            ) : isDeadlinePassed ? (
+              <button
+                disabled
+                className="flex items-center gap-1.5 px-4 py-2 bg-stone-200 text-stone-500 text-xs font-semibold rounded-lg cursor-not-allowed opacity-75"
+              >
+                Registration Closed
+              </button>
+            ) : !isEligible ? (
+              <button
+                disabled
+                title="Only students with matching verified competencies can apply"
+                className="flex items-center gap-1.5 px-4 py-2 bg-stone-200 text-stone-500 text-xs font-semibold rounded-lg cursor-not-allowed opacity-75"
+              >
+                Ineligible to Apply
+              </button>
             ) : (
               <button
                 onClick={() => handleApplyClick(job)}
@@ -153,19 +220,6 @@ export default function StudentJobsPage() {
                 <Briefcase className="w-3.5 h-3.5" /> Apply Now
               </button>
             )}
-          </div>
-        </div>
-
-        <p className="text-xs text-stone-600 mb-5 line-clamp-2 leading-relaxed">{job.description}</p>
-
-        <div>
-          <h4 className="text-[10px] font-bold text-stone-500 uppercase tracking-wider mb-2">Required Competencies</h4>
-          <div className="flex flex-wrap gap-1.5">
-            {job.required_skills?.map((s: any, idx: number) => (
-              <span key={idx} className="px-2.5 py-0.5 bg-stone-100 text-stone-700 text-xs font-medium rounded border border-stone-200">
-                {s.skill_name}
-              </span>
-            ))}
           </div>
         </div>
       </div>

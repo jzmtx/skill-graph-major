@@ -21,6 +21,9 @@ export default function CompanyDashboardPage() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [skillsInput, setSkillsInput] = useState('');
+  const [vacancies, setVacancies] = useState<number>(1);
+  const [maxShortlistCount, setMaxShortlistCount] = useState<number>(2);
+  const [deadline, setDeadline] = useState<string>('');
 
   useEffect(() => {
     const load = async () => {
@@ -48,6 +51,13 @@ export default function CompanyDashboardPage() {
     load();
   }, [router]);
 
+  const handleVacanciesChange = (newVal: number) => {
+    const v = Math.max(1, newVal || 1);
+    setVacancies(v);
+    // Auto-update default double of vacancy applicants
+    setMaxShortlistCount(v * 2);
+  };
+
   const handleCreateJob = async (e: React.FormEvent) => {
     e.preventDefault();
     const authId = typeof window !== 'undefined' ? localStorage.getItem('company_auth_id') : null;
@@ -64,7 +74,10 @@ export default function CompanyDashboardPage() {
       await postJob(authId, {
         title,
         description: description,
-        required_skills: skillsArray
+        required_skills: skillsArray,
+        vacancies: Number(vacancies) || 1,
+        max_shortlist_count: Number(maxShortlistCount) || (Number(vacancies) * 2),
+        deadline: deadline || null
       });
 
       const jobList = await getCompanyJobs(authId);
@@ -74,7 +87,7 @@ export default function CompanyDashboardPage() {
       setDashboard(dashData);
       
       setShowForm(false);
-      setTitle(''); setDescription(''); setSkillsInput('');
+      setTitle(''); setDescription(''); setSkillsInput(''); setVacancies(1); setMaxShortlistCount(2); setDeadline('');
     } catch (err: any) {
       setFormError(err.response?.data?.detail || 'Failed to post vacancy');
     } finally {
@@ -169,6 +182,42 @@ export default function CompanyDashboardPage() {
                   placeholder="e.g. Associate Backend Engineer"
                 />
               </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-stone-700 uppercase tracking-wider mb-1">Vacancies (Openings)</label>
+                  <input
+                    type="number" min="1" required
+                    className="w-full p-2.5 text-xs bg-stone-50 border border-stone-300 rounded-lg focus:border-emerald-800 focus:bg-white outline-none"
+                    value={vacancies}
+                    onChange={e => handleVacanciesChange(parseInt(e.target.value) || 1)}
+                  />
+                  <p className="text-[10px] text-stone-400 mt-1">Number of positions to hire.</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-stone-700 uppercase tracking-wider mb-1">Shortlist Quota (For Screening)</label>
+                  <input
+                    type="number" min="1" required
+                    className="w-full p-2.5 text-xs bg-stone-50 border border-stone-300 rounded-lg focus:border-emerald-800 focus:bg-white outline-none"
+                    value={maxShortlistCount}
+                    onChange={e => setMaxShortlistCount(parseInt(e.target.value) || 1)}
+                  />
+                  <p className="text-[10px] text-stone-500 mt-1 font-medium text-emerald-800">
+                    Default 2x ({vacancies * 2} applicants). AI ranks top candidates.
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-stone-700 uppercase tracking-wider mb-1">Registration Closing Date</label>
+                  <input
+                    type="date"
+                    className="w-full p-2.5 text-xs bg-stone-50 border border-stone-300 rounded-lg focus:border-emerald-800 focus:bg-white outline-none"
+                    value={deadline}
+                    onChange={e => setDeadline(e.target.value)}
+                  />
+                  <p className="text-[10px] text-stone-400 mt-1">After closing, AI shortlisting finalizes.</p>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold text-stone-700 uppercase tracking-wider mb-1">Job Description</label>
                 <textarea
@@ -186,7 +235,7 @@ export default function CompanyDashboardPage() {
                   className="w-full p-2.5 text-xs bg-stone-50 border border-stone-300 rounded-lg focus:border-emerald-800 focus:bg-white outline-none"
                   value={skillsInput} onChange={e => setSkillsInput(e.target.value)}
                 />
-                <p className="text-[10px] text-stone-400 mt-1">Skills matching algorithm will evaluate candidates against these tags.</p>
+                <p className="text-[10px] text-stone-400 mt-1">Students must have verified competencies matching these tags to apply.</p>
               </div>
               <div className="flex justify-end pt-1">
                 <button
@@ -215,13 +264,32 @@ export default function CompanyDashboardPage() {
                 <div>
                   <div className="flex justify-between items-start gap-2 mb-2">
                     <h3 className="text-base font-bold text-stone-900">{job.title}</h3>
-                    <span className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded border ${
-                      job.status === 'open' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-stone-100 text-stone-600 border-stone-200'
-                    }`}>
-                      {job.status}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      {job.is_deadline_passed && (
+                        <span className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded border bg-amber-50 text-amber-900 border-amber-200">
+                          Registration Closed
+                        </span>
+                      )}
+                      <span className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded border ${
+                        job.status === 'open' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-stone-100 text-stone-600 border-stone-200'
+                      }`}>
+                        {job.status}
+                      </span>
+                    </div>
                   </div>
                   <p className="text-xs text-stone-600 mb-3 line-clamp-2 leading-relaxed">{job.description}</p>
+
+                  <div className="flex flex-wrap items-center gap-2 mb-3 text-[11px] text-stone-600 bg-stone-50 p-2.5 rounded-lg border border-stone-200">
+                    <span className="font-semibold text-stone-900">👥 {job.vacancies || 1} {job.vacancies === 1 ? 'Vacancy' : 'Vacancies'}</span>
+                    <span>•</span>
+                    <span className="font-medium text-emerald-800">⭐ Shortlist Quota: {job.max_shortlist_count || ((job.vacancies || 1) * 2)}</span>
+                    {job.deadline && (
+                      <>
+                        <span>•</span>
+                        <span>📅 Deadline: {job.deadline}</span>
+                      </>
+                    )}
+                  </div>
                   
                   <div className="flex flex-wrap gap-1 mb-4">
                     {job.required_skills?.map((skill: any, i: number) => (
