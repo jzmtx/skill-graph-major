@@ -303,38 +303,30 @@ def generate_roadmap_resources_progressive(skills: list[dict], role_name: str, b
         print(f"[ResourceWorker] All {len(skills)} nodes for '{role_name}' already have resources cached in Supabase.")
         return
 
-    print(f"[ResourceWorker] '{role_name}': {len(uncached)}/{len(skills)} nodes missing resources. Starting progressive generation in batches of {batch_size}...")
+    # Protect LLM rate limits & server load: Only pre-warm the first 3 introductory nodes.
+    # The remaining nodes generate lazily on-demand when a student opens that node's workspace.
+    nodes_to_prewarm = uncached[:3]
+    print(f"[ResourceWorker] '{role_name}': Pre-warming {len(nodes_to_prewarm)} introductory nodes. Remaining {max(0, len(uncached) - len(nodes_to_prewarm))} nodes will generate on-demand.")
 
-    # 3. Process in batches of 3
-    batches = [uncached[i:i + batch_size] for i in range(0, len(uncached), batch_size)]
-    for batch_num, batch in enumerate(batches, 1):
-        batch_names = [b.get("name") for b in batch]
-        print(f"[ResourceWorker] Starting Batch {batch_num}/{len(batches)} (3 nodes: {batch_names}) for '{role_name}'")
-        
-        for item in batch:
-            skill_identifier = item.get("skill_id") or item.get("name")
-            display_name = item.get("name")
-            if not skill_identifier:
-                continue
-                
-            currently_generating_skills.add(str(skill_identifier))
+    for item in nodes_to_prewarm:
+        skill_identifier = item.get("skill_id") or item.get("name")
+        display_name = item.get("name")
+        if not skill_identifier:
+            continue
+            
+        currently_generating_skills.add(str(skill_identifier))
+        if display_name:
+            currently_generating_skills.add(display_name.lower())
+            
+        try:
+            generate_resource_pack(str(skill_identifier), role_name)
+        except Exception as err:
+            print(f"[ResourceWorker] Error generating resources for {display_name}: {err}")
+        finally:
+            currently_generating_skills.discard(str(skill_identifier))
             if display_name:
-                currently_generating_skills.add(display_name.lower())
-                
-            try:
-                generate_resource_pack(str(skill_identifier), role_name)
-            except Exception as err:
-                print(f"[ResourceWorker] Error generating resources for {display_name}: {err}")
-            finally:
-                currently_generating_skills.discard(str(skill_identifier))
-                if display_name:
-                    currently_generating_skills.discard(display_name.lower())
-                    
-        print(f"[ResourceWorker] Completed Batch {batch_num}/{len(batches)} for '{role_name}'. Stored globally in skill_resources.")
-        
-        # Pacing between batches to avoid Groq rate limits (3s pause)
-        if batch_num < len(batches):
-            time.sleep(3)
+                currently_generating_skills.discard(display_name.lower())
+        time.sleep(1) # Gentle 1s pacing between nodes
 
 def process_roadmap_generation_bg(req: GenerateRequest, is_update: bool, existing_id: str, matching_roadmap: dict, background_tasks: BackgroundTasks):
     req_id = req.request_id

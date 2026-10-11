@@ -23,6 +23,135 @@ OFFICIAL_DOCS_MAP = {
     "typescript": "typescriptlang.org/docs"
 }
 
+CURATED_TECH_RESOURCES = {
+    "python": {
+        "official_docs": "https://docs.python.org/3/",
+        "concepts": ["Data Structures & Collections", "Object-Oriented Programming (OOP)", "Modules, Packages & Virtual Environments", "Error Handling & Asynchronous I/O"],
+        "practice_project": "Build a command-line expense tracker and CLI tool with local data persistence.",
+        "repo": "https://github.com/TheAlgorithms/Python",
+        "platform": "https://leetcode.com/problemset/all/"
+    },
+    "javascript": {
+        "official_docs": "https://developer.mozilla.org/en-US/docs/Web/JavaScript",
+        "concepts": ["Asynchronous JavaScript (Promises & Async/Await)", "DOM Manipulation & Event Loop", "Closures & Prototypes", "Modern ES6+ Syntax & Modules"],
+        "practice_project": "Develop an interactive task management dashboard with local storage persistence.",
+        "repo": "https://github.com/trekhleb/javascript-algorithms",
+        "platform": "https://javascript30.com/"
+    },
+    "typescript": {
+        "official_docs": "https://www.typescriptlang.org/docs/",
+        "concepts": ["Basic & Advanced Types (Unions, Intersections)", "Generics & Utility Types", "Interfaces vs Type Aliases", "TypeScript with Build Tools & Node.js"],
+        "practice_project": "Build a type-safe API client library with end-to-end generic typing.",
+        "repo": "https://github.com/microsoft/TypeScript",
+        "platform": "https://typehero.dev/"
+    },
+    "react": {
+        "official_docs": "https://react.dev/",
+        "concepts": ["Component Lifecycle & JSX", "State & Props Management (Hooks)", "Context API & State Providers", "Client-Side Routing & Performance Optimization"],
+        "practice_project": "Build a real-time collaborative note-taking application with component state.",
+        "repo": "https://github.com/facebook/react",
+        "platform": "https://www.frontendmentor.io/"
+    },
+    "docker": {
+        "official_docs": "https://docs.docker.com/",
+        "concepts": ["Containerization Fundamentals", "Dockerfile Instructions & Multi-Stage Builds", "Docker Compose Multi-Service Architecture", "Volume Persistence & Network Isolation"],
+        "practice_project": "Containerize a full-stack web application with Redis caching and PostgreSQL database using Docker Compose.",
+        "repo": "https://github.com/docker/awesome-compose",
+        "platform": "https://labs.play-with-docker.com/"
+    },
+    "sql": {
+        "official_docs": "https://www.postgresql.org/docs/",
+        "concepts": ["Relational Schema Design & Normalization", "Advanced Joins & Aggregations", "Subqueries & Window Functions", "Indexing & Query Optimization"],
+        "practice_project": "Design an e-commerce analytical database and write performance-optimized reporting queries.",
+        "repo": "https://github.com/dalibo/pgbadger",
+        "platform": "https://sqlzoo.net/"
+    },
+    "postgresql": {
+        "official_docs": "https://www.postgresql.org/docs/",
+        "concepts": ["ACID Transactions & MVCC", "Complex Joins & CTEs", "Indexing (B-Tree, GIN, GiST)", "Stored Procedures & Triggers"],
+        "practice_project": "Implement a transactional ledger system with constraints and atomic bank transfers.",
+        "repo": "https://github.com/postgres/postgres",
+        "platform": "https://pgexercises.com/"
+    },
+    "mysql": {
+        "official_docs": "https://dev.mysql.com/doc/",
+        "concepts": ["Relational Tables & Constraints", "Query Optimization & EXPLAIN", "Transactions & Isolation Levels", "Replication & Backup Strategies"],
+        "practice_project": "Build a relational database schema for a content management system.",
+        "repo": "https://github.com/mysql/mysql-server",
+        "platform": "https://sqlzoo.net/"
+    },
+    "git": {
+        "official_docs": "https://git-scm.com/doc",
+        "concepts": ["Version Control Fundamentals (Commits, Tree, Head)", "Branching, Merging & Fast-Forwarding", "Rebase, Cherry-Pick & Conflict Resolution", "Remote Workflows (Fetch, Pull, Pull Requests)"],
+        "practice_project": "Simulate an open-source team collaboration workflow with feature branches and pull request merges.",
+        "repo": "https://github.com/git/git",
+        "platform": "https://learngitbranching.js.org/"
+    },
+    "linux": {
+        "official_docs": "https://ubuntu.com/tutorials/command-line-for-beginners",
+        "concepts": ["File System Hierarchy & Permissions", "Process Management & Systemd Services", "Shell Scripting & Pipelines", "Networking Tools & SSH Administration"],
+        "practice_project": "Write an automated system monitoring shell script that alerts on high memory usage.",
+        "repo": "https://github.com/dylanaraps/pure-bash-bible",
+        "platform": "https://overthewire.org/wargames/bandit/"
+    },
+    "fastapi": {
+        "official_docs": "https://fastapi.tiangolo.com/",
+        "concepts": ["Path & Query Parameters", "Pydantic Request/Response Validation", "Dependency Injection System", "OAuth2 & JWT Security Integration"],
+        "practice_project": "Build a secure RESTful authentication and user profile microservice with OpenAPI documentation.",
+        "repo": "https://github.com/tiangolo/fastapi",
+        "platform": "https://fastapi.tiangolo.com/tutorial/"
+    },
+    "node.js": {
+        "official_docs": "https://nodejs.org/en/docs/",
+        "concepts": ["Event Loop & Asynchronous Non-blocking I/O", "File System (fs) & Buffer Streams", "Modular Architecture & NPM Packaging", "Building HTTP Web Servers"],
+        "practice_project": "Build an asynchronous file streaming and transformation microservice.",
+        "repo": "https://github.com/nodejs/node",
+        "platform": "https://nodeschool.io/"
+    },
+    "nodejs": {
+        "official_docs": "https://nodejs.org/en/docs/",
+        "concepts": ["Event Loop & Asynchronous Non-blocking I/O", "File System (fs) & Buffer Streams", "Modular Architecture & NPM Packaging", "Building HTTP Web Servers"],
+        "practice_project": "Build an asynchronous file streaming and transformation microservice.",
+        "repo": "https://github.com/nodejs/node",
+        "platform": "https://nodeschool.io/"
+    },
+    "java": {
+        "official_docs": "https://docs.oracle.com/en/java/",
+        "concepts": ["Object-Oriented Design & Polymorphism", "Java Collections Framework", "Generics & Stream API", "Multithreading & Concurrency Utilities"],
+        "practice_project": "Build a multi-threaded banking simulation handling simultaneous balance transactions.",
+        "repo": "https://github.com/iluwatar/java-design-patterns",
+        "platform": "https://leetcode.com/"
+    },
+    "c++": {
+        "official_docs": "https://en.cppreference.com/w/",
+        "concepts": ["Pointers, References & Manual Memory Management", "RAII & Smart Pointers (unique_ptr, shared_ptr)", "Standard Template Library (STL Containers & Algorithms)", "Object-Oriented & Template Metaprogramming"],
+        "practice_project": "Implement a high-performance custom memory allocator and benchmarking suite.",
+        "repo": "https://github.com/TheAlgorithms/C-Plus-Plus",
+        "platform": "https://www.hackerrank.com/domains/cpp"
+    },
+    "kubernetes": {
+        "official_docs": "https://kubernetes.io/docs/",
+        "concepts": ["Pods, Deployments & ReplicaSets", "Services, Ingress & DNS", "ConfigMaps & Secrets Management", "Storage Classes & PersistentVolumes"],
+        "practice_project": "Deploy a multi-tier microservices application on a local Minikube cluster with auto-scaling.",
+        "repo": "https://github.com/kubernetes/kubernetes",
+        "platform": "https://killercoda.com/playgrounds/scenario/kubernetes"
+    },
+    "html": {
+        "official_docs": "https://developer.mozilla.org/en-US/docs/Web/HTML",
+        "concepts": ["Semantic HTML5 Elements", "Forms, Inputs & Validation Attributes", "Accessibility (a11y) & ARIA Roles", "Document Object Model (DOM) Structure"],
+        "practice_project": "Construct an accessible, semantic portfolio website complying with WCAG 2.1 standards.",
+        "repo": "https://github.com/mdn/learning-area",
+        "platform": "https://www.frontendmentor.io/"
+    },
+    "css": {
+        "official_docs": "https://developer.mozilla.org/en-US/docs/Web/CSS",
+        "concepts": ["Box Model & Specificity", "Flexbox One-Dimensional Layouts", "CSS Grid Two-Dimensional Grids", "Responsive Design with Media Queries & CSS Variables"],
+        "practice_project": "Code a fully responsive, modern e-commerce product card grid with animations.",
+        "repo": "https://github.com/animate-css/animate.css",
+        "platform": "https://cssbattle.dev/"
+    }
+}
+
 def search_youtube(query: str) -> list:
     env = dotenv_values(".env")
     api_key = env.get("YOUTUBE_API_KEY")
@@ -155,7 +284,7 @@ def generate_resource_pack(skill_id: str, role_name: str = "Software Engineering
         skill_slug = skill_res.data[0].get("slug", skill_name.lower().replace(" ", "-"))
         canonical_id = skill_res.data[0]["id"]
     
-    # Check cache via Canonical ID in skill_resources
+    # 1. Check persistent global cache via Canonical ID in Supabase
     if canonical_id:
         try:
             existing = supabase.table("skill_resources").select("*").eq("skill_id", canonical_id).execute()
@@ -165,126 +294,130 @@ def generate_resource_pack(skill_id: str, role_name: str = "Software Engineering
                 return payload
         except Exception as e:
             print(f"[ResourceEngine] Cache lookup error for {skill_name}: {e}")
-        
-    print(f"[ResourceEngine] Pipeline: Generating resources for {skill_name} (Canonical ID: {canonical_id})...")
-    
-    env = dotenv_values(".env")
-    keys_str = env.get("GROQ_API_KEYS", env.get("GROQ_API_KEY", os.environ.get("GROQ_API_KEYS", os.environ.get("GROQ_API_KEY", ""))))
-    key_list = [k.strip() for k in keys_str.split(",") if k.strip()]
-    if not key_list:
-        key_list = ["gsk_placeholder"]
-    
-    # Step 1: Generate the concepts
-    topics_prompt = f"""You are an expert curriculum designer. Break down the technology '{skill_name}' into exactly 4 critical micro-concepts to learn it. 
-    Return ONLY a JSON array of strings. Example: ["Hooks", "Context API", "State Management", "Routing"]"""
-    
-    from services.llm import call_groq_with_retries
-    concepts = []
-    try:
-        res = call_groq_with_retries(
-            messages=[{"role": "user", "content": topics_prompt}],
-            model=GROQ_FAST,
-            temperature=0.2
-        )
-        content = res.choices[0].message.content.strip()
-        if content.startswith("```json"): content = content[7:-3]
-        elif content.startswith("```"): content = content[3:-3]
-        concepts = json.loads(content.strip())
-    except Exception as e:
-        print(f"Failed to generate concepts for {skill_name}: {e}")
-        concepts = [f"Fundamentals of {skill_name}", f"Core Workflows in {skill_name}", f"Practical Architecture with {skill_name}", f"Production Best Practices in {skill_name}"]
-
-    # Step 2: Fetch raw search results for Candidate Pool
-    queries = [{"type": "main", "query": skill_name}]
-    for c in concepts:
-        queries.append({"type": "sub", "query": f"{skill_name} {c}"})
-        
-    search_results = {}
-    
-    def fetch_for_query(q):
-        v = search_youtube(f"{q['query']} tutorial")
-        d = search_docs(q['query'], skill_slug) if q['type'] == 'main' else search_youtube(q['query'])
-        g = search_github(q['query']) if q['type'] == 'main' else []
-        search_results[q['query']] = {"video_candidates": v, "docs_candidates": d, "github_candidates": g}
-        
-    with ThreadPoolExecutor(max_workers=5) as executor:
-        executor.map(fetch_for_query, queries)
-        
-    # Compact candidates to avoid exceeding model token limits
-    compact_candidates = {}
-    for q_name, res in search_results.items():
-        compact_candidates[q_name] = {
-            "top_videos": [{"title": v.get("title"), "url": v.get("url")} for v in res.get("video_candidates", [])[:2]],
-            "docs": [{"title": d.get("title"), "url": d.get("url")} for d in res.get("docs_candidates", [])[:1]],
-            "github": [{"name": g.get("name"), "url": g.get("url")} for g in res.get("github_candidates", [])[:1]],
-        }
-        
-    # Step 3: LLM curates from Top Candidates
-    curation_prompt = f"""
-    You are an expert Senior Developer curating the best learning resources for '{skill_name}'.
-    
-    We have {len(concepts)} micro-concepts: {', '.join(concepts)}.
-    Here are the Top Scored Candidate Resources from YouTube, GitHub, and Official sources:
-    
-    {json.dumps(compact_candidates, indent=1)}
-    
-    Your task:
-    1. For the MAIN skill '{skill_name}': Select the absolute best official docs URL and best video URL from the candidate pool. Generate a 1-sentence "Mini Practice Project".
-    2. Additionally, select the best GitHub repository from the candidate pool (if any) or suggest a relevant Practice Platform (like LeetCode/Frontend Mentor).
-    3. For EACH micro-concept: Select the best video URL from its candidates. Generate a 1-sentence "Mini Project" for it.
-    
-    Return EXACTLY in this JSON format:
-    {{
-        "official_docs_url": "...",
-        "best_video_url": "...",
-        "best_video_title": "...",
-        "practice_project": "...",
-        "open_source_repo_url": "...",
-        "practice_platform_url": "...",
-        "sub_topics": [
-            {{
-                "name": "Micro-Concept Name",
-                "best_video_url": "...",
-                "practice_project": "..."
-            }}
-        ]
-    }}
-    """
-    
-    final_data = {}
-    try:
-        completion = call_groq_with_retries(
-            messages=[{"role": "user", "content": curation_prompt}],
-            model=GROQ_PRIMARY,
-            temperature=0.2,
-            response_format={"type": "json_object"}
-        )
-        raw = completion.choices[0].message.content.strip()
-        final_data = json.loads(raw)
-    except Exception as e:
-        print(f"Failed to curate resource pack for {skill_name}:", e)
             
-    # Reliable Fallbacks if LLM or API candidates were empty
-    fallback_docs = f"https://{OFFICIAL_DOCS_MAP.get(skill_slug)}" if skill_slug in OFFICIAL_DOCS_MAP else f"https://devdocs.io/{skill_slug}"
-    fallback_video = f"https://www.youtube.com/results?search_query={skill_name.replace(' ', '+')}+tutorial+full+course"
-    fallback_title = f"{skill_name} Comprehensive Course & Practical Guide"
-    fallback_proj = f"Build an end-to-end practical real-world application using {skill_name}."
-
-    official_docs = final_data.get("official_docs_url") or fallback_docs
-    best_video = final_data.get("best_video_url") or fallback_video
-    best_video_title = final_data.get("best_video_title") or fallback_title
-    practice_project = final_data.get("practice_project") or fallback_proj
-    
-    sub_topics = final_data.get("sub_topics") or []
-    if not sub_topics:
+    # 2. Check Curated Instant Catalogue for Core Tech (0 LLM calls, 0 token usage, <20ms)
+    slug_key = (skill_slug or skill_name or "").lower().strip()
+    clean_key = (skill_name or "").lower().strip()
+    curated = CURATED_TECH_RESOURCES.get(slug_key) or CURATED_TECH_RESOURCES.get(clean_key)
+    if curated:
+        print(f"[ResourceEngine] Instant Curated Hit for '{skill_name}' (0 LLM tokens used, instant response)")
         sub_topics = [
             {
                 "name": c,
-                "best_video_url": f"https://www.youtube.com/results?search_query={skill_name.replace(' ', '+')}+{c.replace(' ', '+')}",
-                "practice_project": f"Build a focused implementation exercising {c} in {skill_name}."
+                "best_video_url": f"https://www.youtube.com/results?search_query={skill_name.replace(' ', '+')}+{c.replace(' ', '+')}+tutorial",
+                "practice_project": f"Build a focused practical task implementing {c} in {skill_name}."
             }
-            for c in concepts
+            for c in curated["concepts"]
         ]
+        db_payload = {
+            "skill_id": str(canonical_id),
+            "official_docs_url": curated.get("official_docs") or f"https://devdocs.io/{skill_slug}",
+            "best_video_url": f"https://www.youtube.com/results?search_query={skill_name.replace(' ', '+')}+crash+course+full+tutorial",
+            "best_video_title": f"{skill_name} Full Course & Practical Bootcamp",
+            "practice_project": curated.get("practice_project") or f"Build an end-to-end practical application using {skill_name}.",
+            "sub_topics": sub_topics,
+            "confidence_score": 0.99,
+            "status": "APPROVED",
+            "version": "1.0",
+            "last_verified": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        try:
+            supabase.table("skill_resources").upsert(db_payload, on_conflict="skill_id").execute()
+            print(f"[ResourceEngine] Curated pack cached in Supabase for '{skill_name}'")
+        except Exception as e:
+            print(f"[ResourceEngine] Warning: Could not cache curated {skill_name}: {e}")
+            
+        return {
+            **db_payload,
+            "skill_name": skill_name,
+            "open_source_repo_url": curated.get("repo"),
+            "practice_platform_url": curated.get("platform")
+        }
+        
+    print(f"[ResourceEngine] Pipeline: Generating lightweight resources for custom skill '{skill_name}' (Canonical ID: {canonical_id})...")
+    
+    # 3. Check for local Ollama Llama model if configured (OLLAMA_MODEL e.g. llama3.2:3b / llama3.1:8b)
+    env = dotenv_values(".env")
+    ollama_url = env.get("OLLAMA_BASE_URL", os.environ.get("OLLAMA_BASE_URL"))
+    ollama_model = env.get("OLLAMA_MODEL", os.environ.get("OLLAMA_MODEL", "llama3.2:3b"))
+    
+    compact_prompt = f"""You are an expert curriculum designer. For the technical skill '{skill_name}', return a structured learning blueprint JSON.
+Return ONLY valid JSON matching this schema:
+{{
+  "concepts": ["Concept 1", "Concept 2", "Concept 3", "Concept 4"],
+  "practice_project": "1-sentence real-world practice project title.",
+  "official_docs_url": "Official docs or devdocs URL",
+  "open_source_repo_url": "Popular open-source GitHub repo URL or null",
+  "practice_platform_url": "Relevant practice platform URL or null"
+}}"""
+
+    final_data = {}
+    
+    # Try Ollama first if available (0 cloud rate limits, 100% offline)
+    if ollama_url:
+        try:
+            resp = requests.post(
+                f"{ollama_url.rstrip('/')}/api/generate",
+                json={
+                    "model": ollama_model,
+                    "prompt": compact_prompt,
+                    "format": "json",
+                    "stream": False,
+                    "options": {"temperature": 0.2}
+                },
+                timeout=12
+            )
+            if resp.status_code == 200:
+                raw_response = resp.json().get("response", "{}")
+                final_data = json.loads(raw_response)
+                print(f"[ResourceEngine] Generated using local Ollama model '{ollama_model}' for '{skill_name}'")
+        except Exception as oe:
+            print(f"[ResourceEngine] Ollama request bypassed ({oe}), falling back to Groq...")
+
+    # Fallback to GROQ_FAST with single compact prompt (~120 output tokens max)
+    if not final_data.get("concepts"):
+        from services.llm import call_groq_with_retries
+        try:
+            res = call_groq_with_retries(
+                messages=[{"role": "user", "content": compact_prompt}],
+                model=GROQ_FAST,
+                temperature=0.2,
+                response_format={"type": "json_object"}
+            )
+            content = res.choices[0].message.content.strip()
+            if content.startswith("```json"): content = content[7:-3]
+            elif content.startswith("```"): content = content[3:-3]
+            final_data = json.loads(content.strip())
+        except Exception as ge:
+            print(f"[ResourceEngine] LLM generation error for {skill_name}: {ge}")
+
+    # Fallback guarantees if LLM was unavailable
+    concepts = final_data.get("concepts") or [
+        f"Core Principles of {skill_name}",
+        f"Key Syntax & Architecture in {skill_name}",
+        f"Data Flow & Workflows with {skill_name}",
+        f"Production Best Practices for {skill_name}"
+    ]
+    
+    fallback_docs = f"https://{OFFICIAL_DOCS_MAP.get(skill_slug)}" if skill_slug in OFFICIAL_DOCS_MAP else f"https://devdocs.io/{skill_slug}"
+    fallback_video = f"https://www.youtube.com/results?search_query={skill_name.replace(' ', '+')}+crash+course+full+tutorial"
+    fallback_title = f"{skill_name} Comprehensive Course & Practical Guide"
+    fallback_proj = final_data.get("practice_project") or f"Build an end-to-end practical application implementing {skill_name}."
+
+    official_docs = final_data.get("official_docs_url") or fallback_docs
+    best_video = fallback_video
+    best_video_title = fallback_title
+    practice_project = fallback_proj
+    
+    sub_topics = [
+        {
+            "name": c,
+            "best_video_url": f"https://www.youtube.com/results?search_query={skill_name.replace(' ', '+')}+{c.replace(' ', '+')}+tutorial",
+            "practice_project": f"Build a focused implementation exercising {c} in {skill_name}."
+        }
+        for c in concepts
+    ]
         
     # Step 4: Persist in Supabase skill_resources table using Canonical Skill ID
     db_payload = {
