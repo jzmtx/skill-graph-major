@@ -120,8 +120,7 @@ def speculative_pregeneration_task(skill_name: str, current_difficulty: int, stu
                         "difficulty_level": target_diff,
                         "question_base_text": clean_txt,
                         "options_json": {"choices": opts, "topic": topic, "fingerprint": q_fp},
-                        "correct_answer": correct_ans,
-                        "topic": topic
+                        "correct_answer": correct_ans
                     })
                     seen_texts.add(clean_txt)
                     seen_fingerprints.add(q_fp)
@@ -251,8 +250,7 @@ def get_adaptive_question(req: GetQuestionRequest, background_tasks: BackgroundT
                         "difficulty_level": target_diff,
                         "question_base_text": clean_txt,
                         "options_json": {"choices": opts, "topic": topic, "fingerprint": q_fp},
-                        "correct_answer": correct_ans,
-                        "topic": topic
+                        "correct_answer": correct_ans
                     })
                     seen_texts.add(clean_txt)
                     seen_fingerprints.add(q_fp)
@@ -291,8 +289,7 @@ def get_adaptive_question(req: GetQuestionRequest, background_tasks: BackgroundT
                     "difficulty_level": target_diff,
                     "question_base_text": clean_txt,
                     "options_json": {"choices": opts, "topic": topic, "fingerprint": q_fp},
-                    "correct_answer": correct_ans,
-                    "topic": topic
+                    "correct_answer": correct_ans
                 })
             if insert_data:
                 inserted = supabase.table("questions").insert(insert_data).execute()

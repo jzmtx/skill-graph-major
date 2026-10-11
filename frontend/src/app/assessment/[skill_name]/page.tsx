@@ -8,7 +8,7 @@ import 'highlight.js/styles/github.css';
 import { 
   Target, ArrowLeft, CheckCircle2, XCircle, Code, Loader2, Brain, 
   ShieldAlert, ShieldCheck, Flag, Terminal, EyeOff, Timer, Info, X,
-  Check, ArrowRight, AlertTriangle, FileText, Lock
+  Check, ArrowRight, AlertTriangle, FileText, Lock, AlertCircle, RefreshCw
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -24,6 +24,7 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
   const [acknowledgedPolicy, setAcknowledgedPolicy] = useState(false);
 
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [question, setQuestion] = useState<any>(null);
   const [questionCount, setQuestionCount] = useState(1);
   const [difficulty, setDifficulty] = useState(1);
@@ -194,6 +195,7 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
     );
     try {
       setLoading(true);
+      setLoadError(null);
       
       // STRICT RULE: Coding questions ONLY on Question 6 and Question 12 (5 minutes time limit = 300s)
       if (count === 6 || count === 12) {
@@ -209,6 +211,7 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
           setSeenIds(prev => [...prev.filter((id): id is string => typeof id === 'string' && id.trim().length > 0), qId]);
           setSelectedOption(null);
           setTimeLeft(300); // 5 minutes for coding questions
+          setLoadError(null);
           setLoading(false);
           return;
         }
@@ -232,8 +235,13 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
         setSeenIds(prev => [...prev.filter((id): id is string => typeof id === 'string' && id.trim().length > 0), qId]);
         setSelectedOption(null);
         setTimeLeft(60); // 60 seconds for MCQs
+        setLoadError(null);
       } else {
-        handleFinish(score, history);
+        if (count > 12) {
+          handleFinish(score, history);
+        } else {
+          setLoadError("Unable to synthesize examination item. Please click retry.");
+        }
       }
     } catch (e) {
       console.error("fetchNextQuestion error:", e);
@@ -254,12 +262,17 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
           setExecutionOutput(null);
           setSelectedOption(null);
           setTimeLeft(60);
+          setLoadError(null);
           return;
         }
       } catch (fallbackErr) {
         console.error("Fallback question error:", fallbackErr);
       }
-      handleFinish(score, history);
+      if (count > 12) {
+        handleFinish(score, history);
+      } else {
+        setLoadError("Assessment question generation timed out or encountered a temporary connection issue. Click below to retry.");
+      }
     } finally {
       setLoading(false);
     }
@@ -405,6 +418,13 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
   };
 
   const handleFinish = async (finalScore: number, finalHistory = history) => {
+    // Safety guard: do not record a zero score if no questions were actually attempted/answered
+    if (finalHistory.length === 0 && finalScore === 0) {
+      console.warn("handleFinish aborted: No questions were answered.");
+      router.push('/dashboard');
+      return;
+    }
+
     setIsFinished(true);
     setLoading(true);
     try {
@@ -779,7 +799,36 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
       {/* Main Content */}
       <main className="flex-1 flex items-center justify-center p-4">
         <div className="w-full max-w-3xl">
-          {loading && !question ? (
+          {loadError ? (
+            <div className="bg-white rounded-xl shadow-sm border border-stone-200 p-8 text-center animate-in zoom-in-95 duration-150">
+              <div className="w-12 h-12 bg-amber-50 text-amber-850 border border-amber-200 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertCircle className="w-6 h-6 text-amber-700" />
+              </div>
+              <h2 className="text-base font-bold text-stone-900 mb-2">Item Delivery Interrupted</h2>
+              <p className="text-xs text-stone-600 leading-relaxed mb-6 max-w-md mx-auto">
+                {loadError}
+              </p>
+              <div className="flex items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLoadError(null);
+                    fetchNextQuestion(difficulty, seenIds, questionCount);
+                  }}
+                  className="px-5 py-2.5 bg-emerald-800 hover:bg-emerald-900 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors flex items-center gap-2 cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Retry Question</span>
+                </button>
+                <Link
+                  href="/dashboard"
+                  className="px-4 py-2.5 rounded-lg text-xs font-semibold text-stone-600 hover:text-stone-900 hover:bg-stone-100 transition-colors"
+                >
+                  Return to Dashboard
+                </Link>
+              </div>
+            </div>
+          ) : loading && !question ? (
             <div className="bg-white rounded-xl shadow-sm border border-stone-200 p-12 text-center">
               <Loader2 className="w-8 h-8 text-emerald-800 animate-spin mx-auto mb-3" />
               <div className="text-xs text-stone-500">Synthesizing adaptive assessment item...</div>
