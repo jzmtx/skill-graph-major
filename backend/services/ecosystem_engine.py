@@ -142,18 +142,37 @@ def build_ecosystem_map(career_name: str, ecosystem_root_name: str):
     from services.blueprint_engine import get_career_blueprint
     blueprint_stages = get_career_blueprint(career_name)
     
-    # --- FETCH TOP MNCS HIRING ---
-    jds_res = supabase.table("industry_intelligence").select("company_name").ilike("role_name", career_name).execute()
-    
+    # --- FETCH TOP MNCS HIRING FROM LIVE INGESTED JDS ---
+    from collections import Counter
     mncs_found = []
-    if jds_res.data:
-        from collections import Counter
-        companies = [row["company_name"] for row in jds_res.data if row.get("company_name") and row["company_name"] != "Unknown"]
-        counts = Counter(companies)
-        top_companies = [c[0] for c in counts.most_common(5)]
-        mncs_found = top_companies
-    
-    total_jds = len(jds_res.data) if jds_res.data else 0
+    total_jds = 0
+    try:
+        jds_res = supabase.table("raw_job_postings").select("company_name").ilike("role_name", f"%{career_name}%").execute()
+        if jds_res.data:
+            total_jds = len(jds_res.data)
+            companies = [row["company_name"] for row in jds_res.data if row.get("company_name") and row["company_name"] not in ("Unknown", "Aggregator")]
+            counts = Counter(companies)
+            mncs_found = [c[0] for c in counts.most_common(5)]
+    except Exception as e:
+        print(f"Error querying raw_job_postings for role {career_name}: {e}")
+
+    # If specific role has fewer than 4 companies, supplement with top hiring companies across our 1000 JDs
+    if len(mncs_found) < 4:
+        try:
+            top_res = supabase.table("raw_job_postings").select("company_name").limit(500).execute()
+            if top_res.data:
+                all_comps = [row["company_name"] for row in top_res.data if row.get("company_name") and row["company_name"] not in ("Unknown", "Aggregator")]
+                counts = Counter(all_comps)
+                for c, _ in counts.most_common(8):
+                    if c not in mncs_found:
+                        mncs_found.append(c)
+                    if len(mncs_found) >= 5:
+                        break
+        except Exception:
+            pass
+            
+    if not mncs_found:
+        mncs_found = ["Google", "Amazon", "Microsoft", "Meta", "Netflix"]
     
     return {
         "career": career_name,

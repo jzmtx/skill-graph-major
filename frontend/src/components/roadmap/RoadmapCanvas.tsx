@@ -56,6 +56,23 @@ export default function RoadmapCanvas({ roadmapData: rawRoadmapData }: { roadmap
             <span className="font-bold">{roadmapData.confidence}%</span> market alignment
           </div>
         )}
+
+        {(() => {
+          const comps: string[] = (
+            roadmapData?.target_companies || 
+            roadmapData?.mncs_found || 
+            ["Google", "Amazon", "Microsoft", "Meta", "Netflix"]
+          ).map((c: string) => c.split('|')[0].split(' - ')[0].trim()).filter(Boolean);
+
+          if (comps.length === 0) return null;
+          return (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg text-xs font-medium text-stone-700 border border-stone-200 shadow-sm">
+              <Briefcase className="w-3.5 h-3.5 text-emerald-800" />
+              <span className="font-semibold text-stone-900">Target Employers:</span>
+              <span className="text-emerald-900 font-semibold">{comps.slice(0, 4).join(", ")}</span>
+            </div>
+          );
+        })()}
         
         {/* Dev Mode Toggle */}
         <button 

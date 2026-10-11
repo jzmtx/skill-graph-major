@@ -114,34 +114,85 @@ export default function AdminMarketPage() {
 
   const roadmaps = marketData.roadmaps || [];
   const rawJds = marketData.raw_jds || [];
+  const demandScores = marketData.demand_scores || [];
+
+  const selectedRoadmap = selectedRoadmapId === "all" ? null : roadmaps.find((r: any) => r.id === selectedRoadmapId);
 
   const filteredRawJds = rawJds.filter((jd: any) => {
-    if (selectedRoadmapId === "all") return true;
-    const roadmap = roadmaps.find((r: any) => r.id === selectedRoadmapId);
-    if (!roadmap) return true;
-    return jd.role_name?.toLowerCase() === roadmap.role_name?.toLowerCase();
+    if (!selectedRoadmap) return true;
+    return jd.role_name?.toLowerCase().trim() === selectedRoadmap.role_name?.toLowerCase().trim();
   });
 
   const totalPages = Math.ceil(filteredRawJds.length / rowsPerPage);
   const currentJds = filteredRawJds.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
 
-  const skillCount: { [key: string]: number } = {};
+  // Dynamic Skill Demand Calculation
+  const skillMap: { [key: string]: { skill_name: string; score: number; count: number } } = {};
+
+  // 1. Ingest industry-calculated demand scores from role_skill_demand
+  demandScores.forEach((d: any) => {
+    const roleMatches = !selectedRoadmap || 
+      (d.role_name && d.role_name.toLowerCase().replace(/\s+/g, ' ') === selectedRoadmap.role_name?.toLowerCase().replace(/\s+/g, ' '));
+    if (!roleMatches) return;
+
+    const skillTitle = d.canonical_skills?.title || d.skill_name;
+    if (!skillTitle) return;
+    const cleanTitle = skillTitle.trim();
+    // Normalize raw industry scores (0.12 - 0.40) to standard 35% - 98%
+    const rawScore = Number(d.industry_score) || (Number(d.jd_frequency) * 6) || 0.2;
+    const normalized = Math.min(98, Math.max(30, Math.round((rawScore / 0.40) * 100)));
+
+    if (!skillMap[cleanTitle] || normalized > skillMap[cleanTitle].score) {
+      skillMap[cleanTitle] = {
+        skill_name: cleanTitle,
+        score: normalized,
+        count: (skillMap[cleanTitle]?.count || 0) + 1
+      };
+    } else {
+      skillMap[cleanTitle].count += 1;
+    }
+  });
+
+  // 2. Supplement with roadmaps core_skills for selected scope
+  (roadmaps || []).forEach((r: any) => {
+    const roleMatches = !selectedRoadmap || r.id === selectedRoadmap.id;
+    if (!roleMatches) return;
+    (r.core_skills || []).forEach((cs: any) => {
+      const name = cs.skill || cs.name;
+      if (!name) return;
+      const cleanName = name.trim();
+      const pct = Math.min(95, Math.max(40, Math.round(Number(cs.percentage) || 85)));
+      if (!skillMap[cleanName]) {
+        skillMap[cleanName] = { skill_name: cleanName, score: pct, count: 1 };
+      }
+    });
+  });
+
+  // 3. Supplement with explicit extracted_skills from raw JDs if present
   filteredRawJds.forEach((jd: any) => {
     if (jd.extracted_skills && Array.isArray(jd.extracted_skills)) {
       jd.extracted_skills.forEach((skill: string) => {
         const norm = skill.trim();
-        skillCount[norm] = (skillCount[norm] || 0) + 1;
+        if (norm) {
+          if (!skillMap[norm]) {
+            skillMap[norm] = { skill_name: norm, score: 75, count: 1 };
+          } else {
+            skillMap[norm].count += 1;
+          }
+        }
       });
     }
   });
 
-  const aggregatedSkills = Object.entries(skillCount)
-    .sort((a, b) => b[1] - a[1])
+  const evaluatedSkillsCount = Object.keys(skillMap).length;
+
+  const aggregatedSkills = Object.values(skillMap)
+    .sort((a, b) => b.score - a.score || b.count - a.count)
     .slice(0, 10)
-    .map(([skill, count]) => ({
-      skill_name: skill,
-      demand_percentage: Math.round((count / Math.max(1, filteredRawJds.length)) * 100),
-      count: count
+    .map(item => ({
+      skill_name: item.skill_name,
+      demand_percentage: item.score,
+      count: item.count
     }));
 
   const rolesCount: { [key: string]: number } = {};
@@ -253,7 +304,7 @@ export default function AdminMarketPage() {
             {[
               { label: "Total JDs Analyzed", value: marketStats?.total_count || 0, icon: FileText },
               { label: "Target Companies", value: marketStats?.companies ? Object.keys(marketStats.companies).length : 0, icon: Briefcase },
-              { label: "Skills Evaluated", value: Object.keys(skillCount).length, icon: TrendingUp },
+              { label: "Skills Evaluated", value: evaluatedSkillsCount, icon: TrendingUp },
             ].map((kpi, i) => (
               <div key={i} className="bg-white border border-stone-200 p-5 rounded-xl flex items-center gap-4 shadow-xs">
                 <div className="p-3 bg-stone-100 rounded-lg text-emerald-800 border border-stone-200">
@@ -284,6 +335,7 @@ export default function AdminMarketPage() {
                     <Tooltip 
                       cursor={{ fill: 'rgba(22, 101, 52, 0.05)' }} 
                       contentStyle={{ backgroundColor: '#FFFFFF', borderColor: '#E7E5E4', color: '#1C1917', borderRadius: '8px', fontSize: '12px' }} 
+                      formatter={(val: any) => [`${val}% Demand Rating`, 'Market Weight']}
                     />
                     <Bar dataKey="demand_percentage" fill="#166534" radius={[0, 4, 4, 0]} />
                   </BarChart>

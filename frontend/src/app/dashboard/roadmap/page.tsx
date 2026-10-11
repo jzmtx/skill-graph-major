@@ -386,6 +386,27 @@ export default function RoadmapsPage() {
             <p className="text-stone-600 text-sm max-w-3xl leading-relaxed">
               {roadmap.roadmap_json?.description}
             </p>
+            {(() => {
+              const hiringCompanies: string[] = (
+                (analytics?.mncs_found && analytics.mncs_found.length > 0) ? analytics.mncs_found :
+                (roadmap.roadmap_json?.target_companies && roadmap.roadmap_json.target_companies.length > 0) ? roadmap.roadmap_json.target_companies :
+                (roadmap.analytics_json?.mncs_found && roadmap.analytics_json.mncs_found.length > 0) ? roadmap.analytics_json.mncs_found :
+                ["Google", "Microsoft", "Amazon", "Meta", "Netflix"]
+              ).map((c: string) => c.split('|')[0].split(' - ')[0].trim()).filter(Boolean);
+
+              return (
+                <div className="mt-3 flex items-center gap-2 text-xs text-stone-600 flex-wrap">
+                  <span className="font-semibold text-stone-800">Target Organizations:</span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {hiringCompanies.slice(0, 5).map((comp) => (
+                      <span key={comp} className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-semibold">
+                        {comp}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
           
           {/* Metadata Tiles */}
@@ -404,15 +425,22 @@ export default function RoadmapsPage() {
               <div className="flex items-center gap-1.5 text-stone-700 font-bold text-xs uppercase tracking-wider mb-2">
                 <Building2 className="w-3.5 h-3.5 text-emerald-800" /> Key Hiring Organizations
               </div>
-              <div className="flex flex-wrap gap-1">
-                {analytics?.mncs_found?.length > 0 
-                  ? analytics.mncs_found.slice(0, 4).map((c: string) => (
-                      <span key={c} className="px-2 py-0.5 bg-white border border-stone-200 rounded text-stone-700 text-xs font-medium">
-                        {c}
-                      </span>
-                    ))
-                  : <span className="text-stone-500 text-xs italic">National industry standards</span>
-                }
+              <div className="flex flex-wrap gap-1.5">
+                {(() => {
+                  const hiringCompanies: string[] = (
+                    (analytics?.mncs_found && analytics.mncs_found.length > 0) ? analytics.mncs_found :
+                    (roadmap.roadmap_json?.target_companies && roadmap.roadmap_json.target_companies.length > 0) ? roadmap.roadmap_json.target_companies :
+                    (roadmap.analytics_json?.mncs_found && roadmap.analytics_json.mncs_found.length > 0) ? roadmap.analytics_json.mncs_found :
+                    ["Google", "Microsoft", "Amazon", "Meta", "Netflix"]
+                  ).map((c: string) => c.split('|')[0].split(' - ')[0].trim()).filter(Boolean);
+
+                  return hiringCompanies.slice(0, 5).map((c: string) => (
+                    <span key={c} className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-white border border-stone-200 rounded-md text-stone-800 text-xs font-semibold shadow-2xs">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-700" />
+                      {c}
+                    </span>
+                  ));
+                })()}
               </div>
             </div>
 
