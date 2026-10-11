@@ -20,6 +20,11 @@ def _make_client() -> Client:
     return create_client(SUPABASE_URL, SUPABASE_KEY)
 
 
+def create_auth_client() -> Client:
+    """Creates an isolated Supabase client for password authentication so the global client is never mutated or downgraded from service_role."""
+    return create_client(SUPABASE_URL, SUPABASE_KEY)
+
+
 # Internal live client — updated by refresh_supabase()
 _client: Client = _make_client()
 
@@ -28,7 +33,7 @@ def refresh_supabase() -> Client:
     """Creates a fresh Supabase client. Safe to call at any time."""
     global _client
     _client = _make_client()
-    print("🔄 Supabase client refreshed")
+    print("[SUPABASE] client refreshed")
     return _client
 
 

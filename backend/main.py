@@ -31,7 +31,7 @@ async def periodic_refresh():
 async def startup_event():
     """Refresh the Supabase client on startup to clear any stale JWT sessions."""
     database.refresh_supabase()
-    print("✅ Supabase client refreshed on startup")
+    print("[OK] Supabase client refreshed on startup")
     asyncio.create_task(periodic_refresh())
 
 @app.get("/")
@@ -55,3 +55,4 @@ app.include_router(alumni.router, prefix="/api/alumni", tags=["Alumni"])
 app.include_router(opensource.router, prefix="/api/opensource", tags=["Open Source"])
 
 app.include_router(upload.router, prefix="/api/upload", tags=["Upload"])
+# Uvicorn reload trigger: company eligibility & ATS screening

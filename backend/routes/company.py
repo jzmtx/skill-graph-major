@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List, Dict
 from datetime import datetime, timezone
-from database import supabase
+from database import supabase, create_auth_client
 from services.hireability import calculate_hireability_index
 from cachetools import TTLCache
 
@@ -118,7 +118,8 @@ async def register_company(payload: CompanyRegister):
 @router.post("/login")
 async def login_company(payload: CompanyLogin):
     try:
-        response = supabase.auth.sign_in_with_password({
+        auth_client = create_auth_client()
+        response = auth_client.auth.sign_in_with_password({
             "email": payload.email.strip(),
             "password": payload.password
         })
@@ -177,8 +178,11 @@ def _extract_job_meta(job: dict) -> dict:
     meta = None
     clean_skills = []
     for s in skills:
-        if isinstance(s, dict) and s.get("_meta"):
-            meta = s
+        if isinstance(s, dict) and "_meta" in s:
+            if isinstance(s["_meta"], dict):
+                meta = s["_meta"]
+            else:
+                meta = s
         else:
             clean_skills.append(s)
             
@@ -262,8 +266,8 @@ async def get_job_applicants(auth_id: str, job_id: str):
             raise HTTPException(status_code=404, detail="Job not found")
         job_meta = _extract_job_meta(job_res.data[0])
 
-        # Fetch applications for this job
-        apps = supabase.table("job_applications").select("*").eq("job_id", job_id).order("match_score", desc=True).execute()
+        # Fetch applications with joined students for this job
+        apps = supabase.table("job_applications").select("*, students(*)").eq("job_id", job_id).order("match_score", desc=True).execute()
 
         if not apps.data:
             return {"applicants": [], "job": job_meta}
@@ -278,25 +282,22 @@ async def get_job_applicants(auth_id: str, job_id: str):
                     supabase.table("job_applications").update({"status": "shortlisted"}).eq("id", a["id"]).execute()
                     a["status"] = "shortlisted"
 
-        student_ids = [app["student_id"] for app in apps.data]
-
-        # Bulk fetch students
-        students_res = supabase.table("students").select(
-            "id, name, email, phone, branch, year, usn, github_url, linkedin_url, college_id"
-        ).in_("id", student_ids).execute()
-        students_map = {s["id"]: s for s in students_res.data}
+        student_ids = list(set([str(app["student_id"]) for app in apps.data if app.get("student_id")]))
 
         # Bulk fetch student skills
         skills_res = supabase.table("student_skills").select("*").in_("student_id", student_ids).execute()
         skills_map = {}
         for skill in skills_res.data:
-            sid = skill["student_id"]
+            sid = str(skill["student_id"])
             if sid not in skills_map:
                 skills_map[sid] = []
             skills_map[sid].append(skill)
 
         # Bulk fetch colleges
-        college_ids = list(set([s["college_id"] for s in students_res.data if s.get("college_id")]))
+        college_ids = list(set([
+            app.get("students", {}).get("college_id") for app in apps.data 
+            if isinstance(app.get("students"), dict) and app["students"].get("college_id")
+        ]))
         colleges_map = {}
         if college_ids:
             colleges_res = supabase.table("colleges").select("id, name").in_("id", college_ids).execute()
@@ -304,14 +305,14 @@ async def get_job_applicants(auth_id: str, job_id: str):
 
         enriched = []
         for app in apps.data:
-            sid = app["student_id"]
-            student_data = students_map.get(sid)
+            sid = str(app["student_id"])
+            student_data = app.get("students") or {"id": sid, "name": "Applicant", "email": ""}
             student_skills = skills_map.get(sid, [])
             
             hireability = calculate_hireability_index(student_skills)
             
             college_name = None
-            if student_data and student_data.get("college_id"):
+            if isinstance(student_data, dict) and student_data.get("college_id"):
                 college_name = colleges_map.get(student_data["college_id"])
 
             enriched.append({

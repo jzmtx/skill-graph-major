@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from database import supabase
+from database import supabase, create_auth_client
 from models import StudentRegisterRequest, StudentLoginRequest
 import uuid
 
@@ -63,8 +63,9 @@ async def register_student(req: StudentRegisterRequest):
 @router.post("/login")
 async def login_student(req: StudentLoginRequest):
     try:
-        # 1. Sign in with Supabase Auth
-        auth_response = supabase.auth.sign_in_with_password({
+        # 1. Sign in with isolated Supabase Auth client to avoid mutating server service role
+        auth_client = create_auth_client()
+        auth_response = auth_client.auth.sign_in_with_password({
             "email": req.email,
             "password": req.password
         })
