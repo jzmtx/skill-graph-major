@@ -303,12 +303,9 @@ def generate_roadmap_resources_progressive(skills: list[dict], role_name: str, b
         print(f"[ResourceWorker] All {len(skills)} nodes for '{role_name}' already have resources cached in Supabase.")
         return
 
-    # Protect LLM rate limits & server load: Only pre-warm the first 3 introductory nodes.
-    # The remaining nodes generate lazily on-demand when a student opens that node's workspace.
-    nodes_to_prewarm = uncached[:3]
-    print(f"[ResourceWorker] '{role_name}': Pre-warming {len(nodes_to_prewarm)} introductory nodes. Remaining {max(0, len(uncached) - len(nodes_to_prewarm))} nodes will generate on-demand.")
+    print(f"[ResourceWorker] '{role_name}': Progressively preloading {len(uncached)} uncached nodes sequentially in the background...")
 
-    for item in nodes_to_prewarm:
+    for idx, item in enumerate(uncached, 1):
         skill_identifier = item.get("skill_id") or item.get("name")
         display_name = item.get("name")
         if not skill_identifier:
@@ -320,13 +317,16 @@ def generate_roadmap_resources_progressive(skills: list[dict], role_name: str, b
             
         try:
             generate_resource_pack(str(skill_identifier), role_name)
+            print(f"[ResourceWorker] [{idx}/{len(uncached)}] Preloaded resources for: '{display_name}'")
         except Exception as err:
             print(f"[ResourceWorker] Error generating resources for {display_name}: {err}")
         finally:
             currently_generating_skills.discard(str(skill_identifier))
             if display_name:
                 currently_generating_skills.discard(display_name.lower())
-        time.sleep(1) # Gentle 1s pacing between nodes
+        
+        # Gentle 1.2s pacing between background nodes to guarantee zero rate limit spikes
+        time.sleep(1.2)
 
 def process_roadmap_generation_bg(req: GenerateRequest, is_update: bool, existing_id: str, matching_roadmap: dict, background_tasks: BackgroundTasks):
     req_id = req.request_id
