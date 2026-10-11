@@ -25,7 +25,7 @@ async def periodic_refresh():
     while True:
         await asyncio.sleep(240)  # 4 minutes
         database.refresh_supabase()
-        print("🔄 Supabase client refreshed (periodic)")
+        print("[SUPABASE] client refreshed (periodic)")
 
 @app.on_event("startup")
 async def startup_event():

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
-from database import supabase
+from database import supabase, create_auth_client
 from services.hireability import calculate_hireability_index
 
 router = APIRouter()
@@ -76,7 +76,8 @@ async def register_tpo(payload: TPORegister):
 async def login_tpo(payload: TPOLogin):
     """Logs in a TPO official. Same pattern as login_student in routes/auth.py."""
     try:
-        auth_response = supabase.auth.sign_in_with_password({
+        auth_client = create_auth_client()
+        auth_response = auth_client.auth.sign_in_with_password({
             "email": payload.email,
             "password": payload.password
         })

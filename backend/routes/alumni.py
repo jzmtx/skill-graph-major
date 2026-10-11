@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List
-from database import supabase
+from database import supabase, create_auth_client
 from services.hireability import calculate_hireability_index
 from cachetools import TTLCache
 
@@ -110,7 +110,8 @@ async def register_alumni(payload: AlumniRegister):
 async def login_alumni(payload: AlumniLogin):
     """Logs in an alumnus. Same pattern as login_student in routes/auth.py."""
     try:
-        auth_response = supabase.auth.sign_in_with_password({
+        auth_client = create_auth_client()
+        auth_response = auth_client.auth.sign_in_with_password({
             "email": payload.email,
             "password": payload.password
         })

@@ -37,32 +37,53 @@ def refresh_supabase() -> Client:
     return _client
 
 
+class _IsolatedAuthProxy:
+    """Wraps auth to isolate sign_in operations so the singleton client is never tainted."""
+    def __getattr__(self, name: str):
+        attr = getattr(_client.auth, name)
+        if name == "sign_in_with_password":
+            def _isolated_sign_in(*args, **kwargs):
+                temp_client = create_client(SUPABASE_URL, SUPABASE_KEY)
+                return temp_client.auth.sign_in_with_password(*args, **kwargs)
+            return _isolated_sign_in
+        return attr
+
+
 class _SupabaseProxy:
     """
-    Proxy that always delegates to the current _client.
-
-    Because all route files do `from database import supabase`, they hold a
-    reference to THIS proxy object — which never changes. Only _client changes
-    when refresh_supabase() is called, so all routes automatically use the
-    fresh connection without needing a restart.
+    Proxy that always delegates to the current _client and guarantees
+    that all database operations execute with the service_role key,
+    completely preventing Row-Level Security (RLS) session downgrade bugs.
     """
 
     def table(self, name: str):
+        # Guarantee PostgREST authorization header is always service_role
+        try:
+            expected_auth = f"Bearer {SUPABASE_KEY}"
+            if _client.postgrest.session.headers.get("Authorization") != expected_auth:
+                _client.postgrest.session.headers["Authorization"] = expected_auth
+        except Exception:
+            pass
         return _client.table(name)
 
     def rpc(self, *args, **kwargs):
+        try:
+            expected_auth = f"Bearer {SUPABASE_KEY}"
+            if _client.postgrest.session.headers.get("Authorization") != expected_auth:
+                _client.postgrest.session.headers["Authorization"] = expected_auth
+        except Exception:
+            pass
         return _client.rpc(*args, **kwargs)
 
     @property
     def auth(self):
-        return _client.auth
+        return _IsolatedAuthProxy()
 
     @property
     def storage(self):
         return _client.storage
 
     def __getattr__(self, name: str):
-        # Fallback for any other attributes
         return getattr(_client, name)
 
 
