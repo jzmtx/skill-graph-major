@@ -2,9 +2,9 @@
 
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { 
-  ShieldAlert, ShieldCheck, Camera, Video, AlertTriangle, 
+  ShieldAlert, ShieldCheck, Camera, CameraOff, Video, AlertTriangle, 
   Smartphone, Eye, Users, ChevronDown, ChevronUp, Bell, Volume2, 
-  VolumeX, Maximize2, Minimize2, Mic, MicOff, Lock
+  VolumeX, Maximize2, Minimize2, Mic, MicOff, Lock, RefreshCw
 } from 'lucide-react';
 
 export interface ProctoringViolation {
@@ -19,7 +19,8 @@ export interface ProctoringViolation {
     | 'window_blur' 
     | 'blind_spot_gaze' 
     | 'camera_tilt'
-    | 'audio_leak';
+    | 'audio_leak'
+    | 'camera_disconnected';
   category: 'tab_switch' | 'webcam_issue' | 'voice_leak' | 'security';
   strikeCount: number;
   isPenaltyFlag: boolean;
@@ -69,6 +70,8 @@ interface ProctoringMonitorProps {
   currentQuestionText?: string;
   currentOptions?: string[];
   onBlackoutChange?: (isBlackedOut: boolean) => void;
+  onCameraStatusChange?: (isActive: boolean, error?: string | null) => void;
+  retryCameraTrigger?: number;
 }
 
 const COMMON_STOPWORDS = new Set([
@@ -86,7 +89,9 @@ export const ProctoringMonitor: React.FC<ProctoringMonitorProps> = ({
   title = "AI Proctoring Guard",
   currentQuestionText = "",
   currentOptions = [],
-  onBlackoutChange
+  onBlackoutChange,
+  onCameraStatusChange,
+  retryCameraTrigger = 0
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -194,7 +199,7 @@ export const ProctoringMonitor: React.FC<ProctoringMonitorProps> = ({
       tabSwitchStrikesRef.current += 1;
       strikeCount = tabSwitchStrikesRef.current;
       setTabSwitchStrikes(strikeCount);
-    } else if (type === 'mobile_phone' || type === 'multiple_faces' || type === 'no_face' || type === 'blind_spot_gaze' || type === 'camera_tilt') {
+    } else if (type === 'mobile_phone' || type === 'multiple_faces' || type === 'no_face' || type === 'blind_spot_gaze' || type === 'camera_tilt' || type === 'camera_disconnected') {
       category = 'webcam_issue';
       webcamStrikesRef.current += 1;
       strikeCount = webcamStrikesRef.current;
@@ -281,53 +286,75 @@ export const ProctoringMonitor: React.FC<ProctoringMonitorProps> = ({
   }, [isAlertVisible]);
 
   // Request Webcam Stream
+  const startCamera = useCallback(async () => {
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("Webcam access not supported in this browser");
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 480 },
+          height: { ideal: 360 },
+          facingMode: 'user'
+        },
+        audio: false
+      });
+
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(e => console.warn("Video play error:", e));
+      }
+
+      // Attach track disconnection and mute listeners
+      const videoTrack = stream.getVideoTracks()[0];
+      if (videoTrack) {
+        videoTrack.onended = () => {
+          setHasPermission(false);
+          const err = "Camera feed was disconnected or stopped.";
+          setCameraError(err);
+          onCameraStatusChange?.(false, err);
+          triggerViolation('camera_disconnected', 'Webcam feed was disconnected or turned off during the assessment.');
+        };
+        videoTrack.onmute = () => {
+          setHasPermission(false);
+          const err = "Camera feed was muted or turned off.";
+          setCameraError(err);
+          onCameraStatusChange?.(false, err);
+          triggerViolation('camera_disconnected', 'Webcam feed was muted or turned off during the assessment.');
+        };
+        videoTrack.onunmute = () => {
+          setHasPermission(true);
+          setCameraError(null);
+          onCameraStatusChange?.(true, null);
+        };
+      }
+
+      setHasPermission(true);
+      setCameraError(null);
+      onCameraStatusChange?.(true, null);
+    } catch (err: any) {
+      setHasPermission(false);
+      const errMsg = err.name === 'NotAllowedError'
+        ? "Camera permission denied. Please allow camera access in browser settings."
+        : (err.message || "Camera permission denied or camera not found.");
+      setCameraError(errMsg);
+      onCameraStatusChange?.(false, errMsg);
+    }
+  }, [onCameraStatusChange, triggerViolation]);
+
   useEffect(() => {
     if (!isActive) return;
-
-    let isMounted = true;
-    async function startCamera() {
-      try {
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          throw new Error("Webcam access not supported in this browser");
-        }
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            width: { ideal: 480 },
-            height: { ideal: 360 },
-            facingMode: 'user'
-          },
-          audio: false
-        });
-
-        if (!isMounted) {
-          stream.getTracks().forEach(t => t.stop());
-          return;
-        }
-
-        streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.play().catch(e => console.warn("Video play error:", e));
-        }
-        setHasPermission(true);
-        setCameraError(null);
-      } catch (err: any) {
-        if (!isMounted) return;
-        setHasPermission(false);
-        setCameraError(err.message || "Camera permission denied or camera not found.");
-      }
-    }
 
     startCamera();
 
     return () => {
-      isMounted = false;
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(t => t.stop());
         streamRef.current = null;
       }
     };
-  }, [isActive]);
+  }, [isActive, retryCameraTrigger, startCamera]);
 
   // Dynamically load TensorFlow.js and COCO-SSD from CDN with strict dependency sequencing
   useEffect(() => {
@@ -1262,15 +1289,17 @@ export const ProctoringMonitor: React.FC<ProctoringMonitorProps> = ({
 
             {/* Camera Permission / Error Fallback */}
             {hasPermission === false && (
-              <div className="absolute inset-0 bg-stone-950/90 flex flex-col items-center justify-center p-4 text-center">
-                <Camera className="w-8 h-8 text-amber-500 mb-2" />
+              <div className="absolute inset-0 bg-stone-950/95 flex flex-col items-center justify-center p-4 text-center z-10">
+                <CameraOff className="w-8 h-8 text-red-500 mb-2" />
                 <p className="text-xs font-semibold text-stone-200 mb-1">Camera Feed Inactive</p>
-                <p className="text-[11px] text-stone-400 mb-3">{cameraError || "Please allow webcam access for proctoring verification."}</p>
+                <p className="text-[11px] text-stone-400 mb-3">{cameraError || "Webcam is turned off or access was denied."}</p>
                 <button
-                  onClick={() => window.location.reload()}
-                  className="px-3 py-1.5 bg-emerald-800 hover:bg-emerald-700 text-white rounded-lg text-xs font-medium transition-colors cursor-pointer"
+                  type="button"
+                  onClick={startCamera}
+                  className="px-3.5 py-1.5 bg-emerald-800 hover:bg-emerald-700 text-white rounded-lg text-xs font-medium transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
                 >
-                  Enable Camera
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Turn On Camera
                 </button>
               </div>
             )}

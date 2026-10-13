@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, use, useRef } from 'react';
+import React, { useState, useEffect, use, useRef, useCallback } from 'react';
 import { getAdaptiveQuestion, submitAnswer, completeAssessment, getCodingQuestion, evaluateCode, simulateCode, reportQuestion, prewarmAssessment } from '@/lib/api';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
@@ -8,7 +8,8 @@ import 'highlight.js/styles/github.css';
 import { 
   Target, ArrowLeft, CheckCircle2, XCircle, Code, Loader2, Brain, 
   ShieldAlert, ShieldCheck, Flag, Terminal, EyeOff, Timer, Info, X,
-  Check, ArrowRight, AlertTriangle, FileText, Lock, AlertCircle, RefreshCw
+  Check, ArrowRight, AlertTriangle, FileText, Lock, AlertCircle, RefreshCw,
+  Camera, CameraOff, Video, VideoOff
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -30,6 +31,17 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
   // Initial Student Agreement & Instructions Screen
   const [hasAcceptedRules, setHasAcceptedRules] = useState(false);
   const [acknowledgedPolicy, setAcknowledgedPolicy] = useState(false);
+
+  // Pre-assessment Webcam Verification Gate State
+  const [webcamStatus, setWebcamStatus] = useState<'prompt' | 'checking' | 'active' | 'denied'>('checking');
+  const [webcamError, setWebcamError] = useState<string | null>(null);
+  const preCheckVideoRef = useRef<HTMLVideoElement>(null);
+  const preCheckStreamRef = useRef<MediaStream | null>(null);
+
+  // In-Assessment Real-time Camera Watchdog State
+  const [isCameraActive, setIsCameraActive] = useState(true);
+  const [cameraBlockError, setCameraBlockError] = useState<string | null>(null);
+  const [retryCameraCounter, setRetryCameraCounter] = useState(0);
 
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -201,9 +213,49 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
     };
   }, [hasAcceptedRules, isFinished]);
 
-  // Question countdown timer (Active only after rules accepted)
+  // Pre-assessment Camera Verification Initializer
+  const initializePreCheckCamera = useCallback(async () => {
+    setWebcamStatus('checking');
+    setWebcamError(null);
+    try {
+      if (typeof navigator === 'undefined' || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("Webcam access is not supported by this browser.");
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 480 }, height: { ideal: 360 }, facingMode: 'user' },
+        audio: false
+      });
+      preCheckStreamRef.current = stream;
+      if (preCheckVideoRef.current) {
+        preCheckVideoRef.current.srcObject = stream;
+        preCheckVideoRef.current.play().catch(e => console.warn("Precheck video play error:", e));
+      }
+      setWebcamStatus('active');
+      setWebcamError(null);
+    } catch (err: any) {
+      setWebcamStatus('denied');
+      const msg = err.name === 'NotAllowedError'
+        ? "Camera permission denied. Please allow camera access in your browser settings to proceed."
+        : (err.message || "Webcam is currently not detected or turned off. Please plug in or enable your camera.");
+      setWebcamError(msg);
+    }
+  }, []);
+
   useEffect(() => {
-    if (!hasAcceptedRules || timeLeft <= 0 || isSubmitting || !!feedback || !question || isFinished || loading) return;
+    if (!hasAcceptedRules) {
+      initializePreCheckCamera();
+    }
+    return () => {
+      if (preCheckStreamRef.current) {
+        preCheckStreamRef.current.getTracks().forEach(t => t.stop());
+        preCheckStreamRef.current = null;
+      }
+    };
+  }, [hasAcceptedRules, initializePreCheckCamera]);
+
+  // Question countdown timer (Active only after rules accepted & camera active)
+  useEffect(() => {
+    if (!hasAcceptedRules || !isCameraActive || timeLeft <= 0 || isSubmitting || !!feedback || !question || isFinished || loading) return;
     const timer = setInterval(() => {
       setTimeLeft(t => {
         if (t <= 1) {
@@ -215,7 +267,7 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [hasAcceptedRules, timeLeft, isSubmitting, feedback, question, isFinished, loading]);
+  }, [hasAcceptedRules, isCameraActive, timeLeft, isSubmitting, feedback, question, isFinished, loading]);
 
   const fetchNextQuestion = async (currentDiff: number, excludeIds: string[], count: number) => {
     const studentId = typeof window !== 'undefined' ? localStorage.getItem('student_id') : null;
@@ -309,17 +361,27 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
 
   const handleStartAssessment = () => {
     if (!acknowledgedPolicy) return;
+    if (webcamStatus !== 'active') {
+      alert("Webcam must be turned on to begin this assessment.");
+      return;
+    }
+    // Release pre-check video stream so ProctoringMonitor can cleanly bind camera
+    if (preCheckStreamRef.current) {
+      preCheckStreamRef.current.getTracks().forEach(t => t.stop());
+      preCheckStreamRef.current = null;
+    }
     setHasAcceptedRules(true);
+    setIsCameraActive(true);
     fetchNextQuestion(difficulty, [], 1);
   };
 
   const handleOptionSelect = (opt: string) => {
-    if (feedback || isSubmitting) return;
+    if (feedback || isSubmitting || !isCameraActive) return;
     setSelectedOption(opt);
   };
 
   const handleRunCode = async () => {
-    if (!studentCode.trim() || isExecuting) return;
+    if (!studentCode.trim() || isExecuting || !isCameraActive) return;
     setIsExecuting(true);
     setExecutionOutput(null);
     try {
@@ -337,6 +399,7 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
 
   const handleSubmit = async (isTimeout = false) => {
     if (isSubmitting || !!feedback) return;
+    if (!isCameraActive && !isTimeout) return;
     if (!isCurrentItemCoding && !selectedOption && !isTimeout) return;
     if (isCurrentItemCoding && !studentCode.trim() && !isTimeout) return;
 
@@ -570,6 +633,83 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
 
           </div>
 
+          {/* Mandatory Webcam Verification & Device Preview */}
+          <div className="bg-stone-50 border border-stone-200 rounded-xl p-4 mb-5">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Camera className="w-4 h-4 text-emerald-800" />
+                <span className="font-bold text-stone-900 text-xs">Mandatory Webcam Hardware Verification</span>
+              </div>
+              {webcamStatus === 'active' ? (
+                <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" /> Camera Ready &amp; Active
+                </span>
+              ) : webcamStatus === 'checking' ? (
+                <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-800 border border-amber-200">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" /> Verifying Camera...
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-red-100 text-red-800 border border-red-300">
+                  <CameraOff className="w-3.5 h-3.5 text-red-600" /> Camera Not On / Blocked
+                </span>
+              )}
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-4 items-center">
+              {/* Live Preview Screen */}
+              <div className="relative w-40 h-28 bg-stone-900 rounded-lg overflow-hidden border border-stone-300 shrink-0 flex items-center justify-center shadow-2xs">
+                {webcamStatus === 'active' ? (
+                  <video
+                    ref={preCheckVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full h-full object-cover -scale-x-100"
+                  />
+                ) : webcamStatus === 'checking' ? (
+                  <div className="flex flex-col items-center gap-1.5 text-stone-400 text-[10px]">
+                    <Loader2 className="w-5 h-5 animate-spin text-emerald-500" />
+                    <span>Connecting feed...</span>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-1 text-stone-400 text-center p-2">
+                    <CameraOff className="w-6 h-6 text-red-400" />
+                    <span className="text-[10px] text-red-400 font-semibold">Feed Offline</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Status details & Action */}
+              <div className="flex-1 text-xs text-stone-600 space-y-2">
+                {webcamStatus === 'active' ? (
+                  <div>
+                    <p className="font-semibold text-stone-900 text-xs">Webcam feed successfully initialized.</p>
+                    <p className="text-[11px] text-stone-500 mt-0.5 leading-relaxed">
+                      Ensure your face is clearly visible, centered in frame, and well-lit. AI supervision requires your camera to remain on for the full duration of the test.
+                    </p>
+                  </div>
+                ) : (
+                  <div>
+                    <p className="font-bold text-red-700 text-xs">
+                      Webcam must be turned on to take this assessment.
+                    </p>
+                    <p className="text-[11px] text-stone-500 mt-0.5 leading-relaxed">
+                      {webcamError || "Camera permission is required. Click the button below to turn on your webcam and grant browser access."}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={initializePreCheckCamera}
+                      className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-800 hover:bg-emerald-900 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+                    >
+                      <Camera className="w-3.5 h-3.5" />
+                      Turn On / Test Webcam
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
           {/* Student Declaration Checkbox */}
           <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-xl p-4 mb-6">
             <label className="flex items-start gap-3 cursor-pointer select-none">
@@ -595,11 +735,20 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
             </Link>
             <button
               onClick={handleStartAssessment}
-              disabled={!acknowledgedPolicy}
+              disabled={!acknowledgedPolicy || webcamStatus !== 'active'}
               className="w-full sm:w-auto px-6 py-2.5 bg-emerald-800 hover:bg-emerald-900 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
             >
-              <span>Accept Guidelines &amp; Begin Assessment</span>
-              <ArrowRight className="w-3.5 h-3.5" />
+              {webcamStatus !== 'active' ? (
+                <>
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>Webcam Required to Begin Assessment</span>
+                </>
+              ) : (
+                <>
+                  <span>Accept Guidelines &amp; Begin Assessment</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </>
+              )}
             </button>
           </div>
 
@@ -1276,6 +1425,42 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
         </div>
       )}
 
+      {/* In-Assessment Camera Loss / Inactive Blocker Overlay */}
+      {hasAcceptedRules && !isFinished && !isCameraActive && (
+        <div className="fixed inset-0 z-50 bg-stone-950/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="max-w-md w-full bg-white rounded-2xl border border-red-300 p-6 md:p-8 shadow-2xl text-center space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 mx-auto rounded-2xl bg-red-50 text-red-600 border border-red-200 flex items-center justify-center shadow-xs">
+              <CameraOff className="w-8 h-8" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold font-serif text-stone-900">Webcam Not Detected / Turned Off</h2>
+              <p className="text-xs text-stone-600 mt-2 leading-relaxed">
+                You cannot continue taking this assessment while your webcam is turned off. AI proctoring rules require continuous live camera supervision.
+              </p>
+            </div>
+            <div className="bg-red-50/80 border border-red-200 rounded-xl p-3.5 text-left">
+              <div className="text-[11px] font-bold text-red-900 flex items-center gap-1.5 mb-1.5">
+                <AlertTriangle className="w-4 h-4 text-red-700" />
+                Assessment Interaction Suspended
+              </div>
+              <ul className="text-[11px] text-red-800/90 list-disc list-inside space-y-1">
+                <li>Exam countdown timer has been paused.</li>
+                <li>Question view, options, and code submission are locked.</li>
+                <li>{cameraBlockError || "Please turn on your camera and allow browser permissions to resume."}</li>
+              </ul>
+            </div>
+            <button
+              type="button"
+              onClick={() => setRetryCameraCounter(c => c + 1)}
+              className="w-full py-3 bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Re-enable / Turn On Camera
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* AI Proctoring Guard with Mobile Phone Photo-Capture Tracking */}
       {hasAcceptedRules && !isFinished && (
         <ProctoringMonitor
@@ -1286,6 +1471,11 @@ export default function AssessmentPage({ params }: { params: Promise<{ skill_nam
           currentOptions={question?.options || []}
           onViolation={handleProctoringViolation}
           onCategoryStrikeChange={setCategoryStats}
+          onCameraStatusChange={(active, err) => {
+            setIsCameraActive(active);
+            setCameraBlockError(err || null);
+          }}
+          retryCameraTrigger={retryCameraCounter}
         />
       )}
     </div>
