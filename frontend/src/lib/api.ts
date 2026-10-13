@@ -91,6 +91,10 @@ export const completeAssessment = async (data: {
   score_percentage: number;
   history: {topic: string, is_correct: boolean, difficulty: number}[];
   violations?: number;
+  violation_details?: any[];
+  tab_switch_strikes?: number;
+  webcam_strikes?: number;
+  voice_strikes?: number;
   node_id?: string;
   roadmap_id?: string;
 }) => {

@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { getAppliedJobs, getApplicationMessages, sendApplicationMessage, getApplicationAssessment, updateAssessmentStudentStatus, deleteApplicationMessage } from '@/lib/companyApi';
 import { getStudentApplications, getOpenSourceApplicationMessages, sendOpenSourceApplicationMessage, deleteOpenSourceApplicationMessage } from '@/lib/opensourceApi';
 import { getOpportunitiesForStudent, getAlumniMessages, sendAlumniMessage, deleteAlumniMessage } from '@/lib/alumniApi';
-import { Briefcase, Building, Mail, Clock, CheckCircle, XCircle, ChevronRight, MessageSquare, Send, X, ClipboardList, Link as LinkIcon, Image as ImageIcon, GitBranch, Trash2, Sparkles } from 'lucide-react';
+import { Briefcase, Building, Mail, Clock, CheckCircle, XCircle, ChevronRight, MessageSquare, Send, X, ClipboardList, Link as LinkIcon, Image as ImageIcon, GitBranch, Trash2, Sparkles, User, Hash } from 'lucide-react';
 import CreativeChatConsole from '@/components/chat/CreativeChatConsole';
+import { UnifiedCommunicationsHub, UnifiedConversation } from '@/components/chat/UnifiedCommunicationsHub';
 
 import { getCachedData, setCachedData } from '@/lib/cache';
 import { SmartTopBarLoader, SmartListSkeleton } from '@/components/common/SmartLoader';
@@ -26,7 +27,13 @@ export default function JobOffersPage() {
   const [syncing, setSyncing] = useState(false);
   const [assessments, setAssessments] = useState<Record<string, any>>({});
   
-  // Chat state
+  // Unified Communications & Channel Hub state
+  const [conversations, setConversations] = useState<UnifiedConversation[]>([]);
+  const [selectedConvoId, setSelectedConvoId] = useState<string | null>(null);
+  const [isHubOpen, setIsHubOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'applications' | 'communications'>('applications');
+  
+  // Legacy chat state fallback
   const [chatApp, setChatApp] = useState<UnifiedApplication | null>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -96,6 +103,17 @@ export default function JobOffersPage() {
         setApplications(allApplications);
         setCachedData('job_offers_apps', allApplications);
 
+        // Load Unified Communications Directory (Squads, Teammates, Alumni, Recruiters)
+        try {
+          const { api } = await import('@/lib/api');
+          const contactsRes = await api.get(`/api/communications/contacts/student/${studentId}`);
+          if (contactsRes.data?.contacts?.length > 0) {
+            setConversations(contactsRes.data.contacts);
+          }
+        } catch (e) {
+          console.warn("Failed to load communications contacts:", e);
+        }
+
         // Fetch assessments in parallel instead of sequential await loop
         if (jobs.length > 0) {
           const assmtResults = await Promise.allSettled(
@@ -143,9 +161,11 @@ export default function JobOffersPage() {
   };
 
   const handleOpenChat = (app: UnifiedApplication) => {
+    const convoId = app.type === 'job' ? `job_${app.id}` : app.type === 'opensource' ? `os_${app.id}` : `opp_${app.id}`;
+    setSelectedConvoId(convoId);
+    setIsHubOpen(true);
     setChatApp(app);
     loadMessages(app);
-    setIsChatModalOpen(true);
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -236,13 +256,49 @@ export default function JobOffersPage() {
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <SmartTopBarLoader active={syncing} />
-      <div>
-        <h1 className="text-2xl font-serif font-bold text-stone-900 tracking-tight flex items-center gap-2.5">
-          <Mail className="w-6 h-6 text-emerald-800" /> Application Pipeline & Communications
-        </h1>
-        <p className="text-stone-500 text-xs mt-1">
-          Review recruitment progression and direct recruiter communications for active candidacies.
-        </p>
+      
+      {/* Top Header & Tab Switcher */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-serif font-bold text-stone-900 tracking-tight flex items-center gap-2.5">
+            <Mail className="w-6 h-6 text-emerald-800" /> Application Pipeline & Communications
+          </h1>
+          <p className="text-stone-500 text-xs mt-1">
+            Review recruitment progression, assessment challenges, and direct recruiter / alumni communications.
+          </p>
+        </div>
+
+        {/* Industry Hub Navigation Tabs */}
+        <div className="flex items-center gap-2 bg-stone-100 p-1 rounded-xl border border-stone-200">
+          <button
+            onClick={() => setActiveTab('applications')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'applications'
+                ? 'bg-white text-emerald-900 font-bold shadow-2xs'
+                : 'text-stone-600 hover:text-stone-900'
+            }`}
+          >
+            <Briefcase className="w-3.5 h-3.5" />
+            <span>Applications ({applications.length})</span>
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab('communications');
+              setIsHubOpen(true);
+            }}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'communications'
+                ? 'bg-emerald-800 text-white font-bold shadow-2xs'
+                : 'text-stone-600 hover:text-stone-900'
+            }`}
+          >
+            <MessageSquare className="w-3.5 h-3.5" />
+            <span>Communications Hub ({conversations.length})</span>
+            {conversations.some(c => c.unreadCount > 0) && (
+              <span className="w-2 h-2 rounded-full bg-orange-500 animate-ping" />
+            )}
+          </button>
+        </div>
       </div>
 
       {applications.length === 0 ? (
@@ -369,64 +425,31 @@ export default function JobOffersPage() {
       {/* Floating Chats Button with Warm Orange Glow Accent */}
       <button 
         onClick={() => {
-          if (!chatApp && applications.length > 0) {
-            handleOpenChat(applications[0]);
-          } else {
-            setIsChatModalOpen(true);
+          if (!selectedConvoId && conversations.length > 0) {
+            setSelectedConvoId(conversations[0].id);
           }
+          setIsHubOpen(true);
         }}
-        className="fixed bottom-6 right-6 w-12 h-12 bg-gradient-to-tr from-emerald-800 to-emerald-900 border border-orange-400/40 text-white rounded-full shadow-lg flex items-center justify-center hover:scale-105 transition-all z-40 relative group"
-        title="Open dialogue hub"
+        className="fixed bottom-6 right-6 w-13 h-13 bg-gradient-to-tr from-emerald-800 to-emerald-900 border border-orange-400/40 text-white rounded-full shadow-xl flex items-center justify-center hover:scale-105 transition-all z-40 relative group cursor-pointer"
+        title="Open Institutional Communications Hub"
       >
-        <span className="absolute -top-1 -right-1 flex h-3 w-3">
+        <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75" />
-          <span className="relative inline-flex rounded-full h-3 w-3 bg-orange-500 border border-white" />
+          <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-orange-500 border-2 border-white" />
         </span>
         <MessageSquare className="w-5 h-5" />
       </button>
 
-      {/* Creative Dialogue Console */}
-      <CreativeChatConsole
-        isOpen={isChatModalOpen && Boolean(chatApp)}
-        onClose={() => {
-          setIsChatModalOpen(false);
-          setChatApp(null);
-        }}
-        chatType={chatApp?.type === 'opensource' ? 'group' : 'personal'}
-        title={`${chatApp?.title || 'Dialogue'} @ ${chatApp?.companyName || 'Institutional Contact'}`}
-        subtitle="Recruitment Pipeline & Direct Institutional Communication"
-        recipientRole={
-          chatApp?.type === 'job' ? 'Corporate Recruiter' :
-          chatApp?.type === 'opensource' ? 'Project Maintainer' :
-          'Alumni Advisor'
-        }
-        contextTag={
-          chatApp?.type === 'job' ? 'Corporate Thread' :
-          chatApp?.type === 'opensource' ? 'OpenSource Dispatch' :
-          'Mentorship Frequency'
-        }
-        messages={messages}
-        currentUserId={typeof window !== 'undefined' ? localStorage.getItem('student_id') : null}
+      {/* Unified Multi-Channel Communications Hub (Slack / Discord style split-view) */}
+      <UnifiedCommunicationsHub
+        isOpen={isHubOpen}
+        onClose={() => setIsHubOpen(false)}
         currentUserType="student"
-        loading={loadingMsgs}
-        sending={sendingMsg}
-        onRefresh={async () => {
-          if (chatApp) {
-            const studentId = typeof window !== 'undefined' ? localStorage.getItem('student_id') || '' : '';
-            if (chatApp.type === 'job') {
-              const msgs = await getApplicationMessages(chatApp.id);
-              setMessages(msgs || []);
-            } else if (chatApp.type === 'opensource') {
-              const msgs = await getOpenSourceApplicationMessages(chatApp.id);
-              setMessages(msgs || []);
-            } else if (chatApp.type === 'alumni_opp') {
-              const msgs = await getAlumniMessages(chatApp.id, studentId);
-              setMessages(msgs || []);
-            }
-          }
-        }}
-        onSendMessage={handleSendCreativeMessage}
-        onDeleteMessage={handleDeleteMessage}
+        currentUserId={typeof window !== 'undefined' ? localStorage.getItem('student_id') : null}
+        currentUserName={typeof window !== 'undefined' ? localStorage.getItem('student_name') || 'Student' : 'Student'}
+        initialConversations={conversations}
+        activeConversationId={selectedConvoId}
+        onSelectConversation={(c) => setSelectedConvoId(c.id)}
       />
     </div>
   );

@@ -106,7 +106,7 @@ def get_hireability_score(student_id: str):
     try:
         response = supabase.table('student_skills').select('*').eq('student_id', student_id).execute()
         skills = response.data
-        return calculate_hireability_index(skills)
+        return calculate_hireability_index(skills, student_id=student_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

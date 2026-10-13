@@ -1,4 +1,5 @@
 import Sidebar from '@/components/layout/Sidebar';
+import StudentCommunicationsLauncher from '@/components/chat/StudentCommunicationsLauncher';
 import { ReactNode } from 'react';
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
@@ -12,6 +13,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           </div>
         </main>
       </div>
+      <StudentCommunicationsLauncher />
     </div>
   );
 }

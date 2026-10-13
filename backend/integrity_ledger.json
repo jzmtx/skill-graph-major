@@ -1,0 +1,14 @@
+[
+  {
+    "id": "penalty_b1d37dbb-a59a-489d-8d5f-78eb016e4b8b_1791837815",
+    "student_id": "b1d37dbb-a59a-489d-8d5f-78eb016e4b8b",
+    "type": "integrity_penalty",
+    "skill_name": "Python",
+    "icon": "shield-alert",
+    "label": "Proctoring Integrity Deduction \u2014 Python",
+    "detail": "5 penalty flag(s) exceeded 3-strike threshold (Webcam/Assist: 3, Voice: 0, Tab: 0)",
+    "pts": -75,
+    "color": "rose",
+    "date": "2026-10-12T20:43:35.616715+00:00"
+  }
+]

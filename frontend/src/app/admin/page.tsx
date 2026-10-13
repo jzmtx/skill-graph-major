@@ -17,6 +17,7 @@ type UnifiedUser = {
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<UnifiedUser[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("All");
 
@@ -25,6 +26,8 @@ export default function AdminUsersPage() {
   }, []);
 
   const fetchUsers = async () => {
+    setLoading(true);
+    setError(null);
     try {
       const data = await adminApi.getUsers();
 
@@ -69,8 +72,9 @@ export default function AdminUsersPage() {
       }));
 
       setUsers([...students, ...companies, ...tpo, ...alumni]);
-    } catch (error) {
-      console.error("Error fetching users:", error);
+    } catch (err: any) {
+      console.error("Error fetching users:", err);
+      setError("Unable to connect to backend server. Please verify backend is running on port 8000.");
     } finally {
       setLoading(false);
     }
@@ -125,6 +129,18 @@ export default function AdminUsersPage() {
           </div>
         </div>
       </div>
+
+      {error && (
+        <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between text-amber-900 text-xs shadow-xs">
+          <span>{error}</span>
+          <button
+            onClick={fetchUsers}
+            className="px-3 py-1.5 bg-amber-800 text-white rounded-lg font-medium hover:bg-amber-900 transition-colors shadow-2xs"
+          >
+            Retry Connection
+          </button>
+        </div>
+      )}
 
       {/* Search + Type Filter */}
       <div className="mb-6 flex flex-col md:flex-row gap-3">

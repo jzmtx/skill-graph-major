@@ -5,6 +5,7 @@ import { motion, useMotionValue, useTransform, animate, useSpring } from "framer
 import { getHireabilityScore } from "@/lib/api";
 import { 
   ShieldCheck, 
+  ShieldAlert,
   TrendingUp, 
   Layers, 
   Zap, 
@@ -13,7 +14,12 @@ import {
   ChevronDown, 
   GitBranch, 
   CheckCircle2,
-  Target
+  Target,
+  ArrowUpRight,
+  ArrowDownRight,
+  Smartphone,
+  Users,
+  MicOff
 } from "lucide-react";
 
 import { getCachedData, setCachedData } from "@/lib/cache";
@@ -38,6 +44,7 @@ interface HireabilityData {
     consistency_multiplier: number;
     project_bonus: number;
     velocity_bonus: number;
+    integrity_deduction?: number;
     raw_total: number;
   };
   points_history: PointEvent[];
@@ -47,6 +54,7 @@ export default function HireabilityScore({ studentIdProp }: { studentIdProp?: st
   const [data, setData] = useState<HireabilityData | null>(null);
   const [loading, setLoading] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
+  const [historyFilter, setHistoryFilter] = useState<'all' | 'gained' | 'deductions'>('all');
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
 
   // Subtle interactive hover state
@@ -139,7 +147,11 @@ export default function HireabilityScore({ studentIdProp }: { studentIdProp?: st
   const tier = getTierInfo(score);
   const decayAmount = Math.max(0, Math.round(data.breakdown.base_depth - data.breakdown.decayed_depth));
 
-  const renderEventIcon = (type: string) => {
+  const renderEventIcon = (type: string, icon?: string) => {
+    if (icon === "smartphone") return <Smartphone className="w-4 h-4 text-rose-600" />;
+    if (icon === "users") return <Users className="w-4 h-4 text-rose-600" />;
+    if (icon === "mic-off") return <MicOff className="w-4 h-4 text-rose-600" />;
+
     switch (type) {
       case "project_bonus":
         return <Award className="w-4 h-4 text-emerald-800" />;
@@ -148,6 +160,9 @@ export default function HireabilityScore({ studentIdProp }: { studentIdProp?: st
       case "skill_assessed":
       case "base_skill":
         return <Target className="w-4 h-4 text-stone-700" />;
+      case "integrity_penalty":
+      case "proctoring_deduction":
+        return <ShieldAlert className="w-4 h-4 text-rose-600" />;
       default:
         return <CheckCircle2 className="w-4 h-4 text-stone-600" />;
     }
@@ -312,7 +327,7 @@ export default function HireabilityScore({ studentIdProp }: { studentIdProp?: st
               </div>
 
               {/* Verified Modifiers Bar */}
-              {(data.breakdown.project_bonus > 0 || data.breakdown.velocity_bonus > 0) && (
+              {(data.breakdown.project_bonus > 0 || data.breakdown.velocity_bonus > 0 || Boolean(data.breakdown.integrity_deduction && data.breakdown.integrity_deduction > 0)) && (
                 <div className="flex flex-wrap items-center gap-2 pt-2">
                   <span className="text-xs font-semibold text-stone-600 mr-1">Earned Modifiers:</span>
                   {data.breakdown.project_bonus > 0 && (
@@ -325,6 +340,11 @@ export default function HireabilityScore({ studentIdProp }: { studentIdProp?: st
                       <Zap className="w-3.5 h-3.5" /> +{data.breakdown.velocity_bonus} 30-Day Activity Velocity
                     </span>
                   )}
+                  {Boolean(data.breakdown.integrity_deduction && data.breakdown.integrity_deduction > 0) && (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-rose-50 text-rose-700 text-xs font-semibold border border-rose-200">
+                      <ShieldAlert className="w-3.5 h-3.5" /> -{data.breakdown.integrity_deduction} Integrity Deduction
+                    </span>
+                  )}
                 </div>
               )}
             </div>
@@ -332,63 +352,168 @@ export default function HireabilityScore({ studentIdProp }: { studentIdProp?: st
           </div>
 
           {/* Points Audit Trail (Collapsible) */}
-          {data.points_history && data.points_history.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-stone-200">
-              <button
-                onClick={() => setShowHistory(v => !v)}
-                className="w-full flex items-center justify-between text-xs font-bold text-stone-600 hover:text-stone-900 transition-colors py-1 group"
-              >
-                <span className="flex items-center gap-2 uppercase tracking-wider">
-                  <Clock className="w-3.5 h-3.5 text-stone-500" />
-                  Points Ledger & Audit History
-                  <span className="px-2 py-0.5 rounded-full bg-stone-100 text-stone-700 font-semibold text-[10px]">
-                    {data.points_history.length} logged events
+          {data.points_history && data.points_history.length > 0 && (() => {
+            const historyEvents = data.points_history || [];
+            const totalPositivePts = historyEvents.reduce((acc, ev) => {
+              if (typeof ev.pts === "number" && ev.pts > 0) return acc + ev.pts;
+              return acc;
+            }, 0);
+            const totalNegativePts = historyEvents.reduce((acc, ev) => {
+              if (typeof ev.pts === "number" && ev.pts < 0) return acc + Math.abs(ev.pts);
+              return acc;
+            }, 0);
+            const positiveEventsCount = historyEvents.filter(ev => typeof ev.pts === "number" ? ev.pts > 0 : !String(ev.pts).startsWith("-")).length;
+            const negativeEventsCount = historyEvents.filter(ev => typeof ev.pts === "number" ? ev.pts < 0 : String(ev.pts).startsWith("-")).length;
+
+            const filteredHistory = historyEvents.filter(ev => {
+              const isNeg = typeof ev.pts === "number" ? ev.pts < 0 : String(ev.pts).startsWith("-");
+              if (historyFilter === 'gained') return !isNeg;
+              if (historyFilter === 'deductions') return isNeg;
+              return true;
+            });
+
+            return (
+              <div className="mt-4 pt-4 border-t border-stone-200">
+                <button
+                  onClick={() => setShowHistory(v => !v)}
+                  className="w-full flex items-center justify-between text-xs font-bold text-stone-600 hover:text-stone-900 transition-colors py-1 group cursor-pointer"
+                >
+                  <span className="flex items-center gap-2 uppercase tracking-wider">
+                    <Clock className="w-3.5 h-3.5 text-stone-500" />
+                    Points Ledger & Audit History (+ve &amp; -ve)
+                    <span className="px-2 py-0.5 rounded-full bg-stone-100 text-stone-700 font-semibold text-[10px]">
+                      {historyEvents.length} logged events
+                    </span>
                   </span>
-                </span>
-                <span className={`p-1 rounded transition-transform duration-200 ${showHistory ? 'rotate-180' : 'rotate-0'}`}>
-                  <ChevronDown className="w-4 h-4 text-stone-400 group-hover:text-stone-600" />
-                </span>
-              </button>
+                  <span className={`p-1 rounded transition-transform duration-200 ${showHistory ? 'rotate-180' : 'rotate-0'}`}>
+                    <ChevronDown className="w-4 h-4 text-stone-400 group-hover:text-stone-600" />
+                  </span>
+                </button>
 
-              <motion.div
-                initial={false}
-                animate={{ height: showHistory ? 'auto' : 0, opacity: showHistory ? 1 : 0 }}
-                transition={{ duration: 0.25, ease: "easeInOut" }}
-                className="overflow-hidden"
-              >
-                <div className="pt-4 space-y-2.5">
-                  {data.points_history.map((event, idx) => {
-                    const dateFormatted = event.date 
-                      ? new Date(event.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
-                      : "Applied to baseline";
+                <motion.div
+                  initial={false}
+                  animate={{ height: showHistory ? 'auto' : 0, opacity: showHistory ? 1 : 0 }}
+                  transition={{ duration: 0.25, ease: "easeInOut" }}
+                  className="overflow-hidden"
+                >
+                  <div className="pt-4 space-y-3">
                     
-                    return (
-                      <div 
-                        key={idx}
-                        className="p-3 rounded-lg border border-stone-200 bg-stone-50 hover:bg-stone-100/80 transition-colors flex items-center justify-between gap-4"
-                      >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-8 h-8 rounded-lg bg-white border border-stone-200 flex items-center justify-center shrink-0 shadow-2xs">
-                            {renderEventIcon(event.type)}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold text-stone-800 truncate">{event.label}</p>
-                            <p className="text-xs text-stone-500 truncate">{event.detail} · <span className="text-stone-400">{dateFormatted}</span></p>
-                          </div>
-                        </div>
-
-                        <div className="text-right shrink-0">
-                          <span className="text-sm font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-md font-mono">
-                            {typeof event.pts === "number" ? `+${event.pts}` : event.pts}
+                    {/* History Summary Bar & Filter Tabs */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-stone-50 border border-stone-200 text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="flex items-center gap-1 font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded text-[11px] font-mono">
+                          <ArrowUpRight className="w-3 h-3 text-emerald-600" /> +{totalPositivePts} pts Gained
+                        </span>
+                        {totalNegativePts > 0 ? (
+                          <span className="flex items-center gap-1 font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded text-[11px] font-mono">
+                            <ArrowDownRight className="w-3 h-3 text-rose-600" /> -{totalNegativePts} pts Deducted
                           </span>
-                        </div>
+                        ) : (
+                          <span className="text-stone-400 text-[11px] font-medium px-2 py-0.5">
+                            0 Deductions
+                          </span>
+                        )}
                       </div>
-                    );
-                  })}
-                </div>
-              </motion.div>
-            </div>
-          )}
+
+                      {/* Filter Switcher */}
+                      <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-stone-200">
+                        <button
+                          onClick={() => setHistoryFilter('all')}
+                          className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors cursor-pointer ${
+                            historyFilter === 'all' 
+                              ? 'bg-stone-900 text-white shadow-2xs' 
+                              : 'text-stone-600 hover:text-stone-900'
+                          }`}
+                        >
+                          All ({historyEvents.length})
+                        </button>
+                        <button
+                          onClick={() => setHistoryFilter('gained')}
+                          className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors flex items-center gap-1 cursor-pointer ${
+                            historyFilter === 'gained' 
+                              ? 'bg-emerald-800 text-white shadow-2xs' 
+                              : 'text-stone-600 hover:text-emerald-800'
+                          }`}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                          Gained ({positiveEventsCount})
+                        </button>
+                        <button
+                          onClick={() => setHistoryFilter('deductions')}
+                          className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors flex items-center gap-1 cursor-pointer ${
+                            historyFilter === 'deductions' 
+                              ? 'bg-rose-700 text-white shadow-2xs' 
+                              : 'text-stone-600 hover:text-rose-700'
+                          }`}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                          Deductions ({negativeEventsCount})
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Filtered Events List */}
+                    <div className="space-y-2">
+                      {filteredHistory.map((event, idx) => {
+                        const dateFormatted = event.date 
+                          ? new Date(event.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })
+                          : "Applied to baseline";
+                        
+                        const isNegative = typeof event.pts === "number" ? event.pts < 0 : String(event.pts).startsWith("-");
+
+                        return (
+                          <div 
+                            key={idx}
+                            className={`p-3 rounded-lg border transition-all flex items-center justify-between gap-4 ${
+                              isNegative 
+                                ? 'border-rose-200 bg-rose-50/70 hover:bg-rose-100/70 shadow-2xs' 
+                                : 'border-stone-200 bg-stone-50 hover:bg-stone-100/80'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 shadow-2xs ${
+                                isNegative ? 'bg-rose-100 border-rose-300' : 'bg-white border-stone-200'
+                              }`}>
+                                {renderEventIcon(event.type, event.icon)}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <span className={`text-[9px] font-mono font-bold uppercase tracking-wider px-1.5 py-0.2 rounded border ${
+                                    isNegative 
+                                      ? 'bg-rose-100 text-rose-800 border-rose-300' 
+                                      : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                  }`}>
+                                    {isNegative ? 'PENALTY / CHEATING' : 'SCORE GAINED'}
+                                  </span>
+                                  <p className="text-xs sm:text-sm font-semibold text-stone-800 truncate">{event.label}</p>
+                                </div>
+                                <p className="text-xs text-stone-500 truncate mt-0.5">
+                                  {event.detail} · <span className="text-stone-400 font-mono text-[11px]">{dateFormatted}</span>
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="text-right shrink-0">
+                              {isNegative ? (
+                                <span className="text-sm font-bold text-rose-700 bg-rose-50 border border-rose-300 px-2.5 py-1 rounded-md font-mono shadow-2xs">
+                                  {typeof event.pts === "number" ? `${event.pts} pts` : event.pts}
+                                </span>
+                              ) : (
+                                <span className="text-sm font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-md font-mono shadow-2xs">
+                                  {typeof event.pts === "number" ? `+${event.pts} pts` : event.pts}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                  </div>
+                </motion.div>
+              </div>
+            );
+          })()}
 
         </div>
       </motion.div>

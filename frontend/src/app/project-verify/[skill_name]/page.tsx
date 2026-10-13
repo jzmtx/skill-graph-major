@@ -12,6 +12,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Editor } from '@monaco-editor/react';
 import { AiInterviewerAvatar } from '@/components/common/AiInterviewerAvatar';
+import { ProctoringMonitor, ProctoringViolation } from '@/components/proctoring/ProctoringMonitor';
 
 export default function ProjectVerificationPage({ params }: { params: Promise<{ skill_name: string }> }) {
   const router = useRouter();
@@ -46,8 +47,15 @@ export default function ProjectVerificationPage({ params }: { params: Promise<{ 
   const [interimSpeech, setInterimSpeech] = useState('');
   
   // Evaluation Result / Asynchronous Audit
-  const [result, setResult] = useState<{passed: boolean, feedback: string} | null>(null);
+  const [result, setResult] = useState<{passed: boolean, feedback: string, proctoring_flagged?: boolean, violations_count?: number} | null>(null);
   const [evaluationPending, setEvaluationPending] = useState(false);
+
+  // Proctoring Telemetry State
+  const [interviewViolations, setInterviewViolations] = useState<ProctoringViolation[]>([]);
+
+  const handleProctoringViolation = (v: ProctoringViolation) => {
+    setInterviewViolations(prev => [v, ...prev]);
+  };
 
   const recognitionRef = useRef<any>(null);
 
@@ -355,7 +363,9 @@ export default function ProjectVerificationPage({ params }: { params: Promise<{ 
         student_id: studentId,
         skill_name: skillName,
         github_url: githubUrl,
-        qa_pairs: qa_pairs
+        qa_pairs: qa_pairs,
+        violations: interviewViolations.length,
+        violation_details: interviewViolations
       });
       
       setResult(res);
@@ -689,6 +699,10 @@ export default function ProjectVerificationPage({ params }: { params: Promise<{ 
                             : 'AI formulating customized defense & coding challenge questions...'}
                         </span>
                       </div>
+                      <div className="flex items-center gap-2.5">
+                        <Check className="w-4 h-4 text-emerald-700 shrink-0" />
+                        <span>AI Video Proctoring Guard: Real-time anti-mobile phone &amp; photo-taking scanner active</span>
+                      </div>
                     </div>
 
                     {/* Pre-Interview Checklist & Actions */}
@@ -724,22 +738,35 @@ export default function ProjectVerificationPage({ params }: { params: Promise<{ 
             {/* Step 3: Speech-to-Speech Virtual Technical Interview */}
             {step === 3 && questions.length > 0 && (
               <div className="animate-in fade-in duration-300">
-                {/* Animated Virtual AI Interviewer Studio */}
-                <AiInterviewerAvatar
-                  isAiSpeaking={isAiSpeaking}
-                  isListening={isListening}
-                  currentQuestionText={questions[currentQuestionIndex]?.text || ''}
-                  onReplayAudio={() => speakQuestion(questions[currentQuestionIndex]?.text)}
-                  voiceMode={voiceMode}
-                  onToggleVoiceMode={() => {
-                    const newMode = !voiceMode;
-                    setVoiceMode(newMode);
-                    if (!newMode && typeof window !== 'undefined') {
-                      window.speechSynthesis.cancel();
-                      setIsAiSpeaking(false);
-                    }
-                  }}
-                />
+                {/* Dual Stage: AI Assessor Studio & Candidate Proctoring Stream */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-6 items-start">
+                  <div className="lg:col-span-2">
+                    <AiInterviewerAvatar
+                      isAiSpeaking={isAiSpeaking}
+                      isListening={isListening}
+                      currentQuestionText={questions[currentQuestionIndex]?.text || ''}
+                      onReplayAudio={() => speakQuestion(questions[currentQuestionIndex]?.text)}
+                      voiceMode={voiceMode}
+                      onToggleVoiceMode={() => {
+                        const newMode = !voiceMode;
+                        setVoiceMode(newMode);
+                        if (!newMode && typeof window !== 'undefined') {
+                          window.speechSynthesis.cancel();
+                          setIsAiSpeaking(false);
+                        }
+                      }}
+                    />
+                  </div>
+                  <div className="lg:col-span-1">
+                    <ProctoringMonitor
+                      variant="interview"
+                      title="Candidate AI Proctor"
+                      isActive={step === 3 && !evaluationPending}
+                      onViolation={handleProctoringViolation}
+                      currentQuestionText={questions[currentQuestionIndex]?.text || ''}
+                    />
+                  </div>
+                </div>
 
                 <div className="flex items-center justify-between mb-3 px-1">
                   <div className="flex items-center gap-2">
@@ -771,7 +798,7 @@ export default function ProjectVerificationPage({ params }: { params: Promise<{ 
                       </span>
                     )}
                   </div>
-                  <p className="text-stone-900 font-semibold text-sm md:text-base leading-relaxed">
+                  <p className="text-stone-900 font-semibold text-sm md:text-base leading-relaxed select-none">
                     {questions[currentQuestionIndex].text}
                   </p>
                 </div>
@@ -935,6 +962,16 @@ export default function ProjectVerificationPage({ params }: { params: Promise<{ 
                         ? `Congratulations! Your oral defense and repository depth for ${skillName} have been formally verified.`
                         : `Your submission did not meet the required threshold for Level 2 verification.`}
                     </p>
+
+                    {result.proctoring_flagged && (
+                      <div className="mb-4 bg-red-100 border border-red-300 rounded-xl p-3 text-red-900 text-xs text-left flex items-start gap-2">
+                        <ShieldAlert className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-bold">Security Violation Flagged:</p>
+                          <p>{result.violations_count || 'Security'} incident(s) detected during interview session (including camera/mobile device inspection).</p>
+                        </div>
+                      </div>
+                    )}
                     
                     <div className={`p-5 rounded-2xl text-left text-xs md:text-sm ${result.passed ? 'bg-emerald-50 text-emerald-950 border border-emerald-200' : 'bg-red-50 text-red-950 border border-red-200'}`}>
                       <p className="font-bold mb-1.5 flex items-center gap-1.5">

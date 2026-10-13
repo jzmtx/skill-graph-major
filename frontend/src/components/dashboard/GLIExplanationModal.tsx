@@ -378,13 +378,13 @@ export default function GLIExplanationModal({ isOpen, onClose, currentScore = 30
 
                   <div className="bg-stone-50 border border-stone-200 rounded-xl p-3.5 space-y-1.5">
                     <div className="flex items-center justify-between">
-                      <span className="font-bold text-stone-900 text-xs">6. Proctoring Trust Metric</span>
+                      <span className="font-bold text-stone-900 text-xs">6. Categorized Proctoring Integrity</span>
                       <span className="font-mono font-bold text-rose-800 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
-                        Integrity Penalty
+                        3-Strike Policy
                       </span>
                     </div>
                     <p className="text-[11px] text-stone-500 leading-normal">
-                      Exceeding 3 proctoring flags (window switching, copy-paste, or screenshot attempts) applies an automatic trust deduction.
+                      Each category (Tab Switch, Webcam/Assist, Voice Leak) permits up to 3 warnings. Only strikes exceeding 3 increment GLI penalty flags (-15 pts/flag logged in audit history).
                     </p>
                   </div>
                 </div>

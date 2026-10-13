@@ -97,3 +97,8 @@ export const deleteAlumniMessage = async (message_id: string) => {
   const response = await api.delete(`/api/alumni/messages/${message_id}`);
   return response.data;
 };
+
+export const getAlumniConversations = async (alumni_id: string) => {
+  const response = await api.get(`/api/alumni/alumni/${alumni_id}/conversations`);
+  return response.data.conversations || [];
+};

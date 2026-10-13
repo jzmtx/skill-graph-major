@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-import { getTPOProfile, getCollegeStudents, getCollegeAnalytics } from '@/lib/tpoApi';
+import { getTPOProfile, getCollegeStudents, getCollegeAnalytics, syncRoster } from '@/lib/tpoApi';
 import { useRouter } from 'next/navigation';
-import { GraduationCap, Users, TrendingUp, Award, Flame } from 'lucide-react';
+import { GraduationCap, Users, TrendingUp, Award, Flame, RotateCw } from 'lucide-react';
 import ConnectionManager from '@/components/tpo/ConnectionManager';
 import Link from 'next/link';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -41,6 +41,8 @@ export default function TPODashboardPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [selectedBranch, setSelectedBranch] = useState<string>('');
+  const [syncing, setSyncing] = useState(false);
+  const [syncToast, setSyncToast] = useState('');
 
   const fetchStudents = async (authId: string, branch?: string) => {
     try {
@@ -48,6 +50,24 @@ export default function TPODashboardPage() {
       setStudents(studentList);
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const handleQuickSync = async () => {
+    const authId = typeof window !== 'undefined' ? localStorage.getItem('tpo_auth_id') : null;
+    if (!authId) return;
+    setSyncing(true);
+    try {
+      await syncRoster(authId);
+      await fetchStudents(authId, selectedBranch || undefined);
+      const analyticsData = await getCollegeAnalytics(authId);
+      setAnalytics(analyticsData);
+      setSyncToast('Roster updated');
+      setTimeout(() => setSyncToast(''), 3000);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -103,7 +123,23 @@ export default function TPODashboardPage() {
               <GraduationCap className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="text-2xl font-serif font-bold text-stone-900">{college?.name}</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-serif font-bold text-stone-900">{college?.name}</h1>
+                <button
+                  type="button"
+                  onClick={handleQuickSync}
+                  disabled={syncing}
+                  title="Resync institutional roster"
+                  className="p-1 rounded text-stone-400 hover:text-stone-700 hover:bg-stone-200 transition-colors opacity-60 hover:opacity-100"
+                >
+                  <RotateCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin text-emerald-800' : ''}`} />
+                </button>
+                {syncToast && (
+                  <span className="text-[10px] text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-medium">
+                    {syncToast}
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-stone-500">Placement Officer Portal: {tpo?.name}</p>
             </div>
           </div>
@@ -290,7 +326,18 @@ export default function TPODashboardPage() {
             {/* Student Directory Table */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <h2 className="text-xs font-bold uppercase tracking-wider text-stone-700">Student Directory ({students.length})</h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-stone-700">Student Directory ({students.length})</h2>
+                  <button
+                    type="button"
+                    onClick={handleQuickSync}
+                    disabled={syncing}
+                    title="Resync roster"
+                    className="p-1 rounded text-stone-400 hover:text-stone-700 transition-colors opacity-70 hover:opacity-100"
+                  >
+                    <RotateCw className={`w-3 h-3 ${syncing ? 'animate-spin text-emerald-800' : ''}`} />
+                  </button>
+                </div>
                 
                 {analytics?.branch_stats && analytics.branch_stats.length > 0 && (
                   <select 
@@ -308,7 +355,15 @@ export default function TPODashboardPage() {
               
               {students.length === 0 ? (
                 <div className="bg-white rounded-xl border border-stone-200 p-8 text-center text-stone-400 text-xs">
-                  No registered students found for this filter.
+                  <p>No registered students found for this filter.</p>
+                  <button
+                    type="button"
+                    onClick={handleQuickSync}
+                    disabled={syncing}
+                    className="mt-2 text-emerald-800 hover:underline font-semibold"
+                  >
+                    {syncing ? 'Synchronizing roster...' : 'Click to auto-sync college roster'}
+                  </button>
                 </div>
               ) : (
                 <div className="bg-white rounded-xl border border-stone-200 overflow-hidden shadow-2xs">

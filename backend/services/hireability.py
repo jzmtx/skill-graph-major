@@ -39,7 +39,7 @@ def _calculate_days_since(updated_at_str: str) -> int:
         # If parsing fails, assume 0 days (no penalty)
         return 0
 
-def calculate_hireability_index(skills: list[dict]) -> dict:
+def calculate_hireability_index(skills: list[dict], student_id: str | None = None) -> dict:
     """
     Calculates the Hireability Index based on the research-backed algorithm.
     Input skills format:
@@ -52,9 +52,27 @@ def calculate_hireability_index(skills: list[dict]) -> dict:
         }
     ]
     """
+    # Load student integrity penalties from persistent ledger
+    student_penalties = []
+    integrity_penalty_total = 0
+    if student_id:
+        try:
+            import os
+            import json
+            ledger_file = os.path.join(os.path.dirname(__file__), "..", "integrity_ledger.json")
+            if os.path.exists(ledger_file):
+                with open(ledger_file, "r") as f:
+                    ledger = json.load(f)
+                    for entry in ledger:
+                        if entry.get("student_id") == student_id and entry.get("type") == "integrity_penalty":
+                            student_penalties.append(entry)
+                            integrity_penalty_total += abs(entry.get("pts", 0))
+        except Exception as e:
+            print("Error loading integrity ledger:", e)
+
     if not skills:
         return {
-            "score": 300, 
+            "score": max(300, 300 - min(100, integrity_penalty_total)), 
             "breakdown": {
                 "base_depth": 0,
                 "decayed_depth": 0,
@@ -62,9 +80,10 @@ def calculate_hireability_index(skills: list[dict]) -> dict:
                 "project_bonus": 0,
                 "velocity_bonus": 0,
                 "consistency_multiplier": 1.0,
+                "integrity_deduction": integrity_penalty_total,
                 "raw_total": 0
             },
-            "points_history": []
+            "points_history": student_penalties
         }
 
     total_base_depth = 0
@@ -199,6 +218,18 @@ def calculate_hireability_index(skills: list[dict]) -> dict:
                     "date": None
                 })
     
+    # 4. Integrate Negative Proctoring Penalties into points_history
+    for p in student_penalties:
+        points_history.append({
+            "type": "integrity_penalty",
+            "icon": p.get("icon", "shield-alert"),
+            "label": p.get("label", "Proctoring Integrity Deduction"),
+            "detail": p.get("detail", "Exceeded 3-strike proctoring threshold during examination"),
+            "pts": p.get("pts", -15),
+            "color": "rose",
+            "date": p.get("date")
+        })
+
     # Calculate Final Raw Score
     raw_score = (total_decayed_depth * synergy_multiplier * consistency_multiplier) + project_bonus + velocity_bonus
     
@@ -208,13 +239,16 @@ def calculate_hireability_index(skills: list[dict]) -> dict:
     SCALING_FACTOR = 1000.0
     
     asymptotic_multiplier = 1.0 - math.exp(-raw_score / SCALING_FACTOR)
-    hireability_index = INDEX_MIN + (INDEX_MAX - INDEX_MIN) * asymptotic_multiplier
-    hireability_index = min(INDEX_MAX - 1, int(hireability_index))
+    base_hireability_index = INDEX_MIN + (INDEX_MAX - INDEX_MIN) * asymptotic_multiplier
     
-    # Sort history: skill entries by date desc (newest first), multipliers at end
+    # Direct deduction of cheating & proctoring penalties from GLI score!
+    hireability_index = max(INDEX_MIN, int(base_hireability_index - integrity_penalty_total))
+    hireability_index = min(INDEX_MAX - 1, hireability_index)
+    
+    # Sort history: entries by date desc (newest first), multipliers at end
     dated = [e for e in points_history if e.get("date")]
     multipliers = [e for e in points_history if not e.get("date")]
-    dated.sort(key=lambda x: x["date"], reverse=True)
+    dated.sort(key=lambda x: str(x["date"]), reverse=True)
     points_history = dated + multipliers
     
     return {
@@ -226,6 +260,7 @@ def calculate_hireability_index(skills: list[dict]) -> dict:
             "consistency_multiplier": consistency_multiplier,
             "project_bonus": project_bonus,
             "velocity_bonus": round(velocity_bonus, 2),
+            "integrity_deduction": integrity_penalty_total,
             "raw_total": round(raw_score, 2)
         },
         "points_history": points_history

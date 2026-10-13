@@ -11,8 +11,10 @@ import {
   updateInterestStatus,
   getAlumniMessages,
   sendAlumniMessage,
-  deleteAlumniMessage
+  deleteAlumniMessage,
+  getAlumniConversations
 } from '@/lib/alumniApi';
+import { api } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import {
   Users,
@@ -39,6 +41,7 @@ import StudentProfileModal, { StudentProfileData } from '@/components/dashboard/
 import AlumniOpenSourceManager from '@/components/alumni/AlumniOpenSourceManager';
 import ReactMarkdown from 'react-markdown';
 import CreativeChatConsole from '@/components/chat/CreativeChatConsole';
+import { UnifiedCommunicationsHub, UnifiedConversation } from '@/components/chat/UnifiedCommunicationsHub';
 
 interface Opportunity {
   id: string;
@@ -98,7 +101,13 @@ export default function AlumniDashboardPage() {
   const [interestedStudents, setInterestedStudents] = useState<StudentWithSkills[]>([]);
   const [interestedLoading, setInterestedLoading] = useState(false);
 
-  // Chat State
+  // Unified Communications & Messages Hub State
+  const [conversations, setConversations] = useState<UnifiedConversation[]>([]);
+  const [selectedConvoId, setSelectedConvoId] = useState<string | null>(null);
+  const [isHubOpen, setIsHubOpen] = useState(false);
+  const [dashboardTab, setDashboardTab] = useState<'opportunities' | 'opensource' | 'students' | 'messages'>('opportunities');
+
+  // Legacy Chat State fallback
   const [chatStudent, setChatStudent] = useState<{opp_id: string, opp_title: string, student_id: string, student_name: string} | null>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -106,7 +115,6 @@ export default function AlumniDashboardPage() {
   const [sendingMsg, setSendingMsg] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [dashboardTab, setDashboardTab] = useState<'opportunities' | 'opensource' | 'students'>('opportunities');
 
   // --- College Students section ---
   const [showCollegeStudents, setShowCollegeStudents] = useState(false);
@@ -125,10 +133,27 @@ export default function AlumniDashboardPage() {
         const profile = await getAlumniProfile(authId);
         setAlumni(profile.alumni);
         setCollege(profile.college);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('alumni_id', profile.alumni.id);
+        }
 
         if (profile.alumni.is_verified) {
-          const oppList = await getMyOpportunities(profile.alumni.id);
-          setOpportunities(oppList);
+          const [oppList, commContacts] = await Promise.allSettled([
+            getMyOpportunities(profile.alumni.id),
+            api.get(`/api/communications/contacts/alumni/${profile.alumni.id}`)
+          ]);
+          
+          if (oppList.status === 'fulfilled') {
+            setOpportunities(oppList.value || []);
+          }
+
+          if (commContacts.status === 'fulfilled' && commContacts.value?.data?.contacts) {
+            const fetched = commContacts.value.data.contacts || [];
+            setConversations(fetched);
+            if (fetched.length > 0 && !selectedConvoId) {
+              setSelectedConvoId(fetched[0].id);
+            }
+          }
         }
       } catch {
         setError('Failed to load dashboard. Please try logging in again.');
@@ -137,7 +162,7 @@ export default function AlumniDashboardPage() {
       }
     };
     load();
-  }, [router]);
+  }, [router, selectedConvoId]);
 
   const handleCreateOpportunity = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -192,14 +217,9 @@ export default function AlumniDashboardPage() {
     }
   };
 
-  const handleOpenChat = async (oppId: string, oppTitle: string, studentId: string, studentName: string) => {
-    setChatStudent({ opp_id: oppId, opp_title: oppTitle, student_id: studentId, student_name: studentName });
-    setLoadingMsgs(true);
-    try {
-      const msgs = await getAlumniMessages(oppId, studentId);
-      setMessages(msgs || []);
-    } catch(e) {}
-    setLoadingMsgs(false);
+  const handleOpenChat = (oppId: string, oppTitle: string, studentId: string, studentName: string) => {
+    setSelectedConvoId(`dm_${studentId}`);
+    setDashboardTab('messages');
   };
 
   const handleStatusChange = async (oppId: string, studentId: string, newStatus: string) => {
@@ -383,7 +403,7 @@ export default function AlumniDashboardPage() {
                 }`}
               >
                 <Briefcase className="w-4 h-4" />
-                Referrals & Mentorship ({opportunities.length})
+                Referrals &amp; Mentorship ({opportunities.length})
               </button>
               <button
                 onClick={() => {
@@ -397,7 +417,23 @@ export default function AlumniDashboardPage() {
                 }`}
               >
                 <GraduationCap className="w-4 h-4" />
-                College Students
+                <span>College Students</span>
+              </button>
+              <button
+                onClick={() => setDashboardTab('messages')}
+                className={`px-4 py-2.5 font-bold text-xs rounded-t-xl transition-all flex items-center gap-2 border-b-2 ${
+                  dashboardTab === 'messages'
+                    ? 'border-emerald-800 text-emerald-800 bg-white shadow-xs'
+                    : 'border-transparent text-stone-500 hover:text-stone-800'
+                }`}
+              >
+                <MessageSquare className="w-4 h-4" />
+                <span>Inquiries &amp; Messages ({conversations.length})</span>
+                {conversations.reduce((acc, c) => acc + (c.unreadCount || 0), 0) > 0 && (
+                  <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-orange-500 text-white animate-pulse">
+                    {conversations.reduce((acc, c) => acc + (c.unreadCount || 0), 0)} NEW
+                  </span>
+                )}
               </button>
             </div>
 
@@ -406,12 +442,29 @@ export default function AlumniDashboardPage() {
               <AlumniOpenSourceManager alumniId={alumni.id} alumniName={alumni.name} collegeName={college?.name} />
             )}
 
+            {/* TAB: INQUIRIES & MESSAGES */}
+            {dashboardTab === 'messages' && (
+              <div className="w-full">
+                <UnifiedCommunicationsHub
+                  isOpen={true}
+                  isEmbedded={true}
+                  onClose={() => {}}
+                  currentUserType="alumni"
+                  currentUserId={alumni?.id}
+                  currentUserName={alumni?.name || 'Alumni Mentor'}
+                  initialConversations={conversations}
+                  activeConversationId={selectedConvoId}
+                  onSelectConversation={(c) => setSelectedConvoId(c.id)}
+                />
+              </div>
+            )}
+
             {/* TAB: GENERAL OPPORTUNITIES */}
             {dashboardTab === 'opportunities' && (
               <>
                 <div className="flex justify-between items-center mb-4">
                   <h2 className="text-base font-bold text-stone-900 flex items-center gap-2">
-                    <Briefcase className="w-4 h-4 text-emerald-800" /> Mentorship & Referrals
+                    <Briefcase className="w-4 h-4 text-emerald-800" /> Mentorship &amp; Referrals
                   </h2>
                   <button
                     onClick={() => setShowForm(!showForm)}
@@ -699,68 +752,41 @@ export default function AlumniDashboardPage() {
         onClose={() => setSelectedStudentProfile(null)}
       />
 
-      {/* Creative Alumni Mentorship Dialogue Console */}
-      <CreativeChatConsole
-        isOpen={Boolean(chatStudent)}
-        onClose={() => setChatStudent(null)}
-        chatType="personal"
-        title={`Advising: ${chatStudent?.student_name || 'Student'}`}
-        subtitle={`Opportunity: ${chatStudent?.opp_title || 'Alumni Mentorship'}`}
-        recipientRole="Candidate Student"
-        contextTag="Direct Message"
-        messages={messages}
-        currentUserId={alumni?.id}
-        currentUserType="alumni"
-        loading={loadingMsgs}
-        sending={sendingMsg}
-        onRefresh={async () => {
-          if (chatStudent) {
-            const msgs = await getAlumniMessages(chatStudent.opp_id, chatStudent.student_id);
-            setMessages(msgs || []);
-          }
-        }}
-        customPrompts={[
-          {
-            label: "Review Code & Architecture",
-            category: "technical",
-            text: "Could you share the repository link for your most recent capstone project? I would like to review your component architecture."
-          },
-          {
-            label: "Schedule Mock Interview",
-            category: "schedule",
-            text: "I have availability for a 30-minute mock technical interview this week. What days/times work best for your schedule?"
-          },
-          {
-            label: "Referral Assessment Note",
-            category: "inquiry",
-            text: "I reviewed your SkillGraph verified scores. Your backend competencies look strong, and I am preparing your referral endorsement."
-          },
-          {
-            label: "Resume & Portfolio Feedback",
-            category: "milestone",
-            text: "Ensure your resume explicitly highlights the verified project milestones and production deployment metrics."
-          }
-        ]}
-        onSendMessage={async (msg) => {
-          if (!chatStudent) return;
-          setSendingMsg(true);
-          try {
-            await sendAlumniMessage(chatStudent.opp_id, chatStudent.student_id, {
-              sender_id: alumni?.id,
-              sender_name: alumni?.name || 'Alumni Mentor',
-              sender_type: 'alumni',
-              message: msg
-            });
-            const msgs = await getAlumniMessages(chatStudent.opp_id, chatStudent.student_id);
-            setMessages(msgs || []);
-          } catch (e) {
-            console.error(e);
-          } finally {
-            setSendingMsg(false);
-          }
-        }}
-        onDeleteMessage={(id) => handleDeleteMessage(String(id))}
-      />
+      {/* Floating Candidate Inquiries Button for Alumni */}
+      {dashboardTab !== 'messages' && (
+        <>
+          <button 
+            onClick={() => {
+              if (!selectedConvoId && conversations.length > 0) {
+                setSelectedConvoId(conversations[0].id);
+              }
+              setIsHubOpen(true);
+            }}
+            className="fixed bottom-6 right-6 w-13 h-13 bg-gradient-to-tr from-emerald-800 to-emerald-900 border border-orange-400/40 text-white rounded-full shadow-xl flex items-center justify-center hover:scale-105 transition-all z-40 relative group cursor-pointer"
+            title="Open Candidate Inquiries & Communications Hub"
+          >
+            {conversations.some(c => c.unreadCount > 0) && (
+              <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-orange-500 border-2 border-white" />
+              </span>
+            )}
+            <MessageSquare className="w-5 h-5" />
+          </button>
+
+          {/* Unified Multi-Channel Communications Hub (Modal View) */}
+          <UnifiedCommunicationsHub
+            isOpen={isHubOpen}
+            onClose={() => setIsHubOpen(false)}
+            currentUserType="alumni"
+            currentUserId={alumni?.id}
+            currentUserName={alumni?.name || 'Alumni Mentor'}
+            initialConversations={conversations}
+            activeConversationId={selectedConvoId}
+            onSelectConversation={(c) => setSelectedConvoId(c.id)}
+          />
+        </>
+      )}
     </div>
   );
 }

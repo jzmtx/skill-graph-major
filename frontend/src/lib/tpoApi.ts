@@ -35,6 +35,11 @@ export const getCollegeAnalytics = async (auth_id: string) => {
   return response.data;
 };
 
+export const syncRoster = async (auth_id: string) => {
+  const response = await api.post(`/api/tpo/sync-roster/${auth_id}`);
+  return response.data;
+};
+
 // --- Connection Management ---
 export const inviteStudent = async (auth_id: string, student_email: string) => {
   const response = await api.post(`/api/tpo/invite/${auth_id}`, { student_email });

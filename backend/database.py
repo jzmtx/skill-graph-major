@@ -16,13 +16,30 @@ if not SUPABASE_URL or not SUPABASE_KEY:
     raise Exception("SUPABASE_URL or SUPABASE_KEY is missing from environment variables.")
 
 
+from supabase.client import ClientOptions
+
 def _make_client() -> Client:
-    return create_client(SUPABASE_URL, SUPABASE_KEY)
+    options = ClientOptions(
+        auto_refresh_token=False,
+        persist_session=False,
+        headers={"Authorization": f"Bearer {SUPABASE_KEY}"}
+    )
+    client = create_client(SUPABASE_URL, SUPABASE_KEY, options)
+    # Neutralize internal auth event listener so postgrest instance is never destroyed or mutated
+    try:
+        client._listen_to_auth_events = lambda *args, **kwargs: None
+    except Exception:
+        pass
+    return client
 
 
 def create_auth_client() -> Client:
     """Creates an isolated Supabase client for password authentication so the global client is never mutated or downgraded from service_role."""
-    return create_client(SUPABASE_URL, SUPABASE_KEY)
+    options = ClientOptions(
+        auto_refresh_token=False,
+        persist_session=False
+    )
+    return create_client(SUPABASE_URL, SUPABASE_KEY, options)
 
 
 # Internal live client — updated by refresh_supabase()
@@ -43,7 +60,7 @@ class _IsolatedAuthProxy:
         attr = getattr(_client.auth, name)
         if name == "sign_in_with_password":
             def _isolated_sign_in(*args, **kwargs):
-                temp_client = create_client(SUPABASE_URL, SUPABASE_KEY)
+                temp_client = create_auth_client()
                 return temp_client.auth.sign_in_with_password(*args, **kwargs)
             return _isolated_sign_in
         return attr
@@ -57,23 +74,30 @@ class _SupabaseProxy:
     """
 
     def table(self, name: str):
-        # Guarantee PostgREST authorization header is always service_role
+        builder = _client.table(name)
+        expected_auth = f"Bearer {SUPABASE_KEY}"
         try:
-            expected_auth = f"Bearer {SUPABASE_KEY}"
-            if _client.postgrest.session.headers.get("Authorization") != expected_auth:
-                _client.postgrest.session.headers["Authorization"] = expected_auth
+            builder.headers["Authorization"] = expected_auth
+            builder.headers["authorization"] = expected_auth
+            _client.postgrest.headers["authorization"] = expected_auth
+            _client.postgrest.headers["Authorization"] = expected_auth
+            _client.options.headers["Authorization"] = expected_auth
         except Exception:
             pass
-        return _client.table(name)
+        return builder
 
     def rpc(self, *args, **kwargs):
+        builder = _client.rpc(*args, **kwargs)
+        expected_auth = f"Bearer {SUPABASE_KEY}"
         try:
-            expected_auth = f"Bearer {SUPABASE_KEY}"
-            if _client.postgrest.session.headers.get("Authorization") != expected_auth:
-                _client.postgrest.session.headers["Authorization"] = expected_auth
+            builder.headers["Authorization"] = expected_auth
+            builder.headers["authorization"] = expected_auth
+            _client.postgrest.headers["authorization"] = expected_auth
+            _client.postgrest.headers["Authorization"] = expected_auth
+            _client.options.headers["Authorization"] = expected_auth
         except Exception:
             pass
-        return _client.rpc(*args, **kwargs)
+        return builder
 
     @property
     def auth(self):

@@ -527,3 +527,81 @@ async def delete_alumni_message(message_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/alumni/{alumni_id}/conversations")
+async def get_alumni_conversations(alumni_id: str):
+    """Fetch all active candidate conversations and message threads across all opportunities for an alumni."""
+    try:
+        opps_res = supabase.table("opportunities").select("id, title, type").eq("alumni_id", alumni_id).execute()
+        opps = opps_res.data or []
+        if not opps:
+            return {"conversations": []}
+            
+        opp_map = {o["id"]: o for o in opps}
+        opp_ids = list(opp_map.keys())
+
+        # Fetch messages across all opportunities posted by this alumni
+        msgs_res = supabase.table("alumni_messages").select("*").in_("opportunity_id", opp_ids).order("created_at", desc=True).execute()
+        all_msgs = msgs_res.data or []
+
+        # Also fetch interested students
+        interests_res = supabase.table("opportunity_interest").select("opportunity_id, student_id, status, expressed_at, students(id, name, email)").in_("opportunity_id", opp_ids).execute()
+        all_interests = interests_res.data or []
+
+        student_info_map = {}
+        for interest in all_interests:
+            s = interest.get("students")
+            if s and isinstance(s, dict):
+                student_info_map[interest["student_id"]] = s
+
+        # Group conversation threads by (opportunity_id, student_id)
+        threads = {}
+        for m in all_msgs:
+            key = f"{m['opportunity_id']}_{m['student_id']}"
+            if key not in threads:
+                opp = opp_map.get(m["opportunity_id"], {})
+                student_data = student_info_map.get(m["student_id"], {})
+                threads[key] = {
+                    "id": key,
+                    "opportunity_id": m["opportunity_id"],
+                    "opportunity_title": opp.get("title", "Opportunity"),
+                    "opportunity_type": opp.get("type", "referral"),
+                    "student_id": m["student_id"],
+                    "student_name": student_data.get("name") or m.get("sender_name") or "Student Candidate",
+                    "student_email": student_data.get("email") or "",
+                    "last_message": m.get("message", ""),
+                    "last_message_time": m.get("created_at"),
+                    "last_sender_type": m.get("sender_type"),
+                    "messages_count": 0,
+                    "unread_count": 0
+                }
+            threads[key]["messages_count"] += 1
+            if m.get("sender_type") == "student":
+                threads[key]["unread_count"] += 1
+
+        # Also add interested candidates who haven't messaged yet so alumni can initiate chat
+        for item in all_interests:
+            key = f"{item['opportunity_id']}_{item['student_id']}"
+            if key not in threads:
+                opp = opp_map.get(item["opportunity_id"], {})
+                s = item.get("students") or {}
+                threads[key] = {
+                    "id": key,
+                    "opportunity_id": item["opportunity_id"],
+                    "opportunity_title": opp.get("title", "Opportunity"),
+                    "opportunity_type": opp.get("type", "referral"),
+                    "student_id": item["student_id"],
+                    "student_name": s.get("name") or "Student Candidate",
+                    "student_email": s.get("email") or "",
+                    "last_message": f"Expressed interest in {opp.get('title', 'opportunity')}",
+                    "last_message_time": item.get("expressed_at"),
+                    "last_sender_type": "student",
+                    "messages_count": 0,
+                    "unread_count": 1
+                }
+
+        sorted_convos = sorted(threads.values(), key=lambda x: x["last_message_time"] or "", reverse=True)
+        return {"conversations": sorted_convos}
+    except Exception as e:
+        print(f"Error fetching alumni conversations: {e}")
+        return {"conversations": []}
+

@@ -154,6 +154,22 @@ def _assert_tpo_verified(auth_id: str) -> dict:
     return tpo_data
 
 
+def _get_college_student_scope(college_id: str) -> list[str]:
+    """Resolves all related college IDs for a college (e.g. Canara / CEC variants)."""
+    try:
+        col = supabase.table("colleges").select("name").eq("id", college_id).execute()
+        if not col.data:
+            return [college_id]
+        name = col.data[0]["name"].strip().lower()
+        if "canara" in name or name == "cec":
+            all_cols = supabase.table("colleges").select("id, name").execute()
+            ids = [c["id"] for c in (all_cols.data or []) if "canara" in c["name"].lower() or c["name"].strip().lower() == "cec"]
+            return ids if ids else [college_id]
+        return [college_id]
+    except Exception:
+        return [college_id]
+
+
 # ============================================================
 # Student Cluster (auto-linked by college_id — no separate approval queue)
 # ============================================================
@@ -163,9 +179,10 @@ async def get_college_students(auth_id: str, branch: Optional[str] = None):
     """Lists all students belonging to this TPO's college, or linked via requests."""
     tpo_data = _assert_tpo_verified(auth_id)
     college_id = tpo_data["college_id"]
+    scope_ids = _get_college_student_scope(college_id)
 
     try:
-        query = supabase.table("students").select("id, name, email, branch, year, usn, is_verified").eq("college_id", college_id)
+        query = supabase.table("students").select("id, name, email, branch, year, usn, is_verified, college_id").in_("college_id", scope_ids)
         if branch:
             query = query.eq("branch", branch)
             
@@ -398,9 +415,10 @@ async def get_college_analytics(auth_id: str):
     verification breakdown, and top skills across the college."""
     tpo_data = _assert_tpo_verified(auth_id)
     college_id = tpo_data["college_id"]
+    scope_ids = _get_college_student_scope(college_id)
 
     try:
-        students_full = supabase.table("students").select("*").eq("college_id", college_id).execute()
+        students_full = supabase.table("students").select("*").in_("college_id", scope_ids).execute()
         student_ids = [s["id"] for s in students_full.data]
         total_students = len(student_ids)
 
@@ -488,5 +506,30 @@ async def get_college_analytics(auth_id: str):
         }
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sync-roster/{auth_id}")
+async def sync_college_roster(auth_id: str):
+    """Self-healing sync endpoint that reconciles unlinked or alias-mismatched students."""
+    tpo_data = _assert_tpo_verified(auth_id)
+    college_id = tpo_data["college_id"]
+    scope_ids = _get_college_student_scope(college_id)
+
+    try:
+        updated_count = 0
+        for sid in scope_ids:
+            if sid != college_id:
+                re = supabase.table("students").update({"college_id": college_id}).eq("college_id", sid).execute()
+                updated_count += len(re.data or [])
+
+        stds = supabase.table("students").select("id").eq("college_id", college_id).execute()
+        return {
+            "success": True,
+            "message": f"College roster synced. {len(stds.data or [])} students active.",
+            "total_students": len(stds.data or []),
+            "reconciled": updated_count
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

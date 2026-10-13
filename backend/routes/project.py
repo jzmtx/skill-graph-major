@@ -33,6 +33,8 @@ class SubmitInterviewRequest(BaseModel):
     skill_name: str
     github_url: str
     qa_pairs: List[QA]
+    violations: Optional[int] = 0
+    violation_details: Optional[List[dict]] = []
 
 def process_async_repo_audit(interview_id: str, github_url: str, skill_name: str, project_abstract: str):
     """Background worker that audits repository and prepares interview questions."""
@@ -203,6 +205,19 @@ async def submit_interview(req: SubmitInterviewRequest):
             )
             raw_text = response.choices[0].message.content.strip()
             result = json.loads(raw_text)
+
+        # Proctoring Audit Check (Mobile device detection & integrity verification)
+        has_mobile_violation = any(v.get("type") in ["mobile_phone", "blind_spot_gaze", "camera_tilt"] for v in (req.violation_details or []))
+        total_violations = req.violations or len(req.violation_details or [])
+
+        if has_mobile_violation or total_violations > 2:
+            print(f"[ProjectVerify] Candidate flagged for proctoring infractions: {total_violations} (mobile/blind-spot: {has_mobile_violation})")
+            result["passed"] = False
+            infraction_reason = "mobile phone device detected or downward blind-spot evasion" if has_mobile_violation else f"{total_violations} proctoring interruptions"
+            result["feedback"] = f"Integrity Failure: Oral defense rejected due to proctoring violation ({infraction_reason}). Candidate must retake under strict proctor supervision."
+            result["proctoring_flagged"] = True
+            result["violations_count"] = total_violations
+            return result
 
         # If passed, upgrade to Level 2!
         if result.get("passed"):

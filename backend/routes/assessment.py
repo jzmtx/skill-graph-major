@@ -27,6 +27,7 @@ class SubmitAnswerRequest(BaseModel):
     skill_name: str
     question_id: str
     selected_option: str
+    current_difficulty: Optional[int] = 1
 class PrewarmRequest(BaseModel):
     skill_name: str
     student_id: Optional[str] = None
@@ -406,7 +407,12 @@ def submit_answer(req: SubmitAnswerRequest, background_tasks: BackgroundTasks):
         # 1. Fetch correct answer from DB
         q_res = supabase.table("questions").select("correct_answer, question_base_text").eq("id", req.question_id).execute()
         if not q_res.data:
-            raise HTTPException(status_code=404, detail="Question not found")
+            # Fallback search if question_id was formatted differently
+            fallback_res = supabase.table("questions").select("correct_answer, question_base_text").ilike("skill_name", req.skill_name).limit(1).execute()
+            if fallback_res.data:
+                q_res = fallback_res
+            else:
+                raise HTTPException(status_code=404, detail="Question not found")
             
         correct_ans = q_res.data[0]['correct_answer']
         
@@ -414,22 +420,26 @@ def submit_answer(req: SubmitAnswerRequest, background_tasks: BackgroundTasks):
         is_correct = (req.selected_option.strip() == correct_ans.strip())
         
         # 3. Adaptive Logic: Adjust next difficulty
-        next_difficulty = req.current_difficulty
+        curr_diff = req.current_difficulty or 1
         if is_correct:
-            next_difficulty = min(5, req.current_difficulty + 1)
+            next_difficulty = min(5, curr_diff + 1)
         else:
-            next_difficulty = max(1, req.current_difficulty - 1)
+            next_difficulty = max(1, curr_diff - 1)
             
         # Spawn background task to speculatively pre-generate for next_difficulty and its neighbors
         background_tasks.add_task(speculative_pregeneration_task, req.skill_name, next_difficulty, req.student_id)
         
-        # Fast Explanation Generation using Groq
-        explanation = generate_explanation_fast(
-            skill_name=req.skill_name,
-            question_text=q_res.data[0].get('question_base_text', ''),
-            options=[],
-            correct_answer=correct_ans
-        )
+        # Fast Explanation Generation with safe fallback
+        try:
+            explanation = generate_explanation_fast(
+                skill_name=req.skill_name,
+                question_text=q_res.data[0].get('question_base_text', ''),
+                options=[],
+                correct_answer=correct_ans
+            )
+        except Exception as expl_err:
+            print(f"[submit_answer] Fast explanation fallback used: {expl_err}")
+            explanation = f"The correct answer is '{correct_ans}'."
             
         return {
             "is_correct": is_correct,
@@ -438,7 +448,11 @@ def submit_answer(req: SubmitAnswerRequest, background_tasks: BackgroundTasks):
             "explanation": explanation
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 class GetCodingQuestionRequest(BaseModel):
@@ -576,6 +590,10 @@ class CompleteAssessmentRequest(BaseModel):
     node_id: str = None
     roadmap_id: str = None
     violations: int = 0
+    violation_details: list[dict] = []
+    tab_switch_strikes: int = 0
+    webcam_strikes: int = 0
+    voice_strikes: int = 0
 
 class SimulateCodeRequest(BaseModel):
     skill_name: str
@@ -621,17 +639,138 @@ def report_question(req: ReportQuestionRequest):
 @router.post("/complete")
 def complete_assessment(req: CompleteAssessmentRequest):
     try:
+        import os
+        import json
+        from datetime import datetime, timezone
+
         analytics = analyze_performance(req.skill_name, req.history)
         
-        # Calculate integrity deduction if proctoring infractions exceeded threshold (>3)
-        integrity_penalty = 0
-        effective_score = req.score_percentage
-        if req.violations > 3:
-            integrity_penalty = min(35, (req.violations - 3) * 10 + 10)
-            effective_score = max(0, req.score_percentage - integrity_penalty)
-            analytics += f"\n\n**Proctoring Audit:** {req.violations} unverified window interruptions/actions flagged during examination. An integrity trust deduction of -{integrity_penalty} points was applied to your verified competency benchmark."
-        
-        if effective_score >= 60:
+        # Categorized 3-Strike Threshold Calculation
+        # For each category: Strikes 1, 2, 3 are warning strikes. Only strikes > 3 increment penalty flags!
+        tab_penalty_flags = max(0, req.tab_switch_strikes - 3)
+        webcam_penalty_flags = max(0, req.webcam_strikes - 3)
+        voice_penalty_flags = max(0, req.voice_strikes - 3)
+
+        # Fallback if raw violation_details passed without specific strike counts
+        if req.tab_switch_strikes == 0 and req.webcam_strikes == 0 and req.voice_strikes == 0 and req.violation_details:
+            tab_raw = sum(1 for v in req.violation_details if v.get("category") == "tab_switch" or v.get("type") in ["tab_switch", "window_blur", "screenshot_attempt"])
+            webcam_raw = sum(1 for v in req.violation_details if v.get("category") == "webcam_issue" or v.get("type") in ["multiple_faces", "no_face", "blind_spot_gaze", "camera_tilt"])
+            voice_raw = sum(1 for v in req.violation_details if v.get("category") == "voice_leak" or v.get("type") == "audio_leak")
+            tab_penalty_flags = max(0, tab_raw - 3)
+            webcam_penalty_flags = max(0, webcam_raw - 3)
+            voice_penalty_flags = max(0, voice_raw - 3)
+
+        # Itemized Cheating & Proctoring Violation Detection
+        mobile_violations = [v for v in (req.violation_details or []) if v.get("type") == "mobile_phone"]
+        assistant_violations = [v for v in (req.violation_details or []) if v.get("type") == "multiple_faces"]
+        voice_violations = [v for v in (req.violation_details or []) if v.get("type") == "audio_leak"]
+
+        cheating_incidents = []
+        total_cheating_gli_penalty = 0
+
+        # 1. Mobile Phone / Camera / Electronic Gadget photo-capture attempts (-25 pts each)
+        if len(mobile_violations) > 0:
+            deduction = 25 * min(3, len(mobile_violations))
+            total_cheating_gli_penalty += deduction
+            cheating_incidents.append({
+                "label": f"Cheating Detected: Mobile Phone / Gadget — {req.skill_name}",
+                "detail": f"{len(mobile_violations)} unauthorized mobile device / gadget photo scan(s) identified in camera during exam",
+                "pts": -deduction,
+                "type": "integrity_penalty",
+                "icon": "smartphone",
+                "color": "rose"
+            })
+
+        # 2. Unauthorized Human Assistant / Multiple Persons detected in camera frame (-25 pts each)
+        if len(assistant_violations) > 0:
+            deduction = 25 * min(3, len(assistant_violations))
+            total_cheating_gli_penalty += deduction
+            cheating_incidents.append({
+                "label": f"Cheating Detected: Unauthorized Human Assistant — {req.skill_name}",
+                "detail": f"{len(assistant_violations)} instance(s) of external person / assistant detected in camera frame assisting candidate",
+                "pts": -deduction,
+                "type": "integrity_penalty",
+                "icon": "users",
+                "color": "rose"
+            })
+
+        # 3. Audio / Voice Assistant Answering Leak (-20 pts each)
+        if len(voice_violations) > 0:
+            deduction = 20 * min(3, len(voice_violations))
+            total_cheating_gli_penalty += deduction
+            cheating_incidents.append({
+                "label": f"Audio Leak: External Voice / Assistant Speaking — {req.skill_name}",
+                "detail": f"{len(voice_violations)} incident(s) of assistant answering or candidate verbalizing questions detected",
+                "pts": -deduction,
+                "type": "integrity_penalty",
+                "icon": "mic-off",
+                "color": "rose"
+            })
+
+        # 4. Excess Tab Switching beyond 3 strikes (-15 pts per flag)
+        if tab_penalty_flags > 0:
+            deduction = 15 * tab_penalty_flags
+            total_cheating_gli_penalty += deduction
+            cheating_incidents.append({
+                "label": f"Proctoring Violation: Tab Interruption Limit Exceeded — {req.skill_name}",
+                "detail": f"{tab_penalty_flags} penalty flag(s) for leaving examination window beyond the 3-strike warning limit",
+                "pts": -deduction,
+                "type": "integrity_penalty",
+                "icon": "shield-alert",
+                "color": "rose"
+            })
+
+        # Calculate Competency Exam Score Deduction from Cheating
+        score_penalty = min(75, int(total_cheating_gli_penalty * 0.75))
+        effective_score = max(0, req.score_percentage - score_penalty)
+
+        # Severe academic malpractice prevents passing the assessment
+        has_severe_cheating = (len(mobile_violations) > 0 or len(assistant_violations) > 0 or total_cheating_gli_penalty >= 35)
+
+        # Persist Negative Integrity Deductions into Ledger for GLI History
+        if cheating_incidents and req.student_id:
+            try:
+                ledger_file = os.path.join(os.path.dirname(__file__), "..", "integrity_ledger.json")
+                ledger = []
+                if os.path.exists(ledger_file):
+                    try:
+                        with open(ledger_file, "r") as f:
+                            ledger = json.load(f)
+                    except Exception:
+                        ledger = []
+
+                now_iso = datetime.now(timezone.utc).isoformat()
+                now_ts = int(datetime.now(timezone.utc).timestamp())
+                for idx, inc in enumerate(cheating_incidents):
+                    inc_record = {
+                        "id": f"penalty_{req.student_id}_{now_ts}_{idx}",
+                        "student_id": req.student_id,
+                        "type": "integrity_penalty",
+                        "skill_name": req.skill_name,
+                        "icon": inc.get("icon", "shield-alert"),
+                        "label": inc["label"],
+                        "detail": inc["detail"],
+                        "pts": inc["pts"],
+                        "color": inc.get("color", "rose"),
+                        "date": now_iso
+                    }
+                    ledger.append(inc_record)
+
+                with open(ledger_file, "w") as f:
+                    json.dump(ledger, f, indent=2)
+            except Exception as log_err:
+                print("Failed to persist integrity deduction to ledger:", log_err)
+
+        if total_cheating_gli_penalty > 0:
+            analytics += (
+                f"\n\n**PROCTORING INTEGRITY AUDIT:** Academic malpractice or proctoring breaches detected during examination. "
+                f"Assessment score was penalized by -{score_penalty}% (Effective score: {effective_score}%). "
+                f"A negative integrity deduction of -{total_cheating_gli_penalty} pts was recorded in your Global Learner Index (GLI) ledger."
+            )
+            if has_severe_cheating:
+                analytics += "\n\n⚠️ **ACADEMIC MALPRACTICE NOTICE:** Severe proctoring breach detected (mobile device / unauthorized human assistant). Level 1 verification failed."
+
+        if effective_score >= 60 and not has_severe_cheating:
             skill_res = supabase.table("student_skills").select("*").eq("student_id", req.student_id).eq("skill_name", req.skill_name).execute()
             
             if skill_res.data:
